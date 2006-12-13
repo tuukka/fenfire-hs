@@ -50,6 +50,11 @@ pad4 left up right down (Vob size draw) = Vob size' draw' where
     
 pad2 x y   = pad4 x y x y
 pad pixels = pad2 pixels pixels
+
+
+clipVob :: Vob -> Vob
+clipVob (Vob size draw) = Vob size draw' where
+    draw' = do save; (w,h) <- size; rectangle 0 0 w h; clip; draw; restore
              
 
 
