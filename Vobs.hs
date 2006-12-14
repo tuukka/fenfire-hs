@@ -55,6 +55,16 @@ pad2 x y   = pad4 x y x y
 pad pixels = pad2 pixels pixels
 
 
+resizeX :: Double -> Vob -> Vob
+resizeX w (Vob size draw) = Vob (do (_,h) <- size; return (w,h)) draw
+
+resizeY :: Double -> Vob -> Vob
+resizeY h (Vob size draw) = Vob (do (w,_) <- size; return (w,h)) draw
+
+resize :: Double -> Double -> Vob -> Vob
+resize w h (Vob size draw) = Vob (return (w,h)) draw
+
+
 clipVob :: Vob -> Vob
 clipVob (Vob size draw) = Vob size draw' where
     draw' = do save; (w,h) <- size; rectangle 0 0 w h; clip; draw; restore
