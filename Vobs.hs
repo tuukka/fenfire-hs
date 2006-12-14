@@ -130,7 +130,6 @@ interpSignal clock sc1 sc2 = flip fmap clock $ \t -> let
 
 
 
-myVob = rectBox $ pad 5 $ label "Hello World!"
 
 myScene1 = do (vw, vh) <- defaultSize myVob
               return $ fromList [("Foo", (50, 50, vw, vh, myVob))]
@@ -149,6 +148,11 @@ vobMain title vobSignal = do
     
     canvas <- drawingAreaNew
     set window [ containerChild := canvas ]
+
+    onKeyPress window $ \(Key { eventModifier=mods, eventKeyName=key, eventKeyChar=char }) -> do
+        liftIO $ putStrLn $ show mods++key++" ("++show char++")"
+	
+	return False
     
     onExpose canvas $ \(Expose { eventArea=rect }) -> do
         (cw, ch) <- drawingAreaGetSize canvas
