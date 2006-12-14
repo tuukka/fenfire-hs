@@ -130,6 +130,15 @@ interpSignal clock sc1 sc2 = flip fmap clock $ \t -> let
 
 
 
+instance Show Modifier where
+    show Shift = "Shift"
+    show Control = "Control"
+    show Alt = "Alt"
+    show Apple = "Apple"
+    show Compose = "Compose"
+    show _ = "Unknown modifier"
+
+myVob = rectBox $ pad 5 $ label "Hello World!"
 
 myScene1 = do (vw, vh) <- defaultSize myVob
               return $ fromList [("Foo", (50, 50, vw, vh, myVob))]
