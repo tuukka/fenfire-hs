@@ -1,4 +1,6 @@
 
+import qualified System.Time
+
 import Graphics.UI.Gtk
 import Graphics.Rendering.Cairo
 import Graphics.UI.Gtk.Cairo
@@ -118,21 +120,18 @@ main = do
         renderWithDrawable drawable $ do
             save
             
-            (vw, vh) <- defaultSize myVob
-            
-            let myScene1 = fromList [("Foo", (50, 50, vw, vh, myVob))]
-                myScene2 = fromList [("Foo", (150, 150, vw+30, vh, myVob))]
-            
             setSourceRGB 0.5 0.5 0.5
             drawVob (sceneVob myScene1) w h
             drawVob (sceneVob myScene2) w h
             
             setSourceRGB 0 0 0
-            drawVob (sceneVob $ interpolate 0.5 myScene1 myScene2) w h
+            drawVob (sceneVob w h (interpolate 0.5 myScene1 myScene2))
             
             restore
             
         return True
+
+    flip timeoutAdd (1000 `div` 100) (widgetQueueDraw canvas >> return True)
     
     onDestroy window mainQuit
     widgetShowAll window
