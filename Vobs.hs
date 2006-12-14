@@ -1,3 +1,4 @@
+module Vobs where
 
 import qualified System.Time
 
@@ -104,7 +105,7 @@ myVob = rectBox $ pad 5 $
     scaleVob 1 1 (hbox [label "Hello W", label "orld!"])
 
 
-main = do
+oldmain = do
     initGUI
     window <- windowNew
     windowSetTitle window "Example"
