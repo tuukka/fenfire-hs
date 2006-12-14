@@ -1,5 +1,14 @@
 
+module Fenfire where
+
 import Vobs
+
+import Graphics.UI.Gtk hiding (get)
+import Graphics.Rendering.Cairo
+import Graphics.UI.Gtk.Cairo
+
+import Data.IORef
+
 import qualified Data.Map as Map
 import qualified Data.List
 import Maybe (fromJust, isJust, isNothing)
@@ -83,5 +92,44 @@ node3 = PlainLiteral "B"
 prop = PlainLiteral "prop"
 graph = [(node,prop,node2),(node,prop,node3)]            
             
+main = do
+    initGUI
+    window <- windowNew
+    windowSetTitle window "Example"
+    
+    canvas <- drawingAreaNew
+    set window [ containerChild := canvas ]
+
+
+    state <- newIORef (Rotation graph node 0)
+
+    onKeyPress window $ \(Key { eventModifier=mods, eventKeyName=key, eventKeyChar=char }) -> do
+        liftIO $ putStrLn $ show mods++key++" ("++show char++")"
+
+        (Rotation graph node rotation) <- readIORef state
+	writeIORef state (Rotation graph node rotation)
+	return False
+    
+    onExpose canvas $ \(Expose { eventArea=rect }) -> do
+        (cw, ch) <- drawingAreaGetSize canvas
+        let w = fromIntegral cw; h = fromIntegral ch
+        drawable <- drawingAreaGetDrawWindow canvas
+
+        rotation <- readIORef state
+        
+        renderWithDrawable drawable $ do
+            save
+
+	    let scene = vanishingView 3 rotation w h
+	    drawVob (sceneVob scene) w h
+
+            restore
             
-main = myMain
+        return True
+
+    flip timeoutAdd (1000 `div` 100) (widgetQueueDraw canvas >> return True)
+    
+    onDestroy window mainQuit
+    widgetShowAll window
+    mainGUI
+
