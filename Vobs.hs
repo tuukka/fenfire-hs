@@ -90,12 +90,12 @@ sceneVob scene = Vob (return (0,0)) $ \_ _ -> do
         
 
 interpolate :: Ord a => Double -> Scene a -> Scene a -> Scene a
-interpolate fract src dst = let
-      ks = intersect (keys src) (keys dst)
+interpolate fract sc1 sc2 = let
+      interpKeys = intersect (keys sc1) (keys sc2)
       interp a b = (a*(1-fract)) + (b*fract)   -- interpolate two Doubles
-      vob (sx,sy,sw,sh,sv) (dx,dy,dw,dh,dv) = 
-          (interp sx dx, interp sy dy, interp sw dw, interp sh dh,dv)
-    in fromList [(k, vob (src ! k) (dst ! k)) | k <- ks]
+      vob (x1,y1,w1,h1,vob1) (x2,y2,w2,h2,vob2) = 
+          (interp x1 x2, interp y1 y2, interp w1 w2, interp h1 h2, vob2)
+    in fromList [(key, vob (sc1 ! key) (sc2 ! key)) | key <- interpKeys]
              
 
 
