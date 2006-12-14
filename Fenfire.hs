@@ -61,18 +61,18 @@ vanishingView depth start w h =
     Map.unions $ take depth $ oneNode (w/2, h/2) 0 start where -- XXX
         oneNode :: (Double, Double) -> Double -> Rotation -> InfiniteScene
         oneNode (x,y) angle rot@(Rotation _ node _) = 
-            Map.fromList [(node, (x, y, 80, 30, nodeView node))]
+            Map.fromList [(node, (x, y, 80, 20, nodeView node))]
                 : combine [ connections (x,y) rot 0 angle xdir ydir
                           | xdir <- [Neg, Pos], ydir <- [-1, 1] ]
                 
-        angleOffs = pi / 21
+        angleOffs = pi / 14
                 
         connections :: (Double, Double) -> Rotation -> Int -> Double -> 
                        Dir -> Int -> InfiniteScene
         connections (x,y) rot offs angle xdir ydir = result where
             rot' = (get rot xdir offs)
             result = if isNothing rot' then [] else
-                combine [ oneNode (translate angle (mul xdir 100) (x,y))
+                combine [ oneNode (translate angle (mul xdir 150) (x,y))
                                   angle (fromJust rot'),
                           connections (x,y) rot (offs+ydir) 
                                       (angle+fromIntegral ydir*angleOffs)
@@ -80,7 +80,7 @@ vanishingView depth start w h =
                 
         translate :: Double -> Double -> (Double, Double) -> (Double, Double)
         translate angle distance (x,y) = 
-            (x + distance * sin angle, y + distance * cos angle)
+            (x + distance * cos angle, y + distance * sin angle)
 
 
 
@@ -94,6 +94,7 @@ main = do
     initGUI
     window <- windowNew
     windowSetTitle window "Example"
+    windowSetDefaultSize window 400 150
     
     canvas <- drawingAreaNew
     set window [ containerChild := canvas ]
@@ -125,9 +126,6 @@ main = do
             
         return True
 
-    flip timeoutAdd (1000 `div` 100) (widgetQueueDraw canvas >> return True)
-    
     onDestroy window mainQuit
     widgetShowAll window
     mainGUI
-
