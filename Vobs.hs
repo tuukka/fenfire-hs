@@ -2,6 +2,8 @@ module Vobs where
 
 import qualified System.Time
 
+import Signals
+
 import Graphics.UI.Gtk
 import Graphics.Rendering.Cairo
 import Graphics.UI.Gtk.Cairo
@@ -28,6 +30,15 @@ hbox vobs = Vob size draw where
                       drawVob vob vobW h
                       translate vobW 0
                   restore
+                  
+overlay :: [Vob] -> Vob
+overlay vobs = Vob size draw where
+    size = do sizes <- mapM defaultSize vobs
+              let (widths, heights) = unzip sizes
+              return (maximum widths, maximum heights)
+              
+    draw w h = do sequence $ flip map vobs $ \vob -> drawVob vob w h
+                  return ()
     
 label :: String -> Vob
 label s = Vob (do ext <- textExtents s
@@ -35,7 +46,12 @@ label s = Vob (do ext <- textExtents s
               (\w h -> do ext <- textExtents s
                           save; moveTo 0 (textExtentsHeight ext)
                           showText s; restore)
-                  
+                          
+                          
+rgbColor :: Double -> Double -> Double -> Vob -> Vob
+rgbColor r g b (Vob size draw) = Vob size draw' where
+    draw' w h = do save; setSourceRGB r g b; draw w h; restore
+
                   
 scaleVob :: Double -> Double -> Vob -> Vob
 scaleVob sx sy (Vob size draw) = Vob size' draw' where
@@ -80,11 +96,13 @@ clipVob (Vob size draw) = Vob size draw' where
     
     
     
-type Scene a = Map a (Double, Double, Double, Double, Vob)
+type Scene a  = Map a (Double, Double, Double, Double, Vob)
+type RScene a = Render (Scene a)
 
-sceneVob :: Ord a => Scene a -> Vob
+sceneVob :: Ord a => RScene a -> Vob
 sceneVob scene = Vob (return (0,0)) $ \_ _ -> do
-    flip mapM (toList scene) $ \(key, (x, y, w, h, vob)) -> do 
+    scene' <- scene
+    flip mapM (toList scene') $ \(key, (x, y, w, h, vob)) -> do 
         save; translate (x-w/2) (y-h/2); drawVob vob w h; restore
     return ()
         
@@ -100,15 +118,34 @@ interpolate fract sc1 sc2 = let
              
 
 
+interpSignal :: Ord a => Signal Time -> RScene a -> RScene a -> Signal Vob
+interpSignal clock sc1 sc2 = flip fmap clock $ \t -> let
+        alpha = sin (t/5*pi)/2+0.5
+        isc = do sc1' <- sc1; sc2' <- sc2
+                 return (interpolate alpha sc1' sc2')
+        [v1, v2, iv] = map sceneVob [sc1, sc2, isc]
+        [v1', v2'] = map (rgbColor 0.5 0.5 0.5) [v1, v2]
+        iv' = rgbColor 0 0 0 iv
+    in overlay [v1, v2, iv]
 
-myVob = rectBox $ pad 5 $
-    scaleVob 1 1 (hbox [label "Hello W", label "orld!"])
 
 
-oldmain = do
+myVob = rectBox $ pad 5 $ label "Hello World!"
+
+myScene1 = do (vw, vh) <- defaultSize myVob
+              return $ fromList [("Foo", (50, 50, vw, vh, myVob))]
+myScene2 = do (vw, vh) <- defaultSize myVob
+              return $ fromList [("Foo", (150, 150, vw+30, vh, myVob))]
+
+myMain = do
+    now <- getTimeIO
+    vobMain "Example" $ interpSignal (time now 0.01) myScene1 myScene2
+    
+vobMain :: String -> Signal Vob -> IO ()
+vobMain title vobSignal = do
     initGUI
     window <- windowNew
-    windowSetTitle window "Example"
+    windowSetTitle window title
     
     canvas <- drawingAreaNew
     set window [ containerChild := canvas ]
@@ -121,21 +158,9 @@ oldmain = do
         renderWithDrawable drawable $ do
             save
             
-            (vw, vh) <- defaultSize myVob
-            
-            let myScene1 = fromList [("Foo", (50, 50, vw, vh, myVob))]
-                myScene2 = fromList [("Foo", (150, 150, vw+30, vh, myVob))]
-            
-            System.Time.TOD seconds picoseconds <- liftIO System.Time.getClockTime
-            let time = fromInteger seconds+fromInteger picoseconds/(10**(4*3))
-                alpha = sin (time/5*pi)/2+0.5
-
-            setSourceRGB 0.5 0.5 0.5
-            drawVob (sceneVob myScene1) w h
-            drawVob (sceneVob myScene2) w h
-            
-            setSourceRGB 0 0 0
-            drawVob (sceneVob (interpolate alpha myScene1 myScene2)) w h
+            time <- liftIO getTimeIO
+            let vob = getSignal time vobSignal
+            drawVob vob w h
             
             restore
             

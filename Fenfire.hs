@@ -76,4 +76,4 @@ vanishingView depth start w h =
             (x + distance * sin angle, y + distance * cos angle)
             
             
-main = putStrLn "I compile"
+main = myMain
