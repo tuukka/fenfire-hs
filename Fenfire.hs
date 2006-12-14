@@ -16,7 +16,7 @@ mul Pos = id
 mul Neg = negate
 
 conns g node Pos = [(prop, obj) | (subj, prop, obj) <- g, subj == node]
-conns g node Neg = [(prop, obj) | (subj, prop, obj) <- g, obj  == node]
+conns g node Neg = [(prop, subj) | (subj, prop, obj) <- g, obj  == node]
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 
@@ -44,7 +44,7 @@ get r@(Rotation graph node rot) dir rot' = result where
 type InfiniteScene = [Scene Node]
 
 combine :: [InfiniteScene] -> InfiniteScene
-combine scenes = (Map.unions $ map head scenes) : combine (map tail scenes)
+combine scenes = (Map.unions $ concatMap (take 1) scenes) : combine (map (drop 1) scenes)
 
 nodeView n = rectBox $ clipVob $ resizeY 80 $ pad 5 $ label (show n)
 
@@ -74,6 +74,14 @@ vanishingView depth start w h =
         translate :: Double -> Double -> (Double, Double) -> (Double, Double)
         translate angle distance (x,y) = 
             (x + distance * sin angle, y + distance * cos angle)
+
+
+
+node = PlainLiteral "Home"
+node2 = PlainLiteral "A"
+node3 = PlainLiteral "B"
+prop = PlainLiteral "prop"
+graph = [(node,prop,node2),(node,prop,node3)]            
             
             
 main = myMain
