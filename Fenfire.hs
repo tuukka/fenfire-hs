@@ -43,7 +43,7 @@ get r@(Rotation graph node rot) dir rot' = result where
     index = (length c `div` 2) + rot + rot'
     result = if index >= 0 && index < length c 
              then let (p,n) = c !! index in 
-                  getRotation graph n p (rev dir) node
+                  getRotation graph node p dir n
              else Nothing
         
 -- Some Fenfire views, like the vanishing wheel view, show a conceptually
