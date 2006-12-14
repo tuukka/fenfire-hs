@@ -29,6 +29,12 @@ getSignal time (Signal start (Stream evs _)) = getSignal' evs start where
     getSignal' ((t,v):evs) def | t > time  = def
                                | otherwise = getSignal' evs v
     getSignal' []          def             = def
+
+getNextChange :: Time -> Signal a -> Maybe Time
+getNextChange time (Signal start (Stream evs _)) = findNext evs where
+    findNext ((t,v):evs) | t > time  = Just t
+			 | otherwise = findNext evs
+    findNext []                      = Nothing
     
 updateStream :: Time -> Stream a -> InputEvent -> Stream a
 updateStream t (Stream _ upd) ie = upd t ie

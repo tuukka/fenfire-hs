@@ -149,6 +149,9 @@ myMain = do
     now <- getTimeIO
     vobMain "Example" $ interpSignal (time now 0.01) myScene1 myScene2
     
+timeDbg msg time | False     = liftIO $ putStrLn $ msg ++ "\t" ++ show time
+		 | otherwise = return ()
+
 vobMain :: String -> Signal Vob -> IO ()
 vobMain title vobSignal = do
     initGUI
@@ -172,15 +175,26 @@ vobMain title vobSignal = do
             save
             
             time <- liftIO getTimeIO
+	    timeDbg "Starting redraw at" time
             let vob = getSignal time vobSignal
             drawVob vob w h
             
             restore
             
+        time' <- liftIO getTimeIO
+	timeDbg "Finished redraw at" time'
+	case getNextChange time' vobSignal of
+	    Just t -> do let sleeptime = ceiling ((t-time')*1000)
+			 flip timeoutAdd sleeptime
+				  (widgetQueueDraw canvas >> return False)
+			 timeDbg "Next change at   " t
+			 -- liftIO $ putStrLn $ "Sleeping " ++ show sleeptime ++" ms"
+			 return ()
+            Nothing -> do liftIO $ putStrLn "End of signal, sleeping."
+		          return ()
+
         return True
 
-    flip timeoutAdd (1000 `div` 100) (widgetQueueDraw canvas >> return True)
-    
     onDestroy window mainQuit
     widgetShowAll window
     mainGUI
