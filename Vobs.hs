@@ -3,6 +3,9 @@ import Graphics.UI.Gtk
 import Graphics.Rendering.Cairo
 import Graphics.UI.Gtk.Cairo
 
+import Data.List (intersect)
+import Data.Map (Map, keys, (!), fromList, toList)
+
 data Vob = Vob { vobSize :: Render (Double, Double), drawVob :: Render () }
 
 vobWidth v  = do (w,h) <- vobSize v; return w
@@ -55,36 +58,60 @@ pad pixels = pad2 pixels pixels
 clipVob :: Vob -> Vob
 clipVob (Vob size draw) = Vob size draw' where
     draw' = do save; (w,h) <- size; rectangle 0 0 w h; clip; draw; restore
+    
+    
+    
+type Scene a = Map a (Double, Double, Vob)
+
+sceneVob :: Ord a => Double -> Double -> Scene a -> Vob
+sceneVob w h scene = Vob (return (w,h)) $ do
+    flip mapM (toList scene) $ \(key, (x, y, vob)) -> do 
+        save; translate x y; drawVob vob; restore
+    return ()
+        
+        
+
+interpolate :: Ord a => Double -> Scene a -> Scene a -> Scene a
+interpolate fract src dst = let
+      ks = intersect (keys src) (keys dst)
+      interp a b = (a*(1-fract)) + (b*fract)
+      vob (sx,sy,sv) (dx,dy,dv) = (interp sx dx, interp sy dy, dv)
+    in fromList [(k, vob (src ! k) (dst ! k)) | k <- ks]
+    
+    
              
 
 
 
-main = vobMain "Example" $ rectBox $ pad 5 $
+myVob = rectBox $ pad 5 $
     scaleVob 1 1 (hbox [label "Hello W", label "orld!"])
+    
+myScene1 = fromList [("Foo", (50, 50, myVob))]
+myScene2 = fromList [("Foo", (150, 150, myVob))]
 
 
-vobMain :: String -> Vob -> IO ()
-vobMain windowTitle vob = do
+main = do
     initGUI
     window <- windowNew
-    widgetSetAppPaintable window True
-    windowSetTitle window windowTitle
+    windowSetTitle window "Example"
     
     canvas <- drawingAreaNew
     set window [ containerChild := canvas ]
     
     onExpose canvas $ \(Expose { eventArea=rect }) -> do
         (cw, ch) <- drawingAreaGetSize canvas
+        let w = fromIntegral cw; h = fromIntegral ch
         drawable <- drawingAreaGetDrawWindow canvas
         
         renderWithDrawable drawable $ do
             save
             
-            (vw, vh) <- vobSize vob
-            translate (fromIntegral cw/2 - vw/2) (fromIntegral ch/2 - vh/2)
-
-            setSourceRGB 0 0 0            
-            drawVob vob
+            setSourceRGB 0.5 0.5 0.5
+            drawVob (sceneVob w h myScene1)
+            drawVob (sceneVob w h myScene2)
+            
+            setSourceRGB 0 0 0
+            drawVob (sceneVob w h (interpolate 0.5 myScene1 myScene2))
             
             restore
             
