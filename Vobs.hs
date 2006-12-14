@@ -120,12 +120,21 @@ main = do
         renderWithDrawable drawable $ do
             save
             
+            (vw, vh) <- defaultSize myVob
+            
+            let myScene1 = fromList [("Foo", (50, 50, vw, vh, myVob))]
+                myScene2 = fromList [("Foo", (150, 150, vw+30, vh, myVob))]
+            
+            System.Time.TOD seconds picoseconds <- liftIO System.Time.getClockTime
+            let time = fromInteger seconds+fromInteger picoseconds/(10**(4*3))
+                alpha = sin (time/5*pi)/2+0.5
+
             setSourceRGB 0.5 0.5 0.5
             drawVob (sceneVob myScene1) w h
             drawVob (sceneVob myScene2) w h
             
             setSourceRGB 0 0 0
-            drawVob (sceneVob w h (interpolate 0.5 myScene1 myScene2))
+            drawVob (sceneVob (interpolate alpha myScene1 myScene2)) w h
             
             restore
             
