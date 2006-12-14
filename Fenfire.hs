@@ -32,7 +32,7 @@ data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 getRotation :: Graph -> Node -> Node -> Dir -> Node -> Maybe Rotation
 getRotation graph node prop dir node' = do
     i <- Data.List.elemIndex (prop, node') (conns graph node dir)
-    return (Rotation graph node' i)
+    return (Rotation graph node i)
     
 sheight (Rotation g n _) = 
     max (length $ conns g n Pos) (length $ conns g n Neg) `div` 2
@@ -43,7 +43,7 @@ get r@(Rotation graph node rot) dir rot' = result where
     index = (length c `div` 2) + rot + rot'
     result = if index >= 0 && index < length c 
              then let (p,n) = c !! index in 
-                  getRotation graph node p dir n
+                  getRotation graph n p (rev dir) node
              else Nothing
         
 -- Some Fenfire views, like the vanishing wheel view, show a conceptually
