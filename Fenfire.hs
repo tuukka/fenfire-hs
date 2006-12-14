@@ -1,6 +1,4 @@
 
-module Fenfire where
-
 import Vobs
 
 import Graphics.UI.Gtk hiding (get)
@@ -121,7 +119,7 @@ main = do
             save
 
 	    let scene = vanishingView 3 rotation w h
-	    drawVob (sceneVob scene) w h
+	    drawVob (sceneVob (return scene)) w h
 
             restore
             
