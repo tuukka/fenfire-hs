@@ -95,8 +95,8 @@ handleKey :: Rotation -> Time -> InputEvent -> Signal Rotation
 handleKey rot@(Rotation graph node rotation) time (KeyPress key) =
     Signal nextRotation [] (handleKey nextRotation) where
         nextRotation = case key of
-            "Up"    -> Rotation graph node (rotation-1)
-            "Down"  -> Rotation graph node (rotation+1)
+            "Up"    -> Rotation graph node $ max (-height rot) $ min (height rot) $ rotation-1
+            "Down"  -> Rotation graph node $ max (-height rot) $ min (height rot) $ rotation+1
             "Left"  -> maybe rot id $ get rot Neg 0
             "Right" -> maybe rot id $ get rot Pos 0
 	    _       -> rot
