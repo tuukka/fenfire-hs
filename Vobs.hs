@@ -43,14 +43,11 @@ overlay vobs = Vob size draw where
                   return ()
     
 label :: String -> Vob
-label s = Vob (unsafePerformIO $ do 
-                  context <- cairoCreateContext Nothing
-                  layout  <- layoutText context s
-                  (PangoRectangle _ _ w h, _) <- layoutGetExtents layout
-                  return (fromIntegral w, fromIntegral h))
-              (\w h -> do ext <- textExtents s
-                          save; moveTo 0 (textExtentsHeight ext)
-                          showText s; restore)
+label s = unsafePerformIO $ do 
+    context <- cairoCreateContext Nothing
+    layout  <- layoutText context s
+    (Rectangle _ _ w h, _) <- layoutGetPixelExtents layout
+    return $ Vob (fromIntegral w, fromIntegral h) (\_w _h -> showLayout layout)
                           
                           
 rgbColor :: Double -> Double -> Double -> Vob -> Vob
@@ -105,10 +102,10 @@ clipVob (Vob size draw) = Vob size draw' where
     
 type Scene a  = Map a (Double, Double, Double, Double, Vob)
 
-sceneVob :: Ord a => (Double -> Double -> RScene a) -> Vob
-sceneVob scene = Vob (0,0) $ \sw sh -> do
-    scene' <- scene sw sh
-    flip mapM (toList scene') $ \(_, (x, y, w, h, vob)) -> do 
+sceneVob :: Ord a => (Double -> Double -> Scene a) -> Vob
+sceneVob view = Vob (0,0) $ \sw sh -> do
+    let scene = view sw sh
+    flip mapM (toList scene) $ \(_key, (x, y, w, h, vob)) -> do 
         save; translate (x-w/2) (y-h/2); drawVob vob w h; restore
     return ()
         
