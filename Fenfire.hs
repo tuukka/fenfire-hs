@@ -63,7 +63,7 @@ vanishingView depth start w h =
         oneNode :: (Double, Double) -> Double -> Rotation -> InfiniteScene
         oneNode (x,y) angle rot@(Rotation _ node rot0) = 
             Map.fromList [(node, (x, y, 80, 20, nodeView node))]
-                : combine [ connections (x,y) rot (-rot0) (angle-fromIntegral rot0*angleOffs) xdir ydir
+                : combine [ connections (x,y) rot (-rot0) (angle-fromIntegral rot0*mul xdir angleOffs) xdir ydir
                           | xdir <- [Neg, Pos], ydir <- [-1, 1] ]
                 
         angleOffs = pi / 14
@@ -113,9 +113,9 @@ main = do
         when (key=="q") mainQuit
 	
         let arrows = [up,down,right,left]
-	    up r@(Rotation graph node rotation) | key=="Up" = Rotation graph node (rotation+1)
+	    up r@(Rotation graph node rotation) | key=="Up" = Rotation graph node (rotation-1)
 						| otherwise = r
-	    down r@(Rotation graph node rotation) | key=="Down" = Rotation graph node (rotation-1)
+	    down r@(Rotation graph node rotation) | key=="Down" = Rotation graph node (rotation+1)
 						  | otherwise = r
 	    right r@(Rotation graph node rotation) | key=="Right" = maybe r id $ get r Pos 0
 						  | otherwise = r
