@@ -18,8 +18,8 @@ import Monad (when)
 data Vob = Vob { defaultSize :: (Double, Double), 
                  drawVob :: Double -> Double -> Render () }
 
-defaultWidth  (Vob (w,h) _) = w
-defaultHeight (Vob (w,h) _) = h
+defaultWidth v  = do (w,h) <- defaultSize v; return w
+defaultHeight v = do (w,h) <- defaultSize v; return h
 
     
 hbox :: [Vob] -> Vob
@@ -29,8 +29,9 @@ hbox vobs = Vob size draw where
 
     draw w h = do save
                   sequence $ flip map vobs $ \vob -> do
-                      drawVob vob (defaultWidth vob) h
-                      translate (defaultWidth vob) 0
+                      vobW <- defaultWidth vob
+                      drawVob vob vobW h
+                      translate vobW 0
                   restore
                   
 overlay :: [Vob] -> Vob
@@ -42,12 +43,14 @@ overlay vobs = Vob size draw where
                   return ()
     
 label :: String -> Vob
-label s = unsafePerformIO $ do 
-    context <- cairoCreateContext Nothing
-    layout  <- layoutText context s
-    (PangoRectangle _ _ w0 h0, _) <- layoutGetExtents layout
-    let w = fromIntegral w0; h = fromIntegral h0
-    return $ Vob (w, h) (\_ _ -> showLayout layout)
+label s = Vob (unsafePerformIO $ do 
+                  context <- cairoCreateContext Nothing
+                  layout  <- layoutText context s
+                  (PangoRectangle _ _ w h, _) <- layoutGetExtents layout
+                  return (fromIntegral w, fromIntegral h))
+              (\w h -> do ext <- textExtents s
+                          save; moveTo 0 (textExtentsHeight ext)
+                          showText s; restore)
                           
                           
 rgbColor :: Double -> Double -> Double -> Vob -> Vob
@@ -90,7 +93,7 @@ resizeY :: Double -> Vob -> Vob
 resizeY h (Vob (w,_) draw) = Vob (w,h) draw
 
 resize :: Double -> Double -> Vob -> Vob
-resize w h (Vob _ draw) = Vob (w,h) draw
+resize w h (Vob size draw) = Vob (return (w,h)) draw
 
 
 clipVob :: Vob -> Vob
@@ -101,10 +104,10 @@ clipVob (Vob size draw) = Vob size draw' where
     
 type Scene a  = Map a (Double, Double, Double, Double, Vob)
 
-sceneVob :: Ord a => (Double -> Double -> Scene a) -> Vob
-sceneVob view = Vob (0,0) $ \sw sh -> do
-    let scene = view sw sh
-    flip mapM (toList scene) $ \(_, (x, y, w, h, vob)) -> do 
+sceneVob :: Ord a => (Double -> Double -> RScene a) -> Vob
+sceneVob scene = Vob (0,0) $ \sw sh -> do
+    scene' <- scene sw sh
+    flip mapM (toList scene') $ \(_, (x, y, w, h, vob)) -> do 
         save; translate (x-w/2) (y-h/2); drawVob vob w h; restore
     return ()
         
@@ -114,7 +117,7 @@ interpolate :: Ord a => Double -> Scene a -> Scene a -> Scene a
 interpolate fract sc1 sc2 = let
       interpKeys = intersect (keys sc1) (keys sc2)
       interp a b = (a*(1-fract)) + (b*fract)   -- interpolate two Doubles
-      vob (x1,y1,w1,h1,_) (x2,y2,w2,h2,vob2) = 
+      vob (x1,y1,w1,h1,_vob1) (x2,y2,w2,h2,vob2) = 
           (interp x1 x2, interp y1 y2, interp w1 w2, interp h1 h2, vob2)
     in fromList [(key, vob (sc1 ! key) (sc2 ! key)) | key <- interpKeys]
              
@@ -126,7 +129,6 @@ instance Show Modifier where
     show Alt = "Alt"
     show Apple = "Apple"
     show Compose = "Compose"
-    show _ = "Unknown modifier"
 
 timeDbg :: MonadIO m => String -> Time -> m ()
 timeDbg msg time | False     = liftIO $ putStrLn $ msg ++ "\t" ++ show time

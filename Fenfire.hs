@@ -2,10 +2,6 @@
 import Signals
 import Vobs
 
--- import Graphics.UI.Gtk hiding (get)
--- import Graphics.Rendering.Cairo
--- import Graphics.UI.Gtk.Cairo
-
 import qualified Data.Map as Map
 import qualified Data.List
 import Maybe (fromJust, isJust, isNothing)
@@ -92,7 +88,7 @@ mainView :: Rotation -> Vob
 mainView rot = sceneVob $ vanishingView 3 rot
 
 handleKey :: Rotation -> Time -> InputEvent -> Signal Rotation
-handleKey rot@(Rotation graph node rotation) time (KeyPress key) =
+handleKey rot@(Rotation graph node rotation) _time (KeyPress key) =
     Signal nextRotation [] (handleKey nextRotation) where
         nextRotation = case key of
             "Up"    -> Rotation graph node $ max (-height rot) $ min (height rot) $ rotation-1
@@ -100,17 +96,17 @@ handleKey rot@(Rotation graph node rotation) time (KeyPress key) =
             "Left"  -> maybe rot id $ get rot Neg 0
             "Right" -> maybe rot id $ get rot Pos 0
 	    _       -> rot
+
+home = URI "Home"
+nodeA = PlainLiteral "A"
+nodeAA = PlainLiteral "AA"
+nodeAB = PlainLiteral "AB"
+nodeB = PlainLiteral "B"
+myprop = PlainLiteral "p"
+myGraph = [(home,myprop,nodeA),(home,myprop,nodeB),(nodeA,myprop,nodeAA),(nodeA,myprop,nodeAB)]
             
 main :: IO ()
 main = do
-    let node = PlainLiteral "Home"
-        nodeA = PlainLiteral "A"
-        nodeAA = PlainLiteral "AA"
-        nodeAB = PlainLiteral "AB"
-        nodeB = PlainLiteral "B"
-        prop = PlainLiteral "prop"
-        graph = [(node,prop,nodeA),(node,prop,nodeB),(nodeA,prop,nodeAA),(nodeA,prop,nodeAB)]
-
-    let rot = (Rotation graph node 0)
+    let rot = (Rotation myGraph home 0)
     let rotationSignal = Signal rot [] (handleKey rot)
     vobMain "Fenfire" (fmap mainView rotationSignal)
