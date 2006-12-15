@@ -18,8 +18,8 @@ import Monad (when)
 data Vob = Vob { defaultSize :: (Double, Double), 
                  drawVob :: Double -> Double -> Render () }
 
-defaultWidth v  = do (w,h) <- defaultSize v; return w
-defaultHeight v = do (w,h) <- defaultSize v; return h
+defaultWidth  (Vob (w,_) _) = w
+defaultHeight (Vob (_,h) _) = h
 
     
 hbox :: [Vob] -> Vob
@@ -27,12 +27,12 @@ hbox vobs = Vob size draw where
     size = (sum     $ map defaultWidth vobs, 
             maximum $ map defaultHeight vobs)
 
-    draw w h = do save
-                  sequence $ flip map vobs $ \vob -> do
-                      vobW <- defaultWidth vob
-                      drawVob vob vobW h
-                      translate vobW 0
-                  restore
+    draw _w h = do save
+                   sequence $ flip map vobs $ \vob -> do
+                       let vobW = defaultWidth vob
+                       drawVob vob vobW h
+                       translate vobW 0
+                   restore
                   
 overlay :: [Vob] -> Vob
 overlay vobs = Vob size draw where
@@ -60,24 +60,24 @@ rgbColor r g b (Vob size draw) = Vob size draw' where
                   
 scaleVob :: Double -> Double -> Vob -> Vob
 scaleVob sx sy (Vob (w,h) draw) = Vob (sx*w, sy*h) draw' where
-    draw' w h = do save; scale sx sy; draw (sx*w) (sy*h); restore
+    draw' w' h' = do save; scale sx sy; draw (sx*w') (sy*h'); restore
     
     
 rectBox :: Vob -> Vob
 rectBox (Vob (w,h) draw) = Vob (w+2,h+2) draw' where
-    draw' w h = do save
-                   rectangle 0 0 w h; stroke
-                   translate 1 1; draw (w-2) (h-2)
-                   restore
+    draw' w' h' = do save
+                     rectangle 0 0 w' h'; stroke
+                     translate 1 1; draw (w'-2) (h'-2)
+                     restore
                
                
 pad4 :: Double -> Double -> Double -> Double -> Vob -> Vob
 pad4 left up right down (Vob (w,h) draw) = Vob size' draw' where
     size'     = (left+w+right, up+h+down)
-    draw' w h = do save
-                   translate left up
-                   draw (w-left-right) (h-up-down)
-                   restore
+    draw' w' h' = do save
+                     translate left up
+                     draw (w'-left-right) (h'-up-down)
+                     restore
     
 pad2 :: Double -> Double -> Vob -> Vob
 pad2 x y   = pad4 x y x y
@@ -93,7 +93,8 @@ resizeY :: Double -> Vob -> Vob
 resizeY h (Vob (w,_) draw) = Vob (w,h) draw
 
 resize :: Double -> Double -> Vob -> Vob
-resize w h (Vob size draw) = Vob (return (w,h)) draw
+
+resize w h (Vob _size draw) = Vob (w,h) draw
 
 
 clipVob :: Vob -> Vob
