@@ -85,7 +85,7 @@ vanishingView depth start w h =
 
 
 mainView :: Rotation -> Vob
-mainView rot = sceneVob $ vanishingView 3 rot
+mainView rot = sceneVob $ vanishingView 3 rot 700 300
 
 handleKey :: Rotation -> Time -> InputEvent -> Signal Rotation
 handleKey rot@(Rotation graph node rotation) _time (KeyPress key) =
@@ -97,16 +97,17 @@ handleKey rot@(Rotation graph node rotation) _time (KeyPress key) =
             "Right" -> maybe rot id $ get rot Pos 0
 	    _       -> rot
 
-home = URI "Home"
-nodeA = PlainLiteral "A"
-nodeAA = PlainLiteral "AA"
-nodeAB = PlainLiteral "AB"
-nodeB = PlainLiteral "B"
-myprop = PlainLiteral "p"
-myGraph = [(home,myprop,nodeA),(home,myprop,nodeB),(nodeA,myprop,nodeAA),(nodeA,myprop,nodeAB)]
             
 main :: IO ()
 main = do
-    let rot = (Rotation myGraph home 0)
+    let node = URI "Home"
+        nodeA = PlainLiteral "A"
+        nodeAA = PlainLiteral "AA"
+        nodeAB = PlainLiteral "AB"
+        nodeB = PlainLiteral "B"
+        prop = PlainLiteral "prop"
+        graph = [(node,prop,nodeA),(node,prop,nodeB),(nodeA,prop,nodeAA),(nodeA,prop,nodeAB)]
+
+    let rot = (Rotation graph node 0)
     let rotationSignal = Signal rot [] (handleKey rot)
     vobMain "Fenfire" (fmap mainView rotationSignal)
