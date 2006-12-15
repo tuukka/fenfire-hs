@@ -1,14 +1,14 @@
 
 GHC?=ghc
 
-TARGETS=vobs fenfire
+TARGETS=vobtest fenfire
 
 all: $(TARGETS)
 
-vobs: VobTest.hs Vobs.hs
+vobtest: VobTest.hs *.hs
 	$(GHC) -o $@ --make $<
 
-fenfire: Fenfire.hs Vobs.hs
+fenfire: Fenfire.hs *.hs
 	$(GHC) -o $@ --make $<
 
 clean:
