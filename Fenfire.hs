@@ -10,6 +10,7 @@ import Data.IORef
 import qualified Data.Map as Map
 import qualified Data.List
 import Maybe (fromJust, isJust, isNothing)
+import Monad (when)
 
 data Node = URI String | PlainLiteral String    deriving (Eq, Ord, Show)
 data Dir  = Pos | Neg                           deriving (Eq, Ord, Show)
@@ -106,7 +107,20 @@ main = do
         liftIO $ putStrLn $ show mods++key++" ("++show char++")"
 
         (Rotation graph node rotation) <- readIORef state
-	writeIORef state (Rotation graph node rotation)
+
+        when (key=="q") mainQuit
+	
+        let arrows = [up,down,right,left]
+	    up r@(Rotation graph node rotation) | key=="Up" = Rotation graph node (rotation+1)
+						| otherwise = r
+	    down r@(Rotation graph node rotation) | key=="Down" = Rotation graph node (rotation-1)
+						  | otherwise = r
+	    right r@(Rotation graph node rotation) | key=="Right" = maybe r id $ get r Pos 0
+						  | otherwise = r
+	    left r@(Rotation graph node rotation) | key=="Left" = maybe r id $ get r Neg 0
+						  | otherwise = r
+	writeIORef state $ foldr ($) (Rotation graph node rotation) arrows
+	readIORef state >>= print
 	return False
     
     onExpose canvas $ \(Expose { eventArea=rect }) -> do
@@ -125,6 +139,8 @@ main = do
             restore
             
         return True
+
+    flip timeoutAdd 10 (widgetQueueDraw canvas >> return True)
 
     onDestroy window mainQuit
     widgetShowAll window
