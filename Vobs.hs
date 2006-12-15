@@ -3,6 +3,7 @@ module Vobs where
 import Signals
 
 import Data.IORef
+import System.IO.Unsafe (unsafePerformIO)
 
 import Control.Monad.Trans (liftIO, MonadIO)
 
@@ -14,38 +15,38 @@ import Data.List (intersect)
 import Data.Map (Map, keys, (!), fromList, toList, insert, empty)
 import Monad (when)
 
-data Vob = Vob { defaultSize :: Render (Double, Double), 
+data Vob = Vob { defaultSize :: (Double, Double), 
                  drawVob :: Double -> Double -> Render () }
 
-defaultWidth v  = do (w,h) <- defaultSize v; return w
-defaultHeight v = do (w,h) <- defaultSize v; return h
+defaultWidth  (Vob (w,h) _) = w
+defaultHeight (Vob (w,h) _) = h
 
     
 hbox :: [Vob] -> Vob
 hbox vobs = Vob size draw where
-    size = do sizes <- mapM defaultSize vobs
-              let (widths, heights) = unzip sizes
-              return (sum widths, maximum heights)
+    size = (sum     $ map defaultWidth vobs, 
+            maximum $ map defaultHeight vobs)
 
     draw w h = do save
                   sequence $ flip map vobs $ \vob -> do
-                      vobW <- defaultWidth vob
-                      drawVob vob vobW h
-                      translate vobW 0
+                      drawVob vob (defaultWidth vob) h
+                      translate (defaultWidth vob) 0
                   restore
                   
 overlay :: [Vob] -> Vob
 overlay vobs = Vob size draw where
-    size = do sizes <- mapM defaultSize vobs
-              let (widths, heights) = unzip sizes
-              return (maximum widths, maximum heights)
+    size = (maximum $ map defaultWidth vobs, 
+            maximum $ map defaultHeight vobs)
               
     draw w h = do sequence $ flip map vobs $ \vob -> drawVob vob w h
                   return ()
     
 label :: String -> Vob
-label s = Vob (do ext <- textExtents s
-                  return (textExtentsWidth ext, textExtentsHeight ext))
+label s = Vob (unsafePerformIO $ do 
+                  context <- cairoCreateContext Nothing
+                  layout  <- layoutText context s
+                  (PangoRectangle _ _ w h, _) <- layoutGetExtents layout
+                  return (fromIntegral w, fromIntegral h))
               (\w h -> do ext <- textExtents s
                           save; moveTo 0 (textExtentsHeight ext)
                           showText s; restore)
@@ -57,14 +58,12 @@ rgbColor r g b (Vob size draw) = Vob size draw' where
 
                   
 scaleVob :: Double -> Double -> Vob -> Vob
-scaleVob sx sy (Vob size draw) = Vob size' draw' where
-    size'     = do (w,h) <- size; return (sx*w, sy*h)
+scaleVob sx sy (Vob (w,h) draw) = Vob (sx*w, sy*h) draw' where
     draw' w h = do save; scale sx sy; draw (sx*w) (sy*h); restore
     
     
 rectBox :: Vob -> Vob
-rectBox (Vob size draw) = Vob size' draw' where
-    size'     = do (w,h) <- size; return (w+2, h+2)
+rectBox (Vob (w,h) draw) = Vob (w+2,h+2) draw' where
     draw' w h = do save
                    rectangle 0 0 w h; stroke
                    translate 1 1; draw (w-2) (h-2)
@@ -72,8 +71,8 @@ rectBox (Vob size draw) = Vob size' draw' where
                
                
 pad4 :: Double -> Double -> Double -> Double -> Vob -> Vob
-pad4 left up right down (Vob size draw) = Vob size' draw' where
-    size'     = do (w,h) <- size; return (left+w+right, up+h+down)
+pad4 left up right down (Vob (w,h) draw) = Vob size' draw' where
+    size'     = (left+w+right, up+h+down)
     draw' w h = do save
                    translate left up
                    draw (w-left-right) (h-up-down)
@@ -87,13 +86,13 @@ pad pixels = pad2 pixels pixels
 
 
 resizeX :: Double -> Vob -> Vob
-resizeX w (Vob size draw) = Vob (do (_,h) <- size; return (w,h)) draw
+resizeX w (Vob (_,h) draw) = Vob (w,h) draw
 
 resizeY :: Double -> Vob -> Vob
-resizeY h (Vob size draw) = Vob (do (w,_) <- size; return (w,h)) draw
+resizeY h (Vob (w,_) draw) = Vob (w,h) draw
 
 resize :: Double -> Double -> Vob -> Vob
-resize w h (Vob size draw) = Vob (return (w,h)) draw
+resize w h (Vob _ draw) = Vob (w,h) draw
 
 
 clipVob :: Vob -> Vob
@@ -106,7 +105,7 @@ type Scene a  = Map a (Double, Double, Double, Double, Vob)
 type RScene a = Render (Scene a)
 
 sceneVob :: Ord a => (Double -> Double -> RScene a) -> Vob
-sceneVob scene = Vob (return (0,0)) $ \sw sh -> do
+sceneVob scene = Vob (0,0) $ \sw sh -> do
     scene' <- scene sw sh
     flip mapM (toList scene') $ \(_, (x, y, w, h, vob)) -> do 
         save; translate (x-w/2) (y-h/2); drawVob vob w h; restore
