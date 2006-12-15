@@ -1,10 +1,10 @@
 module Vobs where
 
-import qualified System.Time
-
 import Signals
 
 import Data.IORef
+
+import Control.Monad.Trans (liftIO, MonadIO)
 
 import Graphics.UI.Gtk
 import Graphics.Rendering.Cairo
@@ -79,7 +79,10 @@ pad4 left up right down (Vob size draw) = Vob size' draw' where
                    draw (w-left-right) (h-up-down)
                    restore
     
+pad2 :: Double -> Double -> Vob -> Vob
 pad2 x y   = pad4 x y x y
+
+pad :: Double -> Vob -> Vob
 pad pixels = pad2 pixels pixels
 
 
@@ -105,7 +108,7 @@ type RScene a = Render (Scene a)
 sceneVob :: Ord a => (Double -> Double -> RScene a) -> Vob
 sceneVob scene = Vob (return (0,0)) $ \sw sh -> do
     scene' <- scene sw sh
-    flip mapM (toList scene') $ \(key, (x, y, w, h, vob)) -> do 
+    flip mapM (toList scene') $ \(_, (x, y, w, h, vob)) -> do 
         save; translate (x-w/2) (y-h/2); drawVob vob w h; restore
     return ()
         
@@ -115,7 +118,7 @@ interpolate :: Ord a => Double -> Scene a -> Scene a -> Scene a
 interpolate fract sc1 sc2 = let
       interpKeys = intersect (keys sc1) (keys sc2)
       interp a b = (a*(1-fract)) + (b*fract)   -- interpolate two Doubles
-      vob (x1,y1,w1,h1,vob1) (x2,y2,w2,h2,vob2) = 
+      vob (x1,y1,w1,h1,_) (x2,y2,w2,h2,vob2) = 
           (interp x1 x2, interp y1 y2, interp w1 w2, interp h1 h2, vob2)
     in fromList [(key, vob (sc1 ! key) (sc2 ! key)) | key <- interpKeys]
              
@@ -129,6 +132,7 @@ instance Show Modifier where
     show Compose = "Compose"
     show _ = "Unknown modifier"
 
+timeDbg :: MonadIO m => String -> Time -> m ()
 timeDbg msg time | False     = liftIO $ putStrLn $ msg ++ "\t" ++ show time
 		 | otherwise = return ()
 
@@ -156,7 +160,7 @@ vobMain title vobSignal' = do
 
 	return False
     
-    onExpose canvas $ \(Expose { eventArea=rect }) -> do
+    onExpose canvas $ \(Expose {}) -> do
         (cw, ch) <- drawingAreaGetSize canvas
         let w = fromIntegral cw; h = fromIntegral ch
         drawable <- drawingAreaGetDrawWindow canvas

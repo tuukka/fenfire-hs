@@ -2,28 +2,28 @@
 import Signals
 import Vobs
 
-import Graphics.UI.Gtk hiding (get)
-import Graphics.Rendering.Cairo
-import Graphics.UI.Gtk.Cairo
-
-import Data.IORef
+-- import Graphics.UI.Gtk hiding (get)
+-- import Graphics.Rendering.Cairo
+-- import Graphics.UI.Gtk.Cairo
 
 import qualified Data.Map as Map
 import qualified Data.List
 import Maybe (fromJust, isJust, isNothing)
-import Monad (when)
 
 data Node = URI String | PlainLiteral String    deriving (Eq, Ord, Show)
 data Dir  = Pos | Neg                           deriving (Eq, Ord, Show)
 
 type Graph = [(Node, Node, Node)]
 
+rev :: Dir -> Dir
 rev Pos = Neg
 rev Neg = Pos
 
+mul :: Num a => Dir -> a -> a
 mul Pos = id
 mul Neg = negate
 
+conns :: Graph -> Node -> Dir -> [(Node, Node)]
 conns g node Pos = [(prop, obj) | (subj, prop, obj) <- g, subj == node]
 conns g node Neg = [(prop, subj) | (subj, prop, obj) <- g, obj  == node]
 
@@ -34,11 +34,12 @@ getRotation graph node prop dir node' = do
     i <- Data.List.elemIndex (prop, node') (conns graph node dir)
     return (Rotation graph node (i-length (conns graph node dir) `div` 2))
     
-sheight (Rotation g n _) = 
+height :: Rotation -> Int
+height (Rotation g n _) = 
     max (length $ conns g n Pos) (length $ conns g n Neg) `div` 2
 
 get :: Rotation -> Dir -> Int -> Maybe Rotation
-get r@(Rotation graph node rot) dir rot' = result where
+get (Rotation graph node rot) dir rot' = result where
     c = conns graph node dir
     index = (length c `div` 2) + rot + rot'
     result = if index >= 0 && index < length c 
@@ -55,6 +56,7 @@ type InfiniteScene = [Scene Node]
 combine :: [InfiniteScene] -> InfiniteScene
 combine scenes = (Map.unions $ concatMap (take 1) scenes) : combine (map (drop 1) scenes)
 
+nodeView :: Node -> Vob
 nodeView n = rectBox $ clipVob $ resizeY 80 $ pad 5 $ label (show n)
 
 
@@ -85,20 +87,11 @@ vanishingView depth start w h =
             (x + distance * cos angle, y + distance * sin angle)
 
 
-
-node = PlainLiteral "Home"
-nodeA = PlainLiteral "A"
-nodeAA = PlainLiteral "AA"
-nodeAB = PlainLiteral "AB"
-nodeB = PlainLiteral "B"
-prop = PlainLiteral "prop"
-graph = [(node,prop,nodeA),(node,prop,nodeB),(nodeA,prop,nodeAA),(nodeA,prop,nodeAB)]
-
 mainView :: Rotation -> Vob
 mainView rot = sceneVob $ \w h -> return $ vanishingView 3 rot w h
 
 handleKey :: Rotation -> Time -> InputEvent -> Signal Rotation
-handleKey rot@(Rotation graph node rotation) time (KeyPress key) = 
+handleKey rot@(Rotation graph node rotation) time (KeyPress key) =
     Signal nextRotation [] (handleKey nextRotation) where
         nextRotation = case key of
             "Up"    -> Rotation graph node (rotation-1)
@@ -107,9 +100,16 @@ handleKey rot@(Rotation graph node rotation) time (KeyPress key) =
             "Right" -> maybe rot id $ get rot Pos 0
 	    _       -> rot
             
+main :: IO ()
 main = do
-    now <- getTimeIO
-    
+    let node = PlainLiteral "Home"
+        nodeA = PlainLiteral "A"
+        nodeAA = PlainLiteral "AA"
+        nodeAB = PlainLiteral "AB"
+        nodeB = PlainLiteral "B"
+        prop = PlainLiteral "prop"
+        graph = [(node,prop,nodeA),(node,prop,nodeB),(nodeA,prop,nodeAA),(nodeA,prop,nodeAB)]
+
     let rot = (Rotation graph node 0)
     let rotationSignal = Signal rot [] (handleKey rot)
     vobMain "Fenfire" (fmap mainView rotationSignal)

@@ -25,5 +25,5 @@ interpSignal clock sc1 sc2 = flip fmap clock $ \t -> let
 
 main = do
     now <- getTimeIO
-    vobMain "Example" $ interpSignal (time now 0.01) myScene1 myScene2
+    vobMain "Example" $ interpSignal (timeSignal now 0.01) myScene1 myScene2
     
