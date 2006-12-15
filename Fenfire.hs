@@ -31,7 +31,7 @@ data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 getRotation :: Graph -> Node -> Node -> Dir -> Node -> Maybe Rotation
 getRotation graph node prop dir node' = do
     i <- Data.List.elemIndex (prop, node') (conns graph node dir)
-    return (Rotation graph node i)
+    return (Rotation graph node (i-length (conns graph node dir) `div` 2))
     
 sheight (Rotation g n _) = 
     max (length $ conns g n Pos) (length $ conns g n Neg) `div` 2
@@ -61,9 +61,9 @@ vanishingView :: Int -> Rotation -> Double -> Double -> Scene Node
 vanishingView depth start w h = 
     Map.unions $ take depth $ oneNode (w/2, h/2) 0 start where -- XXX
         oneNode :: (Double, Double) -> Double -> Rotation -> InfiniteScene
-        oneNode (x,y) angle rot@(Rotation _ node _) = 
+        oneNode (x,y) angle rot@(Rotation _ node rot0) = 
             Map.fromList [(node, (x, y, 80, 20, nodeView node))]
-                : combine [ connections (x,y) rot 0 angle xdir ydir
+                : combine [ connections (x,y) rot (-rot0) (angle-fromIntegral rot0*angleOffs) xdir ydir
                           | xdir <- [Neg, Pos], ydir <- [-1, 1] ]
                 
         angleOffs = pi / 14
@@ -86,16 +86,18 @@ vanishingView depth start w h =
 
 
 node = PlainLiteral "Home"
-node2 = PlainLiteral "A"
-node3 = PlainLiteral "B"
+nodeA = PlainLiteral "A"
+nodeAA = PlainLiteral "AA"
+nodeAB = PlainLiteral "AB"
+nodeB = PlainLiteral "B"
 prop = PlainLiteral "prop"
-graph = [(node,prop,node2),(node,prop,node3)]            
+graph = [(node,prop,nodeA),(node,prop,nodeB),(nodeA,prop,nodeAA),(nodeA,prop,nodeAB)]
             
 main = do
     initGUI
     window <- windowNew
     windowSetTitle window "Example"
-    windowSetDefaultSize window 400 150
+    windowSetDefaultSize window 700 400
     
     canvas <- drawingAreaNew
     set window [ containerChild := canvas ]
@@ -133,7 +135,7 @@ main = do
         renderWithDrawable drawable $ do
             save
 
-	    let scene = vanishingView 3 rotation w h
+	    let scene = vanishingView 8 rotation w h
 	    drawVob (sceneVob (return scene)) w h
 
             restore
