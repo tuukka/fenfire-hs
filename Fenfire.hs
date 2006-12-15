@@ -24,7 +24,7 @@ mul Pos = id
 mul Neg = negate
 
 conns :: Graph -> Node -> Dir -> [(Node, Node)]
-conns g node Pos = [(prop, obj) | (subj, prop, obj) <- g, subj == node]
+conns g node Pos = [(prop, obj)  | (subj, prop, obj) <- g, subj == node]
 conns g node Neg = [(prop, subj) | (subj, prop, obj) <- g, obj  == node]
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
@@ -57,7 +57,7 @@ combine :: [InfiniteScene] -> InfiniteScene
 combine scenes = (Map.unions $ concatMap (take 1) scenes) : combine (map (drop 1) scenes)
 
 nodeView :: Node -> Vob
-nodeView n = rectBox $ clipVob $ resizeY 80 $ pad 5 $ label (show n)
+nodeView n = rectBox $ clipVob $ resizeX 100 $ pad 5 $ label (show n)
 
 
 vanishingView :: Int -> Rotation -> Double -> Double -> Scene Node
@@ -65,7 +65,8 @@ vanishingView depth start w h =
     Map.unions $ take depth $ oneNode (w/2, h/2) 0 start where -- XXX
         oneNode :: (Double, Double) -> Double -> Rotation -> InfiniteScene
         oneNode (x,y) angle rot@(Rotation _ node rot0) = 
-            Map.fromList [(node, (x, y, 80, 20, nodeView node))]
+            let vob@(Vob (vw, vh) _) = nodeView node in
+            Map.fromList [(node, (x-vw/2, y-vh/2, vw, vh, vob))]
                 : combine [ connections (x,y) rot (-rot0) (angle-fromIntegral rot0*mul xdir angleOffs) xdir ydir
                           | xdir <- [Neg, Pos], ydir <- [-1, 1] ]
                 
