@@ -97,9 +97,9 @@ graph = [(node,prop,nodeA),(node,prop,nodeB),(nodeA,prop,nodeAA),(nodeA,prop,nod
 mainView :: Rotation -> Vob
 mainView rot = sceneVob $ \w h -> return $ vanishingView 3 rot w h
 
-handleKey :: Rotation -> Time -> InputEvent -> Stream Rotation
+handleKey :: Rotation -> Time -> InputEvent -> Signal Rotation
 handleKey rot@(Rotation graph node rotation) time (KeyPress key) = 
-    Stream [(time, nextRotation)] (handleKey nextRotation) where
+    Signal nextRotation [] (handleKey nextRotation) where
         nextRotation = case key of
             "Up"    -> Rotation graph node (rotation-1)
             "Down"  -> Rotation graph node (rotation+1)
@@ -110,7 +110,7 @@ main = do
     now <- getTimeIO
     
     let rot = (Rotation graph node 0)
-    let rotationSignal = Signal rot (Stream [] $ handleKey rot)
+    let rotationSignal = Signal rot [] (handleKey rot)
     vobMain "Fenfire" (fmap mainView rotationSignal)
 
          
