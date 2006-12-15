@@ -24,6 +24,12 @@ getTimeIO :: IO Time
 getTimeIO = do (TOD secs pics) <- System.Time.getClockTime
                return $ fromInteger secs + fromInteger pics / (10**(3*4))
 
+emptyStream :: Stream a
+emptyStream = Stream [] (\t e -> emptyStream)
+
+constSignal :: a -> Signal a
+constSignal value = Signal value emptyStream
+
 getSignal :: Time -> Signal a -> a
 getSignal time (Signal start (Stream evs _)) = getSignal' evs start where
     getSignal' ((t,v):evs) def | t > time  = def
