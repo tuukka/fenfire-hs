@@ -19,9 +19,8 @@ streamDrop t ((t',v):xs) | t' < t    = streamDrop t xs
 streamDrop t []                      = []
     
 streamJoin2 :: Time -> Stream a -> Stream a -> Stream a
-streamJoin2 t ((t',v):xs) ys | t' < t    = (t',v) : streamJoin2 t xs ys
-                             | otherwise = streamDrop t ys
-streamJoin2 t []          ys             = streamDrop t ys
+streamJoin2 t a b = takeWhile (\x -> fst x < t) a 
+                 ++ dropWhile (\x -> fst x < t) b
 
 streamJoinN :: Stream a -> Stream (Stream a) -> Stream a
 streamJoinN start ((t,s):xs) = streamJoin2 t start (streamJoinN s xs)
