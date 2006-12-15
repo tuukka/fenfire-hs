@@ -105,6 +105,7 @@ handleKey rot@(Rotation graph node rotation) time (KeyPress key) =
             "Down"  -> Rotation graph node (rotation+1)
             "Left"  -> maybe rot id $ get rot Neg 0
             "Right" -> maybe rot id $ get rot Pos 0
+	    _       -> rot
             
 main = do
     now <- getTimeIO

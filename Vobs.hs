@@ -12,6 +12,7 @@ import Graphics.UI.Gtk.Cairo
 
 import Data.List (intersect)
 import Data.Map (Map, keys, (!), fromList, toList, insert, empty)
+import Monad (when)
 
 data Vob = Vob { defaultSize :: Render (Double, Double), 
                  drawVob :: Double -> Double -> Render () }
@@ -145,6 +146,8 @@ vobMain title vobSignal' = do
 
     onKeyPress window $ \(Key { eventModifier=mods, eventKeyName=key, eventKeyChar=char }) -> do
         liftIO $ putStrLn $ show mods++key++" ("++show char++")"
+
+        when (key=="q") mainQuit
 
         vobSignal <- readIORef state
 	now <- getTimeIO
