@@ -15,8 +15,7 @@ interpSignal :: Ord a => Signal Time -> Scene a -> Scene a -> Signal Vob
 interpSignal clock sc1 sc2 = flip fmap clock $ \t -> let
         alpha = sin (t/5*pi)/2+0.5
         isc   = interpolate alpha sc1 sc2
-        [fsc1, fsc2, fisc] = map (\x _ _ -> x) [sc1, sc2, isc]
-        [v1, v2, iv] = map sceneVob [fsc1, fsc2, fisc]
+        [v1, v2, iv] = map sceneVob [sc1, sc2, isc]
         [v1', v2'] = map (rgbColor 0.5 0.5 0.5) [v1, v2]
         iv' = rgbColor 0 0 0 iv
     in overlay [v1', v2', iv']
