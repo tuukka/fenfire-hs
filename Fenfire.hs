@@ -88,7 +88,7 @@ vanishingView depth start w h =
 
 
 mainView :: Rotation -> Vob
-mainView rot = sceneVob $ \w h -> return $ vanishingView 3 rot w h
+mainView rot = sceneVob $ vanishingView 3 rot
 
 handleKey :: Rotation -> Time -> InputEvent -> Signal Rotation
 handleKey rot@(Rotation graph node rotation) time (KeyPress key) =

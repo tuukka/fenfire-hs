@@ -100,12 +100,11 @@ clipVob (Vob size draw) = Vob size draw' where
     
     
 type Scene a  = Map a (Double, Double, Double, Double, Vob)
-type RScene a = Render (Scene a)
 
-sceneVob :: Ord a => (Double -> Double -> RScene a) -> Vob
-sceneVob scene = Vob (0,0) $ \sw sh -> do
-    scene' <- scene sw sh
-    flip mapM (toList scene') $ \(_, (x, y, w, h, vob)) -> do 
+sceneVob :: Ord a => (Double -> Double -> Scene a) -> Vob
+sceneVob view = Vob (0,0) $ \sw sh -> do
+    let scene = view sw sh
+    flip mapM (toList scene) $ \(_, (x, y, w, h, vob)) -> do 
         save; translate (x-w/2) (y-h/2); drawVob vob w h; restore
     return ()
         
