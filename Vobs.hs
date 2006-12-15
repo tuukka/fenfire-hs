@@ -42,14 +42,12 @@ overlay vobs = Vob size draw where
                   return ()
     
 label :: String -> Vob
-label s = Vob (unsafePerformIO $ do 
-                  context <- cairoCreateContext Nothing
-                  layout  <- layoutText context s
-                  (PangoRectangle _ _ w h, _) <- layoutGetExtents layout
-                  return (fromIntegral w, fromIntegral h))
-              (\w h -> do ext <- textExtents s
-                          save; moveTo 0 (textExtentsHeight ext)
-                          showText s; restore)
+label s = unsafePerformIO $ do 
+    context <- cairoCreateContext Nothing
+    layout  <- layoutText context s
+    (PangoRectangle _ _ w0 h0, _) <- layoutGetExtents layout
+    let w = fromIntegral w0; h = fromIntegral h0
+    return $ Vob (w, h) (\_ _ -> showLayout layout)
                           
                           
 rgbColor :: Double -> Double -> Double -> Vob -> Vob
