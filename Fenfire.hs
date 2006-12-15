@@ -1,4 +1,5 @@
 
+import Signals
 import Vobs
 
 import Graphics.UI.Gtk hiding (get)
@@ -92,14 +93,25 @@ nodeAB = PlainLiteral "AB"
 nodeB = PlainLiteral "B"
 prop = PlainLiteral "prop"
 graph = [(node,prop,nodeA),(node,prop,nodeB),(nodeA,prop,nodeAA),(nodeA,prop,nodeAB)]
+
+mainView :: Rotation -> Vob
+mainView rot = sceneVob $ \w h -> return $ vanishingView 3 rot w h
+
+handleKey :: Rotation -> Time -> InputEvent -> Stream Rotation
+handleKey rot@(Rotation graph node rotation) time (KeyPress key) = 
+    Stream [(time, nextRotation)] (handleKey nextRotation) where
+        nextRotation = case key of
+            "Up"    -> Rotation graph node (rotation-1)
+            "Down"  -> Rotation graph node (rotation+1)
+            "Left"  -> maybe rot id $ get rot Neg 0
+            "Right" -> maybe rot id $ get rot Pos 0
             
 main = do
     now <- getTimeIO
-
-    let scene = vanishingView 3 (Rotation graph node 0) w h
-    let vob = sceneVob (return scene)
-    let vobSignal = Signal vob $ Stream [] $ \time event -> ...
-    vobMain "Fenfire" vobSignal
+    
+    let rot = (Rotation graph node 0)
+    let rotationSignal = Signal rot (Stream [] $ handleKey rot)
+    vobMain "Fenfire" (fmap mainView rotationSignal)
 
          
 oldmain = do
@@ -146,8 +158,8 @@ oldmain = do
         renderWithDrawable drawable $ do
             save
 
-	    let scene = vanishingView 8 rotation w h
-	    drawVob (sceneVob (return scene)) w h
+	    let scene = vanishingView 3 rotation w h
+	    drawVob (sceneVob (\_ _ -> return scene)) w h
 
             restore
             
