@@ -94,6 +94,15 @@ prop = PlainLiteral "prop"
 graph = [(node,prop,nodeA),(node,prop,nodeB),(nodeA,prop,nodeAA),(nodeA,prop,nodeAB)]
             
 main = do
+    now <- getTimeIO
+
+    let scene = vanishingView 3 (Rotation graph node 0) w h
+    let vob = sceneVob (return scene)
+    let vobSignal = Signal vob $ Stream [] $ \time event -> ...
+    vobMain "Fenfire" vobSignal
+
+         
+oldmain = do
     initGUI
     window <- windowNew
     windowSetTitle window "Example"
@@ -123,6 +132,8 @@ main = do
 						  | otherwise = r
 	writeIORef state $ foldr ($) (Rotation graph node rotation) arrows
 	readIORef state >>= print
+	widgetQueueDraw canvas
+
 	return False
     
     onExpose canvas $ \(Expose { eventArea=rect }) -> do
@@ -141,8 +152,6 @@ main = do
             restore
             
         return True
-
-    flip timeoutAdd 10 (widgetQueueDraw canvas >> return True)
 
     onDestroy window mainQuit
     widgetShowAll window

@@ -4,6 +4,8 @@ import qualified System.Time
 
 import Signals
 
+import Data.IORef
+
 import Graphics.UI.Gtk
 import Graphics.Rendering.Cairo
 import Graphics.UI.Gtk.Cairo
@@ -153,7 +155,7 @@ timeDbg msg time | False     = liftIO $ putStrLn $ msg ++ "\t" ++ show time
 		 | otherwise = return ()
 
 vobMain :: String -> Signal Vob -> IO ()
-vobMain title vobSignal = do
+vobMain title vobSignal' = do
     initGUI
     window <- windowNew
     windowSetTitle window title
@@ -161,15 +163,24 @@ vobMain title vobSignal = do
     canvas <- drawingAreaNew
     set window [ containerChild := canvas ]
 
+    state <- newIORef vobSignal'
+
     onKeyPress window $ \(Key { eventModifier=mods, eventKeyName=key, eventKeyChar=char }) -> do
         liftIO $ putStrLn $ show mods++key++" ("++show char++")"
-	
+
+        vobSignal <- readIORef state
+	now <- getTimeIO
+	writeIORef state $ updateSignal now vobSignal (KeyPress key)
+	widgetQueueDraw canvas
+
 	return False
     
     onExpose canvas $ \(Expose { eventArea=rect }) -> do
         (cw, ch) <- drawingAreaGetSize canvas
         let w = fromIntegral cw; h = fromIntegral ch
         drawable <- drawingAreaGetDrawWindow canvas
+
+        vobSignal <- readIORef state
         
         renderWithDrawable drawable $ do
             save

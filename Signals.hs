@@ -2,7 +2,7 @@ module Signals where
 
 import System.Time 
 
-type InputEvent = () -- XXX
+data InputEvent = KeyPress String -- XXX
 
 type Time = Double -- seconds since the epoch
 data Stream a = Stream [(Time, a)] (Time -> InputEvent -> Stream a)
