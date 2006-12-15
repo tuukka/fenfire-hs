@@ -5,8 +5,8 @@ TARGETS=vobs fenfire
 
 all: $(TARGETS)
 
-vobs: Vobs.hs
-	$(GHC) -o $@ -main-is Vobs.myMain --make $<
+vobs: VobTest.hs Vobs.hs
+	$(GHC) -o $@ --make $<
 
 fenfire: Fenfire.hs Vobs.hs
 	$(GHC) -o $@ --make $<
