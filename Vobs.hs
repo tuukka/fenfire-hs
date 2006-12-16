@@ -61,8 +61,8 @@ label :: String -> Vob
 label s = unsafePerformIO $ do 
     context <- cairoCreateContext Nothing
     layout  <- layoutText context s
-    (Rectangle _ _ w h, _) <- layoutGetPixelExtents layout
-    return $ Vob (fromIntegral w, fromIntegral h) (\_w _h -> showLayout layout)
+    (PangoRectangle _ _ w h, _) <- layoutGetExtents layout
+    return $ Vob (realToFrac w, realToFrac h) (\_w _h -> showLayout layout)
                           
                           
 rgbColor :: Double -> Double -> Double -> Vob -> Vob
