@@ -11,8 +11,14 @@ all: $(TARGETS)
 vobtest: VobTest.hs *.hs
 	$(GHCCMD) -o $@ --make $<
 
+run-vobtest: vobtest
+	./$<
+
 fenfire: Fenfire.hs *.hs
 	$(GHCCMD) -o $@ --make $<
+
+run-fenfire: fenfire
+	./$<
 
 clean:
 	rm -f *.hi *.o $(TARGETS)
