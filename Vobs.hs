@@ -23,6 +23,19 @@ data Vob = Vob { defaultSize :: (Double, Double),
 defaultWidth  (Vob (w,_) _) = w
 defaultHeight (Vob (_,h) _) = h
 
+
+type View a b  = a -> Double -> Double -> Scene b
+type Handler a = Key -> a -> a
+
+type Time     = Double -- seconds since the epoch
+type TimeDiff = Double -- in seconds
+
+type Anim a = Time -> (Scene a, Bool)  -- bool is whether to re-render
+
+getTime :: IO Time
+getTime = do (System.Time.TOD secs pics) <- System.Time.getClockTime
+             return $ fromInteger secs + fromInteger pics / (10**(3*4))
+
     
 hbox :: [Vob] -> Vob
 hbox vobs = Vob size draw where
@@ -104,8 +117,8 @@ clipVob (Vob size draw) = Vob size draw' where
     
 type Scene a  = Map a (Double, Double, Double, Double, Vob)
 
-sceneVob :: Ord a => Scene a -> Vob
-sceneVob scene = Vob (0,0) $ \sw sh -> do
+drawScene :: Ord a => Scene a -> Render ()
+drawScene scene = do
     flip mapM (toList scene) $ \(_, (x, y, w, h, vob)) -> do 
         save; translate (x-w/2) (y-h/2); drawVob vob w h; restore
     return ()
@@ -133,9 +146,15 @@ timeDbg :: MonadIO m => String -> m ()
 timeDbg msg | False     = liftIO $ do time <- System.Time.getClockTime
                                       putStrLn $ msg ++ "\t" ++ show time
             | otherwise = return ()
+       
 
-vobMain :: Ord b => String -> a -> (a -> Double -> Double -> Scene b) -> 
-           (Key -> a -> a) -> IO ()
+interpAnim :: Ord a => Time -> TimeDiff -> Scene a -> Scene a -> Anim a
+interpAnim startTime interpDuration sc1 sc2 time =
+    if time > startTime + interpDuration then (sc2, False)
+        else (interpolate ((time-startTime) / interpDuration) sc1 sc2, True)
+    
+
+vobMain :: Ord b => String -> a -> View a b -> Handler a -> IO ()
 vobMain title startState view handleEvent = do
     initGUI
     window <- windowNew
@@ -146,6 +165,7 @@ vobMain title startState view handleEvent = do
     set window [ containerChild := canvas ]
 
     stateRef <- newIORef startState
+    animRef  <- newIORef (const (view startState 700 400, False))
 
     onKeyPress window $ \(Key { eventModifier=mods, eventKeyName=key, eventKeyChar=char }) -> do
         putStrLn $ show mods++key++" ("++show char++")"
@@ -153,28 +173,39 @@ vobMain title startState view handleEvent = do
         when (key=="q") mainQuit
 
         state <- readIORef stateRef
-	writeIORef stateRef $ handleEvent key state
+	let state' = handleEvent key state
+	writeIORef stateRef state'
+	
+        (cw, ch) <- drawingAreaGetSize canvas
+        let w = fromIntegral cw; h = fromIntegral ch
+
+	time <- getTime
+	anim <- readIORef animRef
+	let (scene, _) = anim time; scene' = view state' w h
+	writeIORef animRef $ interpAnim time 2.5 scene scene'
+	
 	widgetQueueDraw canvas
 
 	return False
     
     onExpose canvas $ \(Expose {}) -> do
-        (cw, ch) <- drawingAreaGetSize canvas
-        let w = fromIntegral cw; h = fromIntegral ch
         drawable <- drawingAreaGetDrawWindow canvas
+        anim <- readIORef animRef
+        time <- getTime
 
-        state <- readIORef stateRef
-        let vob = sceneVob (view state w h)
+        let (scene, rerender) = anim time
         
         renderWithDrawable drawable $ do
             save
             
 	    timeDbg "Starting redraw at"
-            drawVob vob w h
+            drawScene scene
             
             restore
             
 	timeDbg "Finished redraw at"
+	
+	if rerender then widgetQueueDraw canvas else return ()
 
         return True
 
