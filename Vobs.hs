@@ -1,7 +1,5 @@
 module Vobs where
 
-import Signals
-
 import Data.IORef
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -14,6 +12,10 @@ import Graphics.UI.Gtk.Cairo
 import Data.List (intersect)
 import Data.Map (Map, keys, (!), fromList, toList, insert, empty)
 import Monad (when)
+
+import qualified System.Time
+
+type Key = String -- XXX
 
 data Vob = Vob { defaultSize :: (Double, Double), 
                  drawVob :: Double -> Double -> Render () }
@@ -127,12 +129,14 @@ instance Show Modifier where
     show Apple = "Apple"
     show Compose = "Compose"
 
-timeDbg :: MonadIO m => String -> Time -> m ()
-timeDbg msg time | False     = liftIO $ putStrLn $ msg ++ "\t" ++ show time
-		 | otherwise = return ()
+timeDbg :: MonadIO m => String -> m ()
+timeDbg msg | False     = liftIO $ do time <- System.Time.getClockTime
+                                      putStrLn $ msg ++ "\t" ++ show time
+            | otherwise = return ()
 
-vobMain :: String -> Signal Vob -> IO ()
-vobMain title vobSignal' = do
+vobMain :: Ord b => String -> a -> (a -> Double -> Double -> Scene b) -> 
+           (Key -> a -> a) -> IO ()
+vobMain title startState view handleEvent = do
     initGUI
     window <- windowNew
     windowSetTitle window title
@@ -141,16 +145,15 @@ vobMain title vobSignal' = do
     canvas <- drawingAreaNew
     set window [ containerChild := canvas ]
 
-    state <- newIORef vobSignal'
+    stateRef <- newIORef startState
 
     onKeyPress window $ \(Key { eventModifier=mods, eventKeyName=key, eventKeyChar=char }) -> do
-        liftIO $ putStrLn $ show mods++key++" ("++show char++")"
+        putStrLn $ show mods++key++" ("++show char++")"
 
         when (key=="q") mainQuit
 
-        vobSignal <- readIORef state
-	now <- getTimeIO
-	writeIORef state $ updateSignal now vobSignal (KeyPress key)
+        state <- readIORef stateRef
+	writeIORef stateRef $ handleEvent key state
 	widgetQueueDraw canvas
 
 	return False
@@ -160,29 +163,18 @@ vobMain title vobSignal' = do
         let w = fromIntegral cw; h = fromIntegral ch
         drawable <- drawingAreaGetDrawWindow canvas
 
-        vobSignal <- readIORef state
+        state <- readIORef stateRef
+        let vob = sceneVob (view state w h)
         
         renderWithDrawable drawable $ do
             save
             
-            time <- liftIO getTimeIO
-	    timeDbg "Starting redraw at" time
-            let vob = getSignal time vobSignal
+	    timeDbg "Starting redraw at"
             drawVob vob w h
             
             restore
             
-        time' <- liftIO getTimeIO
-	timeDbg "Finished redraw at" time'
-	case getNextChange time' vobSignal of
-	    Just t -> do let sleeptime = ceiling ((t-time')*1000)
-			 flip timeoutAdd sleeptime
-				  (widgetQueueDraw canvas >> return False)
-			 timeDbg "Next change at   " t
-			 -- liftIO $ putStrLn $ "Sleeping " ++ show sleeptime ++" ms"
-			 return ()
-            Nothing -> do liftIO $ putStrLn "End of signal, sleeping."
-		          return ()
+	timeDbg "Finished redraw at"
 
         return True
 

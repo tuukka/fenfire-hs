@@ -1,5 +1,4 @@
 
-import Signals
 import Vobs
 
 import qualified Data.Map as Map
@@ -84,18 +83,13 @@ vanishingView depth start w h =
             (x + distance * cos angle, y + distance * sin angle)
 
 
-mainView :: Rotation -> Vob
-mainView rot = sceneVob $ vanishingView 3 rot 700 300
-
-handleKey :: Rotation -> Time -> InputEvent -> Signal Rotation
-handleKey rot@(Rotation graph node rotation) _time (KeyPress key) =
-    Signal nextRotation [] (handleKey nextRotation) where
-        nextRotation = case key of
-            "Up"    -> Rotation graph node $ max (-height rot) $ min (height rot) $ rotation-1
-            "Down"  -> Rotation graph node $ max (-height rot) $ min (height rot) $ rotation+1
-            "Left"  -> maybe rot id $ get rot Neg 0
-            "Right" -> maybe rot id $ get rot Pos 0
-	    _       -> rot
+handleKey :: Key -> Rotation -> Rotation
+handleKey key rot@(Rotation graph node rotation) = case key of
+    "Up"    -> Rotation graph node $ max (-height rot) $ min (height rot) $ rotation-1
+    "Down"  -> Rotation graph node $ max (-height rot) $ min (height rot) $ rotation+1
+    "Left"  -> maybe rot id $ get rot Neg 0
+    "Right" -> maybe rot id $ get rot Pos 0
+    _       -> rot
 
             
 main :: IO ()
@@ -109,5 +103,4 @@ main = do
         graph = [(node,prop,nodeA),(node,prop,nodeB),(nodeA,prop,nodeAA),(nodeA,prop,nodeAB)]
 
     let rot = (Rotation graph node 0)
-    let rotationSignal = Signal rot [] (handleKey rot)
-    vobMain "Fenfire" (fmap mainView rotationSignal)
+    vobMain "Fenfire" rot (vanishingView 3) handleKey
