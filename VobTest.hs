@@ -11,6 +11,6 @@ myScene2 = let (vw, vh) = defaultSize myVob
 
 
 main = do vobMain "Example" False 
-                  (\s w h -> if s then myScene1 else myScene2)
+                  (\s _w _h -> if s then myScene1 else myScene2)
                   (const not)
     
