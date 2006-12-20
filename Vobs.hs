@@ -148,10 +148,20 @@ timeDbg msg | False     = liftIO $ do time <- System.Time.getClockTime
             | otherwise = return ()
        
 
+linearFract :: Double -> (Double, Bool)
+linearFract x = if (x<1) then (x,True) else (1,False)
+
+bounceFract :: Double -> (Double, Bool)
+bounceFract x = (y,cont) where     -- ported from AbstractUpdateManager.java
+    x' = x + x*x
+    y = 1 - cos (2 * pi * n * x) * exp (-x * r)
+    cont = -(x + x*x)*r >= log 0.02
+    (n,r) = (0.4, 2)
+
 interpAnim :: Ord a => Time -> TimeDiff -> Scene a -> Scene a -> Anim a
 interpAnim startTime interpDuration sc1 sc2 time =
-    if time > startTime + interpDuration then (sc2, False)
-        else (interpolate ((time-startTime) / interpDuration) sc1 sc2, True)
+    if continue then (interpolate fract sc1 sc2, True) else (sc2, False)
+    where (fract, continue) = bounceFract ((time-startTime) / interpDuration)
     
 
 vobMain :: Ord b => String -> a -> View a b -> Handler a -> IO ()
@@ -182,7 +192,7 @@ vobMain title startState view handleEvent = do
 	time <- getTime
 	anim <- readIORef animRef
 	let (scene, _) = anim time; scene' = view state' w h
-	writeIORef animRef $ interpAnim time 2.5 scene scene'
+	writeIORef animRef $ interpAnim time 0.3 scene scene'
 	
 	widgetQueueDraw canvas
 
