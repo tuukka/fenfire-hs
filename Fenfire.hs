@@ -5,6 +5,8 @@ import qualified Data.Map as Map
 import qualified Data.List
 import Maybe (fromJust, isJust, isNothing)
 
+import Graphics.UI.Gtk.Gdk.Events
+
 data Node = URI String | PlainLiteral String    deriving (Eq, Ord)
 data Dir  = Pos | Neg                           deriving (Eq, Ord, Show)
 
@@ -64,10 +66,17 @@ type InfiniteScene = [Scene Node]
 combine :: [InfiniteScene] -> InfiniteScene
 combine scenes = (Map.unions $ concatMap (take 1) scenes) : combine (map (drop 1) scenes)
 
+getText :: Graph -> Node -> Maybe String
+getText g n = fmap (\(s,p,o) -> fromNode o)
+                   (Data.List.find (\(s,p,o) -> s==n && p==rdfs_label) g)
+                    
+setText :: Graph -> Node -> String -> Graph
+setText g n t = (n, rdfs_label, PlainLiteral t) :
+                [(s,p,o) | (s,p,o) <- g, not (s == n && p == rdfs_label)]
+
 nodeView :: Graph -> Node -> Vob
 nodeView g n = rectBox $ clipVob $ resizeX 100 $ pad 5 $ label s
-    where s = maybe (show n) (\(s,p,o) -> fromNode o)
-                    (Data.List.find (\(s,p,o) -> s==n && p==rdfs_label) g)
+    where s = maybe (show n) id (getText g n)
 
 
 vanishingView :: [Node] -> Int -> Rotation -> Double -> Double -> Scene Node
@@ -98,14 +107,20 @@ vanishingView props depth start w h =
             (x + distance * cos angle, y + distance * sin angle)
 
 
-handleKey :: [Node] -> Key -> Rotation -> Rotation
-handleKey props key rot@(Rotation graph node rotation) = case key of
-    "Up"    -> Rotation graph node $ max (-h) $ min h $ rotation-1
-    "Down"  -> Rotation graph node $ max (-h) $ min h $ rotation+1
-    "Left"  -> maybe rot id $ get props rot Neg 0
-    "Right" -> maybe rot id $ get props rot Pos 0
-    _       -> rot
+handleKey :: [Node] -> Event -> Rotation -> Rotation
+handleKey props (Key {eventModifier=mods,eventKeyName=key,eventKeyChar=char})
+          rot@(Rotation graph node rotation) = case key of
+    "Up"        -> Rotation graph node $ max (-h) $ min h $ rotation-1
+    "Down"      -> Rotation graph node $ max (-h) $ min h $ rotation+1
+    "Left"      -> maybe rot id $ get props rot Neg 0
+    "Right"     -> maybe rot id $ get props rot Pos 0
+    "BackSpace" -> changeText $ \s -> take (length s - 1) s
+    _           -> case char of
+                       Just c  -> changeText (\s -> s ++ [c])
+                       Nothing -> rot
   where h = height rot props
+        changeText f = Rotation graph' node rotation where
+            graph' = setText graph node (f $ maybe "" id (getText graph node))
 
             
 main :: IO ()

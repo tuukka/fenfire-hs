@@ -15,8 +15,6 @@ import Monad (when)
 
 import qualified System.Time
 
-type Key = String -- XXX
-
 data Vob = Vob { defaultSize :: (Double, Double), 
                  drawVob :: Double -> Double -> Render () }
 
@@ -25,7 +23,7 @@ defaultHeight (Vob (_,h) _) = h
 
 
 type View a b  = a -> Double -> Double -> Scene b
-type Handler a = Key -> a -> a
+type Handler a = Event -> a -> a
 
 type Time     = Double -- seconds since the epoch
 type TimeDiff = Double -- in seconds
@@ -177,13 +175,14 @@ vobMain title startState view handleEvent = do
     stateRef <- newIORef startState
     animRef  <- newIORef (const (view startState 700 400, False))
 
-    onKeyPress window $ \(Key { eventModifier=mods, eventKeyName=key, eventKeyChar=char }) -> do
-        putStrLn $ show mods++key++" ("++show char++")"
+    onKeyPress window $ \event -> do
+        let Key {eventModifier=mods,eventKeyName=key,eventKeyChar=char} = event
+        putStrLn $ show mods++" "++key++" ("++show char++")"
 
-        when (key=="q") mainQuit
+        when (Alt `elem` mods && key == "q") mainQuit
 
         state <- readIORef stateRef
-	let state' = handleEvent key state
+	let state' = handleEvent event state
 	writeIORef stateRef state'
 	
         (cw, ch) <- drawingAreaGetSize canvas
