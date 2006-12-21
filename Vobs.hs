@@ -61,6 +61,20 @@ label s = unsafePerformIO $ do
     layout  <- layoutText context s
     (PangoRectangle _ _ w h, _) <- layoutGetExtents layout
     return $ Vob (realToFrac w, realToFrac h) (\_w _h -> showLayout layout)
+    
+multiline :: Bool -> Int -> String -> Vob
+multiline useTextWidth widthInChars s = unsafePerformIO $ do 
+    context <- cairoCreateContext Nothing
+    layout  <- layoutText context s
+    desc    <- contextGetFontDescription context
+    lang    <- languageFromString s
+    (FontMetrics {approximateCharWidth=cw})
+        <- contextGetMetrics context desc lang
+    let w1 = fromIntegral widthInChars * cw
+    layoutSetWidth layout (Just w1)
+    (PangoRectangle _ _ w2 h, _) <- layoutGetExtents layout
+    let w = if useTextWidth then w2 else w1
+    return $ Vob (realToFrac w, realToFrac h) (\_ _ -> showLayout layout)
                           
                           
 rgbColor :: Double -> Double -> Double -> Vob -> Vob

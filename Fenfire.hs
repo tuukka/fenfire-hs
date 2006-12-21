@@ -75,7 +75,7 @@ setText g n t = (n, rdfs_label, PlainLiteral t) :
                 [(s,p,o) | (s,p,o) <- g, not (s == n && p == rdfs_label)]
 
 nodeView :: Graph -> Node -> Vob
-nodeView g n = rectBox $ clipVob $ resizeX 100 $ pad 5 $ label s
+nodeView g n = rectBox $ clipVob $ pad 5 $ multiline False 15 s
     where s = maybe (show n) id (getText g n)
 
 
@@ -96,7 +96,7 @@ vanishingView props depth start w h =
         connections (x,y) rot offs angle xdir ydir = result where
             rot' = (get props rot xdir offs)
             result = if isNothing rot' then [] else
-                combine [ oneNode (translate angle (mul xdir 150) (x,y))
+                combine [ oneNode (translate angle (mul xdir 200) (x,y))
                                   angle (fromJust rot'),
                           connections (x,y) rot (offs+ydir) 
                                       (angle+fromIntegral ydir*angleOffs)
