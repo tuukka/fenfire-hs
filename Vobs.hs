@@ -75,6 +75,7 @@ label s = unsafePerformIO $ do
 multiline :: Bool -> Int -> String -> Vob
 multiline useTextWidth widthInChars s = unsafePerformIO $ do 
     layout  <- layoutText pangoContext s
+    layoutSetWrap layout WrapPartialWords
     desc    <- contextGetFontDescription pangoContext
     lang    <- languageFromString s
     (FontMetrics {approximateCharWidth=cw, ascent=ascent, descent=descent})
