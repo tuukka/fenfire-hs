@@ -82,9 +82,10 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
     let w1 = fromIntegral widthInChars * cw
         h1 = ascent + descent
     layoutSetWidth layout (Just w1)
-    (PangoRectangle _ _ w2 h2, _) <- layoutGetExtents layout
-    let w = if useTextWidth then w2 else w1
-        h = max h1 h2
+    (PangoRectangle _ _ w2 h2, PangoRectangle _ _ w3 h3) 
+        <- layoutGetExtents layout
+    let w = if useTextWidth then max w2 w3 else w1
+        h = maximum [h1, h2, h3]
     return $ Vob (realToFrac w, realToFrac h) (\_ _ -> showLayout layout)
                           
                           
