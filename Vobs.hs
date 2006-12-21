@@ -78,10 +78,10 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
     layoutSetWrap layout WrapPartialWords
     desc    <- contextGetFontDescription pangoContext
     lang    <- languageFromString s
-    (FontMetrics {approximateCharWidth=cw, ascent=ascent, descent=descent})
+    (FontMetrics {approximateCharWidth=cw, ascent=ascent', descent=descent'})
         <- contextGetMetrics pangoContext desc lang
     let w1 = fromIntegral widthInChars * cw
-        h1 = ascent + descent
+        h1 = ascent' + descent'
     layoutSetWidth layout (Just w1)
     (PangoRectangle _ _ w2 h2, PangoRectangle _ _ w3 h3) 
         <- layoutGetExtents layout
@@ -214,7 +214,7 @@ vobMain title startState view handleEvent = do
         when (Alt `elem` mods && key == "q") mainQuit
 
         state <- readIORef stateRef
-	let (state', interpolate) = handleEvent event state
+	let (state', interpolate') = handleEvent event state
 	writeIORef stateRef state'
 	
         (cw, ch) <- drawingAreaGetSize canvas
@@ -223,8 +223,8 @@ vobMain title startState view handleEvent = do
 	time <- getTime
 	anim <- readIORef animRef
 	let (scene, _) = anim time; scene' = view state' w h
-	    anim' = if interpolate then interpAnim time 0.3 scene scene'
-	                           else noAnim scene'
+	    anim' = if interpolate' then interpAnim time 0.3 scene scene'
+	                            else noAnim scene'
 	writeIORef animRef anim'
 	
 	widgetQueueDraw canvas

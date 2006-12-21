@@ -67,8 +67,8 @@ combine :: [InfiniteScene] -> InfiniteScene
 combine scenes = (Map.unions $ concatMap (take 1) scenes) : combine (map (drop 1) scenes)
 
 getText :: Graph -> Node -> Maybe String
-getText g n = fmap (\(s,p,o) -> fromNode o)
-                   (Data.List.find (\(s,p,o) -> s==n && p==rdfs_label) g)
+getText g n = fmap (\(_s,_p,o) -> fromNode o)
+                   (Data.List.find (\(s,p,_o) -> s==n && p==rdfs_label) g)
                     
 setText :: Graph -> Node -> String -> Graph
 setText g n t = (n, rdfs_label, PlainLiteral t) :
@@ -109,7 +109,7 @@ vanishingView props depth start w h =
 
 handleKey :: [Node] -> Handler Rotation
 -- handleKey :: [Node] -> Event -> Rotation -> (Rotation, Bool)
-handleKey props (Key {eventModifier=mods,eventKeyName=key,eventKeyChar=char})
+handleKey props (Key {eventModifier=_mods,eventKeyName=key,eventKeyChar=char})
           rot@(Rotation graph node rotation) = case key of
     "Up"        -> (Rotation graph node $ max (-h) $ min h $ rotation-1, True)
     "Down"      -> (Rotation graph node $ max (-h) $ min h $ rotation+1, True)
@@ -122,7 +122,7 @@ handleKey props (Key {eventModifier=mods,eventKeyName=key,eventKeyChar=char})
   where h = height rot props
         changeText f = Rotation graph' node rotation where
             graph' = setText graph node (f $ maybe "" id (getText graph node))
-
+handleKey _ _ _ = undefined -- Event is always a Key
             
 main :: IO ()
 main = do
