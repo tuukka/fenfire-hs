@@ -124,21 +124,22 @@ handleKey props (Key {eventModifier=_mods,eventKeyName=key,eventKeyChar=char})
             graph' = setText graph node (f $ maybe "" id (getText graph node))
 handleKey _ _ _ = undefined -- Event is always a Key
             
+home = URI "ex:0"
+nodeA = URI "ex:A"
+nodeAA = URI "ex:AA"
+nodeAB = URI "ex:AB"
+nodeB = URI "ex:B"
+testGraph = [(home, lbl, lit "Home"),
+             (home, prop, nodeA), (nodeA, lbl, lit "Node A"),
+             (nodeA, prop, nodeAA),
+             (nodeA, prop, nodeAB),
+             (home, prop, nodeB), (nodeB, lbl, lit "Node B")]
+    where prop = rdfs_seeAlso
+          lbl = rdfs_label
+          lit = PlainLiteral
+
 main :: IO ()
 main = do
-    let node = URI "ex:0"
-        nodeA = URI "ex:A"
-        nodeAA = URI "ex:AA"
-        nodeAB = URI "ex:AB"
-        nodeB = URI "ex:B"
-        prop = rdfs_seeAlso; lbl = rdfs_label
-        props = [prop]
-        lit = PlainLiteral
-        graph = [(node, lbl, lit "Home"),
-                 (node, prop, nodeA), (nodeA, lbl, lit "Node A"),
-                 (nodeA, prop, nodeAA),
-                 (nodeA, prop, nodeAB),
-                 (node, prop, nodeB), (nodeB, lbl, lit "Node B")]
-
-    let rot = (Rotation graph node 0)
+    let rot = (Rotation testGraph home 0)
+        props = [rdfs_seeAlso]
     vobMain "Fenfire" rot (vanishingView props 3) (handleKey props)
