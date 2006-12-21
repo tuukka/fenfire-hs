@@ -23,7 +23,7 @@ defaultHeight (Vob (_,h) _) = h
 
 
 type View a b  = a -> Double -> Double -> Scene b
-type Handler a = Event -> a -> a
+type Handler a = Event -> a -> (a, Bool)   -- bool is whether to interpolate
 
 type Time     = Double -- seconds since the epoch
 type TimeDiff = Double -- in seconds
@@ -187,6 +187,8 @@ interpAnim startTime interpDuration sc1 sc2 time =
     if continue then (interpolate fract sc1 sc2, True) else (sc2, False)
     where (fract, continue) = bounceFract ((time-startTime) / interpDuration)
     
+noAnim scene = const (scene, False)
+    
 
 vobMain :: Ord b => String -> a -> View a b -> Handler a -> IO ()
 vobMain title startState view handleEvent = do
@@ -199,7 +201,7 @@ vobMain title startState view handleEvent = do
     set window [ containerChild := canvas ]
 
     stateRef <- newIORef startState
-    animRef  <- newIORef (const (view startState 700 400, False))
+    animRef  <- newIORef (noAnim $ view startState 700 400)
 
     onKeyPress window $ \event -> do
         let Key {eventModifier=mods,eventKeyName=key,eventKeyChar=char} = event
@@ -208,7 +210,7 @@ vobMain title startState view handleEvent = do
         when (Alt `elem` mods && key == "q") mainQuit
 
         state <- readIORef stateRef
-	let state' = handleEvent event state
+	let (state', interpolate) = handleEvent event state
 	writeIORef stateRef state'
 	
         (cw, ch) <- drawingAreaGetSize canvas
@@ -217,7 +219,9 @@ vobMain title startState view handleEvent = do
 	time <- getTime
 	anim <- readIORef animRef
 	let (scene, _) = anim time; scene' = view state' w h
-	writeIORef animRef $ interpAnim time 0.3 scene scene'
+	    anim' = if interpolate then interpAnim time 0.3 scene scene'
+	                           else noAnim scene'
+	writeIORef animRef anim'
 	
 	widgetQueueDraw canvas
 

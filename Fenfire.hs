@@ -107,17 +107,18 @@ vanishingView props depth start w h =
             (x + distance * cos angle, y + distance * sin angle)
 
 
-handleKey :: [Node] -> Event -> Rotation -> Rotation
+handleKey :: [Node] -> Handler Rotation
+-- handleKey :: [Node] -> Event -> Rotation -> (Rotation, Bool)
 handleKey props (Key {eventModifier=mods,eventKeyName=key,eventKeyChar=char})
           rot@(Rotation graph node rotation) = case key of
-    "Up"        -> Rotation graph node $ max (-h) $ min h $ rotation-1
-    "Down"      -> Rotation graph node $ max (-h) $ min h $ rotation+1
-    "Left"      -> maybe rot id $ get props rot Neg 0
-    "Right"     -> maybe rot id $ get props rot Pos 0
-    "BackSpace" -> changeText $ \s -> take (length s - 1) s
+    "Up"        -> (Rotation graph node $ max (-h) $ min h $ rotation-1, True)
+    "Down"      -> (Rotation graph node $ max (-h) $ min h $ rotation+1, True)
+    "Left"      -> (maybe rot id $ get props rot Neg 0, True)
+    "Right"     -> (maybe rot id $ get props rot Pos 0, True)
+    "BackSpace" -> (changeText $ \s -> take (length s - 1) s, False)
     _           -> case char of
-                       Just c  -> changeText (\s -> s ++ [c])
-                       Nothing -> rot
+                       Just c  -> (changeText (\s -> s ++ [c]), False)
+                       Nothing -> (rot, False)
   where h = height rot props
         changeText f = Rotation graph' node rotation where
             graph' = setText graph node (f $ maybe "" id (getText graph node))
