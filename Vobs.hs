@@ -90,9 +90,12 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
     return $ Vob (realToFrac w, realToFrac h) (\_ _ -> showLayout layout)
                           
                           
+rgbaColor :: Double -> Double -> Double -> Double -> Vob -> Vob
+rgbaColor r g b a (Vob size draw) = Vob size draw' where
+    draw' w h = do save; setSourceRGBA r g b a; draw w h; restore
+
 rgbColor :: Double -> Double -> Double -> Vob -> Vob
-rgbColor r g b (Vob size draw) = Vob size draw' where
-    draw' w h = do save; setSourceRGB r g b; draw w h; restore
+rgbColor r g b vob = rgbaColor r g b 1 vob
 
                   
 scaleVob :: Double -> Double -> Vob -> Vob
