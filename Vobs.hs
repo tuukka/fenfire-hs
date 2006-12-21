@@ -182,7 +182,7 @@ linearFract x = if (x<1) then (x,True) else (1,False)
 bounceFract :: Double -> (Double, Bool)
 bounceFract x = (y,cont) where     -- ported from AbstractUpdateManager.java
     x' = x + x*x
-    y = 1 - cos (2 * pi * n * x) * exp (-x * r)
+    y = 1 - cos (2 * pi * n * x') * exp (-x' * r)
     cont = -(x + x*x)*r >= log 0.02
     (n,r) = (0.4, 2)
 
