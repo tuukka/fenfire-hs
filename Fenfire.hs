@@ -75,7 +75,7 @@ setText g n t = (n, rdfs_label, PlainLiteral t) :
                 [(s,p,o) | (s,p,o) <- g, not (s == n && p == rdfs_label)]
 
 nodeView :: Graph -> Node -> Vob
-nodeView g n = rectBox $ clipVob $ pad 5 $ multiline False 15 s
+nodeView g n = rectBox $ clipVob $ pad 5 $ multiline False 20 s
     where s = maybe (show n) id (getText g n)
 
 

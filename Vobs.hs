@@ -54,26 +54,37 @@ overlay vobs = Vob size draw where
               
     draw w h = do sequence $ flip map vobs $ \vob -> drawVob vob w h
                   return ()
+                  
+
+pangoContext :: PangoContext
+pangoContext = unsafePerformIO $ do
+    context <- cairoCreateContext Nothing
+    desc    <- contextGetFontDescription context
+    fontDescriptionSetFamily desc "Sans"
+    fontDescriptionSetSize   desc (fromInteger 10)
+    contextSetFontDescription context desc
+    return context
     
+
 label :: String -> Vob
 label s = unsafePerformIO $ do 
-    context <- cairoCreateContext Nothing
-    layout  <- layoutText context s
+    layout  <- layoutText pangoContext s
     (PangoRectangle _ _ w h, _) <- layoutGetExtents layout
     return $ Vob (realToFrac w, realToFrac h) (\_w _h -> showLayout layout)
     
 multiline :: Bool -> Int -> String -> Vob
 multiline useTextWidth widthInChars s = unsafePerformIO $ do 
-    context <- cairoCreateContext Nothing
-    layout  <- layoutText context s
-    desc    <- contextGetFontDescription context
+    layout  <- layoutText pangoContext s
+    desc    <- contextGetFontDescription pangoContext
     lang    <- languageFromString s
-    (FontMetrics {approximateCharWidth=cw})
-        <- contextGetMetrics context desc lang
+    (FontMetrics {approximateCharWidth=cw, ascent=ascent, descent=descent})
+        <- contextGetMetrics pangoContext desc lang
     let w1 = fromIntegral widthInChars * cw
+        h1 = ascent + descent
     layoutSetWidth layout (Just w1)
-    (PangoRectangle _ _ w2 h, _) <- layoutGetExtents layout
+    (PangoRectangle _ _ w2 h2, _) <- layoutGetExtents layout
     let w = if useTextWidth then w2 else w1
+        h = max h1 h2
     return $ Vob (realToFrac w, realToFrac h) (\_ _ -> showLayout layout)
                           
                           
