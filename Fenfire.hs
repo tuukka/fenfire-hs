@@ -111,7 +111,7 @@ vanishingView props depth start w h =
 
 handleKey :: [Node] -> Handler Rotation
 -- handleKey :: [Node] -> Event -> Rotation -> IO (Rotation, Bool)
-handleKey props (Key {eventModifier=_mods,eventKeyName=key,eventKeyChar=char})
+handleKey props (Key { eventModifier=_, eventKeyName=key, eventKeyChar=_ })
           rot@(Rotation graph node rotation) = return $ case key of
     "Up"    -> rotate (-1); "i" -> rotate (-1)
     "Down"  -> rotate 1;    "," -> rotate 1
@@ -123,7 +123,7 @@ handleKey props (Key {eventModifier=_mods,eventKeyName=key,eventKeyChar=char})
             (Rotation graph node $ max (-h) $ min h $ rotation+dir, True)
         move dir = (maybe rot id $ get props rot dir 0, True)
 
-handleKey _ _ rot = (rot, False)
+handleKey _ _ rot = return (rot, False)
             
 home = URI "ex:0"
 nodeA = URI "ex:A"
