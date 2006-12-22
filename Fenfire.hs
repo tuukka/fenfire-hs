@@ -124,7 +124,7 @@ handleKey props (Key { eventModifier=_, eventKeyName=key, eventKeyChar=_ })
             (Rotation graph node $ max (-h) $ min h $ rotation+dir, True)
         move dir = Just $ return (maybe rot id $ get props rot dir 0, True)
 
-handleKey _ _ rot = Nothing
+handleKey _ _ _rot = Nothing
             
 home = URI "ex:0"
 nodeA = URI "ex:A"
