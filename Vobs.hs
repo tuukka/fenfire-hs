@@ -23,7 +23,8 @@ defaultHeight (Vob (_,h) _) = h
 
 
 type View a b  = a -> Double -> Double -> Scene b
-type Handler a = Event -> a -> (a, Bool)   -- bool is whether to interpolate
+type Handler a = Event -> a -> IO (a, Bool)
+    -- bool is whether to interpolate
 
 type Time     = Double -- seconds since the epoch
 type TimeDiff = Double -- in seconds
@@ -164,7 +165,8 @@ interpolate fract sc1 sc2 = let
 
 
 isInterpUseful :: Ord a => Scene a -> Scene a -> Bool             
-isInterpUseful sc1 sc2 = all same [(sc1 ! key, sc2 ! key) | key <- interpKeys]
+isInterpUseful sc1 sc2 = 
+    not $ all same [(sc1 ! key, sc2 ! key) | key <- interpKeys]
     where same ((x1,y1,w1,h1,_vob1), (x2,y2,w2,h2,_vob2)) = 
               all (\d -> abs d < 5) [x1-x2, y1-y2, w1-w2, h1-h2]
           interpKeys = intersect (keys sc1) (keys sc2)
@@ -200,18 +202,37 @@ interpAnim startTime interpDuration sc1 sc2 time =
 noAnim scene = const (scene, False)
     
 
-vobMain :: Ord b => String -> a -> View a b -> Handler a -> IO ()
-vobMain title startState view handleEvent = do
-    initGUI
-    window <- windowNew
-    windowSetTitle window title
-    windowSetDefaultSize window 700 400
-    
+vobCanvas :: Ord b => Window -> IORef a -> View a b -> Handler a -> 
+                      IO (DrawingArea, a -> Bool -> IO ())
+vobCanvas window stateRef view handleEvent = do
     canvas <- drawingAreaNew
-    set window [ containerChild := canvas ]
+    
+    animRef    <- newIORef Nothing
+    
+    let getWH = do (cw, ch) <- drawingAreaGetSize canvas
+                   return (fromIntegral cw, fromIntegral ch)
+    
+        getAnim = do
+            maybeAnim <- readIORef animRef
+            case maybeAnim of
+                Just anim -> return anim
+                Nothing   -> do state <- readIORef stateRef; (w,h) <- getWH
+                                let anim = noAnim $ view state w h
+                                writeIORef animRef (Just anim)
+                                return anim
+            
+        changeState state' interpolate' = do
+	    writeIORef stateRef state'
+	    
+	    (w,h) <- getWH;  time <- getTime;  anim <- getAnim
 
-    stateRef <- newIORef startState
-    animRef  <- newIORef (noAnim $ view startState 700 400)
+	    let (scene, _rerender) = anim time; scene' = view state' w h
+	        anim' = if interpolate' && isInterpUseful scene scene'
+                        then interpAnim time 5 scene scene'
+	                else noAnim scene'
+	    writeIORef animRef (Just anim')
+	
+	    widgetQueueDraw canvas
 
     onKeyPress window $ \event -> do
         let Key {eventModifier=mods,eventKeyName=key,eventKeyChar=char} = event
@@ -220,27 +241,14 @@ vobMain title startState view handleEvent = do
         when (Alt `elem` mods && key == "q") mainQuit
 
         state <- readIORef stateRef
-	let (state', interpolate') = handleEvent event state
-	writeIORef stateRef state'
-	
-        (cw, ch) <- drawingAreaGetSize canvas
-        let w = fromIntegral cw; h = fromIntegral ch
-
-	time <- getTime
-	anim <- readIORef animRef
-	let (scene, _rerender) = anim time; scene' = view state' w h
-	    anim' = if interpolate' && not (isInterpUseful scene scene')
-                    then interpAnim time 5 scene scene'
-	            else noAnim scene'
-	writeIORef animRef anim'
-	
-	widgetQueueDraw canvas
+	(state', interpolate') <- handleEvent event state
+	changeState state' interpolate'
 
 	return False
     
     onExpose canvas $ \(Expose {}) -> do
         drawable <- drawingAreaGetDrawWindow canvas
-        anim <- readIORef animRef
+        anim <- getAnim
         time <- getTime
 
         let (scene, rerender) = anim time
@@ -259,6 +267,4 @@ vobMain title startState view handleEvent = do
 
         return True
 
-    onDestroy window mainQuit
-    widgetShowAll window
-    mainGUI
+    return (canvas, changeState)

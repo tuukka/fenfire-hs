@@ -4,9 +4,10 @@ import Vobs
 
 import qualified Data.Map as Map
 import qualified Data.List
+import Data.IORef
 import Maybe (fromJust, isJust, isNothing)
 
-import Graphics.UI.Gtk.Gdk.Events
+import Graphics.UI.Gtk hiding (get)
 
 data Node = URI String | PlainLiteral String    deriving (Eq, Ord)
 data Dir  = Pos | Neg                           deriving (Eq, Ord, Show)
@@ -109,9 +110,9 @@ vanishingView props depth start w h =
 
 
 handleKey :: [Node] -> Handler Rotation
--- handleKey :: [Node] -> Event -> Rotation -> (Rotation, Bool)
+-- handleKey :: [Node] -> Event -> Rotation -> IO (Rotation, Bool)
 handleKey props (Key {eventModifier=_mods,eventKeyName=key,eventKeyChar=char})
-          rot@(Rotation graph node rotation) = case key of
+          rot@(Rotation graph node rotation) = return $ case key of
     "Up"        -> (Rotation graph node $ max (-h) $ min h $ rotation-1, True)
     "Down"      -> (Rotation graph node $ max (-h) $ min h $ rotation+1, True)
     "Left"      -> (maybe rot id $ get props rot Neg 0, True)
@@ -141,6 +142,20 @@ testGraph = [(home, lbl, lit "Home"),
 
 main :: IO ()
 main = do
-    let rot = (Rotation testGraph home 0)
-        props = [rdfs_seeAlso]
-    vobMain "Fenfire" rot (vanishingView props 3) (handleKey props)
+    let props = [rdfs_seeAlso]
+        view = vanishingView props 3
+
+    stateRef <- newIORef (Rotation testGraph home 0)
+    
+    initGUI
+    window <- windowNew
+    windowSetTitle window "Fenfire"
+    windowSetDefaultSize window 700 400
+
+    (canvas, _changeState) <- vobCanvas window stateRef view (handleKey props)
+
+    set window [ containerChild := canvas ]
+    
+    onDestroy window mainQuit
+    widgetShowAll window
+    mainGUI
