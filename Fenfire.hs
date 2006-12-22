@@ -116,9 +116,9 @@ handleKey props (Key {eventModifier=_mods,eventKeyName=key,eventKeyChar=char})
     "Down"      -> (Rotation graph node $ max (-h) $ min h $ rotation+1, True)
     "Left"      -> (maybe rot id $ get props rot Neg 0, True)
     "Right"     -> (maybe rot id $ get props rot Pos 0, True)
-    "BackSpace" -> (changeText $ \s -> take (length s - 1) s, False)
+    "BackSpace" -> (changeText $ \s -> take (length s - 1) s, True)
     _           -> case char of
-                       Just c  -> (changeText (\s -> s ++ [c]), False)
+                       Just c  -> (changeText (\s -> s ++ [c]), True)
                        Nothing -> (rot, False)
   where h = height rot props
         changeText f = Rotation graph' node rotation where
