@@ -23,7 +23,7 @@ main = do
     stateRef <- newIORef False
 
     let view state _w _h    = if state then myScene1 else myScene2
-        handle _event state = return (not state, True)
+        handle _event state = Just $ return (not state, True)
 
     (canvas, _updateCanvas) <- vobCanvas stateRef view handle 
                                          (const $ return ())

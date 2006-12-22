@@ -23,7 +23,7 @@ defaultHeight (Vob (_,h) _) = h
 
 
 type View a b  = a -> Double -> Double -> Scene b
-type Handler a = Event -> a -> IO (a, Bool)
+type Handler a = Event -> a -> Maybe (IO (a, Bool))
     -- bool is whether to interpolate
 
 type Time     = Double -- seconds since the epoch
@@ -243,13 +243,15 @@ vobCanvas stateRef view handleEvent stateChanged = do
         when (Alt `elem` mods && key == "q") mainQuit
 
         state <- readIORef stateRef
-	(state', interpolate') <- handleEvent event state
 	
-        writeIORef stateRef state'
-        stateChanged state'
-        updateAnim interpolate'
-
-	return False
+	case handleEvent event state of
+          Just action -> do
+            (state', interpolate') <- action
+            writeIORef stateRef state'
+            stateChanged state'
+            updateAnim interpolate'
+	    return True
+          Nothing                     -> return False
     
     onExpose canvas $ \(Expose {}) -> do
         drawable <- drawingAreaGetDrawWindow canvas
