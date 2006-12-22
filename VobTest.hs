@@ -1,3 +1,4 @@
+module VobTest where
 
 import Vobs
 import Data.Map (fromList)

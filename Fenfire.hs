@@ -1,3 +1,4 @@
+module Fenfire where
 
 import Vobs
 

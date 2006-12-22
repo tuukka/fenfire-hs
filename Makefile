@@ -9,13 +9,13 @@ TARGETS=vobtest fenfire
 all: $(TARGETS)
 
 vobtest: VobTest.hs *.hs
-	$(GHCCMD) -o $@ --make $<
+	$(GHCCMD) -o $@ -main-is $(shell basename $< .hs).main --make $<
 
 run-vobtest: vobtest
 	./$<
 
 fenfire: Fenfire.hs *.hs
-	$(GHCCMD) -o $@ --make $<
+	$(GHCCMD) -o $@ -main-is $(shell basename $< .hs).main --make $<
 
 run-fenfire: fenfire
 	./$<
