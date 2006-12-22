@@ -163,10 +163,10 @@ interpolate fract sc1 sc2 = let
              
 
 
-interpolateNull :: Ord a => Scene a -> Scene a -> Bool             
-interpolateNull sc1 sc2 = all same [(sc1 ! key, sc2 ! key) | key <- interpKeys]
+isInterpUseful :: Ord a => Scene a -> Scene a -> Bool             
+isInterpUseful sc1 sc2 = all same [(sc1 ! key, sc2 ! key) | key <- interpKeys]
     where same ((x1,y1,w1,h1,_vob1), (x2,y2,w2,h2,_vob2)) = 
-              all (<1) [x1-x2, y1-y2, w1-w2, h1-h2]
+              all (\d -> abs d < 5) [x1-x2, y1-y2, w1-w2, h1-h2]
           interpKeys = intersect (keys sc1) (keys sc2)
           
 instance Show Modifier where
@@ -229,7 +229,7 @@ vobMain title startState view handleEvent = do
 	time <- getTime
 	anim <- readIORef animRef
 	let (scene, _rerender) = anim time; scene' = view state' w h
-	    anim' = if interpolate' && not (interpolateNull scene scene')
+	    anim' = if interpolate' && not (isInterpUseful scene scene')
                     then interpAnim time 5 scene scene'
 	            else noAnim scene'
 	writeIORef animRef anim'
