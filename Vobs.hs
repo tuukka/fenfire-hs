@@ -202,12 +202,14 @@ interpAnim startTime interpDuration sc1 sc2 time =
 noAnim scene = const (scene, False)
     
 
-vobCanvas :: Ord b => Window -> IORef a -> View a b -> Handler a -> 
-                      IO (DrawingArea, a -> Bool -> IO ())
-vobCanvas window stateRef view handleEvent = do
+vobCanvas :: Ord b => IORef a -> View a b -> Handler a -> (a -> IO ()) ->
+                      IO (DrawingArea, Bool -> IO ())
+vobCanvas stateRef view handleEvent stateChanged = do
     canvas <- drawingAreaNew
     
-    animRef    <- newIORef Nothing
+    widgetSetCanFocus canvas True
+    
+    animRef <- newIORef Nothing
     
     let getWH = do (cw, ch) <- drawingAreaGetSize canvas
                    return (fromIntegral cw, fromIntegral ch)
@@ -220,9 +222,9 @@ vobCanvas window stateRef view handleEvent = do
                                 let anim = noAnim $ view state w h
                                 writeIORef animRef (Just anim)
                                 return anim
-            
-        changeState state' interpolate' = do
-	    writeIORef stateRef state'
+        
+	updateAnim interpolate' = do
+	    state' <- readIORef stateRef
 	    
 	    (w,h) <- getWH;  time <- getTime;  anim <- getAnim
 
@@ -234,7 +236,7 @@ vobCanvas window stateRef view handleEvent = do
 	
 	    widgetQueueDraw canvas
 
-    onKeyPress window $ \event -> do
+    onKeyPress canvas $ \event -> do
         let Key {eventModifier=mods,eventKeyName=key,eventKeyChar=char} = event
         putStrLn $ show mods++" "++key++" ("++show char++")"
 
@@ -242,7 +244,10 @@ vobCanvas window stateRef view handleEvent = do
 
         state <- readIORef stateRef
 	(state', interpolate') <- handleEvent event state
-	changeState state' interpolate'
+	
+        writeIORef stateRef state'
+        stateChanged state'
+        updateAnim interpolate'
 
 	return False
     
@@ -266,5 +271,7 @@ vobCanvas window stateRef view handleEvent = do
 	if rerender then widgetQueueDraw canvas else return ()
 
         return True
+        
+    onConfigure canvas $ \_event -> do updateAnim False; return True
 
-    return (canvas, changeState)
+    return (canvas, updateAnim)

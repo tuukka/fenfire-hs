@@ -113,18 +113,17 @@ handleKey :: [Node] -> Handler Rotation
 -- handleKey :: [Node] -> Event -> Rotation -> IO (Rotation, Bool)
 handleKey props (Key {eventModifier=_mods,eventKeyName=key,eventKeyChar=char})
           rot@(Rotation graph node rotation) = return $ case key of
-    "Up"        -> (Rotation graph node $ max (-h) $ min h $ rotation-1, True)
-    "Down"      -> (Rotation graph node $ max (-h) $ min h $ rotation+1, True)
-    "Left"      -> (maybe rot id $ get props rot Neg 0, True)
-    "Right"     -> (maybe rot id $ get props rot Pos 0, True)
-    "BackSpace" -> (changeText $ \s -> take (length s - 1) s, True)
-    _           -> case char of
-                       Just c  -> (changeText (\s -> s ++ [c]), True)
-                       Nothing -> (rot, False)
+    "Up"    -> rotate (-1); "i" -> rotate (-1)
+    "Down"  -> rotate 1;    "," -> rotate 1
+    "Left"  -> move Neg;    "j" -> move Neg
+    "Right" -> move Pos;    "l" -> move Pos
+    _       -> (rot, False)
   where h = height rot props
-        changeText f = Rotation graph' node rotation where
-            graph' = setText graph node (f $ maybe "" id (getText graph node))
-handleKey _ _ _ = undefined -- Event is always a Key
+        rotate dir = 
+            (Rotation graph node $ max (-h) $ min h $ rotation+dir, True)
+        move dir = (maybe rot id $ get props rot dir 0, True)
+
+handleKey _ _ rot = (rot, False)
             
 home = URI "ex:0"
 nodeA = URI "ex:A"
@@ -144,18 +143,44 @@ main :: IO ()
 main = do
     let props = [rdfs_seeAlso]
         view = vanishingView props 3
+        startState = Rotation testGraph home 0
 
-    stateRef <- newIORef (Rotation testGraph home 0)
+    stateRef <- newIORef startState
     
     initGUI
     window <- windowNew
     windowSetTitle window "Fenfire"
-    windowSetDefaultSize window 700 400
+    windowSetDefaultSize window 700 550
+    
+    textView <- textViewNew
+    textViewSetAcceptsTab textView False
+    buf <- textViewGetBuffer textView
 
-    (canvas, _changeState) <- vobCanvas window stateRef view (handleKey props)
+    let stateChanged (Rotation g n _r) = do
+        textBufferSetText buf (maybe "" id $ getText g n)
+        
+    stateChanged startState
+    
+    (canvas, updateCanvas) <- 
+        vobCanvas stateRef view (handleKey props) stateChanged
+    
+    afterBufferChanged buf $ do start <- textBufferGetStartIter buf
+                                end   <- textBufferGetEndIter buf
+                                text  <- textBufferGetText buf start end True
+                                Rotation g n r <- readIORef stateRef
+                                let g' = setText g n text
+                                writeIORef stateRef $ Rotation g' n r
+                                updateCanvas True
 
-    set window [ containerChild := canvas ]
+    paned <- vPanedNew
+    panedAdd1 paned canvas
+    panedAdd2 paned textView
+    
+    set paned [ panedPosition := 400 ]
+
+    set window [ containerChild := paned ]
     
     onDestroy window mainQuit
     widgetShowAll window
+    widgetGrabFocus canvas
     mainGUI

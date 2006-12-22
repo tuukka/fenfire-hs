@@ -25,7 +25,8 @@ main = do
     let view state _w _h    = if state then myScene1 else myScene2
         handle _event state = return (not state, True)
 
-    (canvas, _changeState) <- vobCanvas window stateRef view handle
+    (canvas, _updateCanvas) <- vobCanvas stateRef view handle 
+                                         (const $ return ())
 
     set window [ containerChild := canvas ]
     
