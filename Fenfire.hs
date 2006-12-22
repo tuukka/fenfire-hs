@@ -112,7 +112,7 @@ vanishingView props depth start w h =
 handleKey :: [Node] -> Handler Rotation
 -- handleKey :: [Node] -> Event -> Rotation -> Maybe (IO (Rotation, Bool))
 handleKey props (Key { eventModifier=_, eventKeyName=key, eventKeyChar=_ })
-          (Rotation graph node rotation) = case key of
+          rot@(Rotation graph node rotation) = case key of
     "Up"    -> rotate (-1); "i" -> rotate (-1)
     "Down"  -> rotate 1;    "," -> rotate 1
     "Left"  -> move Neg;    "j" -> move Neg

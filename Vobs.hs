@@ -178,10 +178,11 @@ instance Show Modifier where
     show Apple = "Apple"
     show Compose = "Compose"
 
-timeDbg :: MonadIO m => String -> m ()
-timeDbg msg | False     = liftIO $ do time <- System.Time.getClockTime
-                                      putStrLn $ msg ++ "\t" ++ show time
-            | otherwise = return ()
+timeDbg :: MonadIO m => String -> m () -> m ()
+timeDbg s act | False     = do out s; act; out s
+              | otherwise = act
+    where out t = liftIO $ do time <- System.Time.getClockTime
+                              putStrLn $ s ++ " " ++ t ++ "\t" ++ show time
        
 
 linearFract :: Double -> (Double, Bool)
@@ -251,7 +252,7 @@ vobCanvas stateRef view handleEvent stateChanged = do
             stateChanged state'
             updateAnim interpolate'
 	    return True
-          Nothing                     -> return False
+          Nothing -> return False
     
     onExpose canvas $ \(Expose {}) -> do
         drawable <- drawingAreaGetDrawWindow canvas
@@ -260,15 +261,7 @@ vobCanvas stateRef view handleEvent stateChanged = do
 
         let (scene, rerender) = anim time
         
-        renderWithDrawable drawable $ do
-            save
-            
-	    timeDbg "Starting redraw at"
-            drawScene scene
-            
-            restore
-            
-	timeDbg "Finished redraw at"
+        renderWithDrawable drawable $ timeDbg "redraw" $ drawScene scene
 	
 	if rerender then widgetQueueDraw canvas else return ()
 
