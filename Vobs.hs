@@ -87,7 +87,7 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
         <- layoutGetExtents layout
     let w = if useTextWidth then max w2 w3 else w1
         h = maximum [h1, h2, h3]
-    return $ Vob (realToFrac w, realToFrac h) (\_ _ -> showLayout layout)
+    return $ Vob (realToFrac w, realToFrac h) (\_w _h -> showLayout layout)
                           
                           
 rgbaColor :: Double -> Double -> Double -> Double -> Vob -> Vob
@@ -147,7 +147,7 @@ type Scene a  = Map a (Double, Double, Double, Double, Vob)
 
 drawScene :: Ord a => Scene a -> Render ()
 drawScene scene = do
-    flip mapM (toList scene) $ \(_, (x, y, w, h, vob)) -> do 
+    flip mapM (toList scene) $ \(_key, (x, y, w, h, vob)) -> do 
         save; translate (x-w/2) (y-h/2); drawVob vob w h; restore
     return ()
         
@@ -222,7 +222,7 @@ vobMain title startState view handleEvent = do
 
 	time <- getTime
 	anim <- readIORef animRef
-	let (scene, _) = anim time; scene' = view state' w h
+	let (scene, _rerender) = anim time; scene' = view state' w h
 	    anim' = if interpolate' then interpAnim time 0.3 scene scene'
 	                            else noAnim scene'
 	writeIORef animRef anim'
