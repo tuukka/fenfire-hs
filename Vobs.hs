@@ -210,32 +210,28 @@ vobCanvas stateRef view handleEvent stateChanged = do
     
     widgetSetCanFocus canvas True
     
-    animRef <- newIORef Nothing
+    animRef <- newIORef undefined
     
     let getWH = do (cw, ch) <- drawingAreaGetSize canvas
                    return (fromIntegral cw, fromIntegral ch)
-    
-        getAnim = do
-            maybeAnim <- readIORef animRef
-            case maybeAnim of
-                Just anim -> return anim
-                Nothing   -> do state <- readIORef stateRef; (w,h) <- getWH
-                                let anim = noAnim $ view state w h
-                                writeIORef animRef (Just anim)
-                                return anim
-        
-	updateAnim interpolate' = do
+                   
+        updateAnim interpolate' = do
 	    state' <- readIORef stateRef
 	    
-	    (w,h) <- getWH;  time <- getTime;  anim <- getAnim
+	    (w,h) <- getWH;  time <- getTime;  anim <- readIORef animRef
 
 	    let (scene, _rerender) = anim time; scene' = view state' w h
 	        anim' = if interpolate' && isInterpUseful scene scene'
                         then interpAnim time 5 scene scene'
 	                else noAnim scene'
-	    writeIORef animRef (Just anim')
+	    writeIORef animRef anim'
 	
 	    widgetQueueDraw canvas
+
+    onRealize canvas $ do (w,h) <- getWH; state <- readIORef stateRef
+                          writeIORef animRef $ noAnim $ view state w h
+    
+    onConfigure canvas $ \_event -> do updateAnim False; return True
 
     onKeyPress canvas $ \event -> do
         let Key {eventModifier=mods,eventKeyName=key,eventKeyChar=char} = event
@@ -256,9 +252,8 @@ vobCanvas stateRef view handleEvent stateChanged = do
     
     onExpose canvas $ \(Expose {}) -> do
         drawable <- drawingAreaGetDrawWindow canvas
-        anim <- getAnim
-        time <- getTime
-
+        
+        anim <- readIORef animRef;  time <- getTime
         let (scene, rerender) = anim time
         
         renderWithDrawable drawable $ timeDbg "redraw" $ drawScene scene
@@ -267,6 +262,4 @@ vobCanvas stateRef view handleEvent stateChanged = do
 
         return True
         
-    onConfigure canvas $ \_event -> do updateAnim False; return True
-
     return (canvas, updateAnim)
