@@ -1,6 +1,7 @@
 module Fenfire where
 
 import Vobs
+import RDF
 
 import qualified Data.Map as Map
 import qualified Data.List
@@ -9,56 +10,37 @@ import Maybe (fromJust, isJust, isNothing)
 
 import Graphics.UI.Gtk hiding (get)
 
-data Node = URI String | PlainLiteral String    deriving (Eq, Ord)
-data Dir  = Pos | Neg                           deriving (Eq, Ord, Show)
-
-instance Show Node where
-    show (URI uri)        = "<" ++ uri ++ ">"
-    show (PlainLiteral s) = "\"" ++ s ++ "\""
-
-type Graph = [(Node, Node, Node)]
-
-rdfs_label   = URI "http://www.w3.org/2000/01/rdf-schema#label"
-rdfs_seeAlso = URI "http://www.w3.org/2000/01/rdf-schema#seeAlso"
-
-fromNode :: Node -> String
-fromNode (URI uri)        = uri
-fromNode (PlainLiteral s) = s
-
-rev :: Dir -> Dir
-rev Pos = Neg
-rev Neg = Pos
-
-mul :: Num a => Dir -> a -> a
-mul Pos = id
-mul Neg = negate
-
-conns :: Graph -> [Node] -> Node -> Dir -> [(Node, Node)]
-conns g props node Pos = [(prop, obj)  | (subj, prop, obj) <- g, 
-                                         subj == node, prop `elem` props]
-conns g props node Neg = [(prop, subj) | (subj, prop, obj) <- g, 
-                                         obj == node,  prop `elem` props]
+data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 
-getRotation :: Graph -> [Node] -> Node -> Node -> Dir -> Node -> Maybe Rotation
-getRotation graph props node prop dir node' = do
-    i <- Data.List.elemIndex (prop, node') (conns graph props node dir)
-    return (Rotation graph node (i-length (conns graph props node dir) `div` 2))
+getRotation :: ViewSettings -> Graph -> Node -> Node -> Dir -> Node ->
+               Maybe Rotation
+getRotation vs graph node prop dir node' = do
+    i <- Data.List.elemIndex (prop, node') (conns vs graph node dir)
+    return (Rotation graph node (i-length (conns vs graph node dir) `div` 2))
     
-height :: Rotation -> [Node] -> Int
-height (Rotation g n _) props = 
-    max (length $ conns g props n Pos) (length $ conns g props n Neg) `div` 2
+conns :: ViewSettings -> Graph -> Node -> Dir -> [(Node, Node)]
+conns vs g node Pos = [(p,o) | (s,p,o) <- g, s == node,
+                               not $ p `elem` hiddenProps vs]
+conns vs g node Neg = [(p,s) | (s,p,o) <- g, o == node,
+                               not $ p `elem` hiddenProps vs]
 
-get :: [Node] -> Rotation -> Dir -> Int -> Maybe Rotation
-get props (Rotation graph node rot) dir rot' = result where
-    c = conns graph props node dir
-    index = (length c `div` 2) + rot + rot'
+rotate :: ViewSettings -> Rotation -> Int -> Maybe Rotation
+rotate vs (Rotation g n r) dir = 
+    if abs (r+dir) > h then Nothing else Just $ Rotation g n (r+dir)
+  where 
+    h = max (length $ conns vs g n Pos) (length $ conns vs g n Neg) `div` 2
+
+move :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
+move vs (Rotation graph node rot) dir = result where
+    c = conns vs graph node dir
+    index = (length c `div` 2) + rot
     result = if index >= 0 && index < length c 
              then let (p,n) = c !! index in 
-                  getRotation graph props n p (rev dir) node
+                  getRotation vs graph n p (rev dir) node
              else Nothing
-        
+
 -- Some Fenfire views, like the vanishing wheel view, show a conceptually
 -- infinitely deep picture, cut off at some depth when actually rendered
 -- on the screen. This type is the output of such a view, structured
@@ -81,8 +63,9 @@ nodeView g n = rectBox $ clipVob $ pad 5 $ multiline False 20 s
     where s = maybe (show n) id (getText g n)
 
 
-vanishingView :: [Node] -> Int -> Rotation -> Double -> Double -> Scene Node
-vanishingView props depth start w h = 
+vanishingView :: ViewSettings -> Int -> Rotation -> Double -> Double ->
+                 Scene Node
+vanishingView vs depth start w h = 
     Map.unions $ take depth $ oneNode (w/2, h/2) 0 start where -- XXX
         oneNode :: (Double, Double) -> Double -> Rotation -> InfiniteScene
         oneNode (x,y) angle rot@(Rotation graph node rot0) = 
@@ -96,7 +79,7 @@ vanishingView props depth start w h =
         connections :: (Double, Double) -> Rotation -> Int -> Double -> 
                        Dir -> Int -> InfiniteScene
         connections (x,y) rot offs angle xdir ydir = result where
-            rot' = (get props rot xdir offs)
+            rot' = do r' <- rotate vs rot offs; move vs r' xdir
             result = if isNothing rot' then [] else
                 combine [ oneNode (translate angle (mul xdir 200) (x,y))
                                   angle (fromJust rot'),
@@ -109,22 +92,17 @@ vanishingView props depth start w h =
             (x + distance * cos angle, y + distance * sin angle)
 
 
-handleKey :: [Node] -> Handler Rotation
--- handleKey :: [Node] -> Event -> Rotation -> Maybe (IO (Rotation, Bool))
-handleKey props (Key { eventModifier=_, eventKeyName=key, eventKeyChar=_ })
-          rot@(Rotation graph node rotation) = case key of
-    "Up"    -> rotate (-1); "i" -> rotate (-1)
-    "Down"  -> rotate 1;    "," -> rotate 1
-    "Left"  -> move Neg;    "j" -> move Neg
-    "Right" -> move Pos;    "l" -> move Pos
+handleKey :: ViewSettings -> Handler Rotation
+handleKey vs (Key { eventModifier=_, eventKeyName=key }) rot = case key of
+    "Up"    -> m rotate (-1); "i" -> m rotate (-1)
+    "Down"  -> m rotate 1;    "," -> m rotate 1
+    "Left"  -> m move Neg;    "j" -> m move Neg
+    "Right" -> m move Pos;    "l" -> m move Pos
     "q"     -> Just $ do mainQuit; return undefined
     _       -> Nothing
-  where h = height rot props
-        rotate dir = Just $ return
-            (Rotation graph node $ max (-h) $ min h $ rotation+dir, True)
-        move dir = Just $ return (maybe rot id $ get props rot dir 0, True)
+  where m f x = fmap (\rot' -> return (rot', True)) $ f vs rot x
 
-handleKey _ _ _rot = Nothing
+handleKey _ _ _ = Nothing
             
 home = URI "ex:0"
 nodeA = URI "ex:A"
@@ -142,8 +120,8 @@ testGraph = [(home, lbl, lit "Home"),
 
 main :: IO ()
 main = do
-    let props = [rdfs_seeAlso]
-        view = vanishingView props 3
+    let vs = ViewSettings { hiddenProps=[rdfs_label] }
+        view = vanishingView vs 3
         startState = Rotation testGraph home 0
 
     stateRef <- newIORef startState
@@ -163,7 +141,7 @@ main = do
     stateChanged startState
     
     (canvas, updateCanvas) <- 
-        vobCanvas stateRef view (handleKey props) stateChanged
+        vobCanvas stateRef view (handleKey vs) stateChanged
     
     afterBufferChanged buf $ do start <- textBufferGetStartIter buf
                                 end   <- textBufferGetEndIter buf

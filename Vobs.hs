@@ -242,13 +242,12 @@ vobCanvas stateRef view handleEvent stateChanged = do
         state <- readIORef stateRef
 	
 	case handleEvent event state of
-          Just action -> do
-            (state', interpolate') <- action
-            writeIORef stateRef state'
-            stateChanged state'
-            updateAnim interpolate'
-	    return True
-          Nothing -> return False
+          Just action -> do (state', interpolate') <- action
+                            writeIORef stateRef state'
+                            stateChanged state'
+                            updateAnim interpolate'
+	                    return True
+          Nothing     -> return False
     
     onExpose canvas $ \(Expose {}) -> do
         drawable <- drawingAreaGetDrawWindow canvas
