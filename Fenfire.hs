@@ -6,7 +6,7 @@ import RDF
 import qualified Data.Map as Map
 import qualified Data.List
 import Data.IORef
-import Maybe (fromJust, isJust, isNothing)
+import Maybe (fromJust, isJust, isNothing, maybeToList)
 
 import Graphics.UI.Gtk hiding (get)
 
@@ -41,15 +41,6 @@ move vs (Rotation graph node rot) dir = result where
                   getRotation vs graph n p (rev dir) node
              else Nothing
 
--- Some Fenfire views, like the vanishing wheel view, show a conceptually
--- infinitely deep picture, cut off at some depth when actually rendered
--- on the screen. This type is the output of such a view, structured
--- as a list of scenes of increasing depth.
-type InfiniteScene = [Scene Node]
-
-combine :: [InfiniteScene] -> InfiniteScene
-combine scenes = (Map.unions $ concatMap (take 1) scenes) : combine (map (drop 1) scenes)
-
 getText :: Graph -> Node -> Maybe String
 getText g n = fmap (\(_s,_p,o) -> fromNode o)
                    (Data.List.find (\(s,p,_o) -> s==n && p==rdfs_label) g)
@@ -63,33 +54,94 @@ nodeView g n = rectBox $ clipVob $ pad 5 $ multiline False 20 s
     where s = maybe (show n) id (getText g n)
 
 
-vanishingView :: ViewSettings -> Int -> Rotation -> Double -> Double ->
+
+vanishingView :: ViewSettings -> Int -> Rotation -> Double -> Double -> 
                  Scene Node
-vanishingView vs depth start w h = 
-    Map.unions $ take depth $ oneNode (w/2, h/2) 0 start where -- XXX
-        oneNode :: (Double, Double) -> Double -> Rotation -> InfiniteScene
-        oneNode (x,y) angle rot@(Rotation graph node rot0) = 
-            let vob@(Vob (vw, vh) _) = nodeView graph node in
-            Map.fromList [(node, (x-vw/2, y-vh/2, vw, vh, vob))]
-                : combine [ connections (x,y) rot (-rot0) (angle-fromIntegral rot0*mul xdir angleOffs) xdir ydir
-                          | xdir <- [Neg, Pos], ydir <- [-1, 1] ]
+vanishingView vs depth startRotation w h = runVanishing depth view where
+    view = do moveTo (w/2) (h/2)
+              placeNode startRotation
+              dir <- choose [Pos, Neg]
+              call $ placeConns startRotation dir True
                 
-        angleOffs = pi / 14
-                
-        connections :: (Double, Double) -> Rotation -> Int -> Double -> 
-                       Dir -> Int -> InfiniteScene
-        connections (x,y) rot offs angle xdir ydir = result where
-            rot' = do r' <- rotate vs rot offs; move vs r' xdir
-            result = if isNothing rot' then [] else
-                combine [ oneNode (translate angle (mul xdir 200) (x,y))
-                                  angle (fromJust rot'),
-                          connections (x,y) rot (offs+ydir) 
-                                      (angle+fromIntegral ydir*angleOffs)
-                                      xdir ydir ]
-                
-        translate :: Double -> Double -> (Double, Double) -> (Double, Double)
-        translate angle distance (x,y) = 
-            (x + distance * cos angle, y + distance * sin angle)
+    placeConns rotation xdir placeFirst = do
+        increaseDepth 1
+        if placeFirst then call $ placeConn rotation xdir else return ()
+        ydir <- choose [-1, 1]
+        call $ placeConns' rotation xdir ydir
+        
+    placeConns' rotation xdir ydir = do
+        increaseDepth 1
+        rotation' <- choose $ maybeToList $ rotate vs rotation ydir
+        changeAngle (fromIntegral ydir * mul xdir pi / 14)
+        call $ placeConn rotation' xdir
+        call $ placeConns' rotation' xdir ydir
+        
+    placeConn rotation dir = do
+        rotation' <- choose $ maybeToList $ move vs rotation dir
+        movePolar dir 200
+        placeNode rotation'
+        call $ placeConns rotation' dir True
+        call $ placeConns rotation' (rev dir) False
+        
+    placeNode (Rotation graph node _) = place node $ nodeView graph node
+    
+    
+data VVState = VVState { vvDepth :: Int, vvX :: Double, vvY :: Double,
+                         vvAngle :: Double }
+                           
+newtype VV a = VV (VVState -> ( Scene Node, [(VVState, a)] ))
+
+instance Monad VV where
+    return x = choose [x]
+    
+    (VV f) >>= g = VV h where
+        h state = (hScene, hResults) where
+            unVV (VV fn) = fn
+            (fScene,  fResults) = f state
+            (gScenes, gResults) = 
+                unzip $ map (\(state', x) -> unVV (g x) state') fResults
+
+            hScene   = Map.unions (fScene : gScenes)
+            hResults = concat gResults
+    
+runVanishing :: Int -> VV a -> Scene Node
+runVanishing depth (VV f) = fst $ f (VVState depth 0 0 0)
+
+choose :: [a] -> VV a
+choose xs = VV $ \state -> (Map.empty, map (\x -> (state,x)) xs)
+
+call :: VV a -> VV ()   -- get the parameter's vobs without changing the state
+call (VV f) = VV g where
+    g state = (scene, [(state, ())])  where  (scene, _) = f state
+
+increaseDepth :: Int -> VV ()
+increaseDepth n = VV f where
+    f state | depth <= 0 = (Map.empty, [])
+            | otherwise  = (Map.empty, [(state { vvDepth=depth }, ())])
+        where depth = vvDepth state - n
+
+place :: Node -> Vob -> VV ()
+place node vob = VV f where
+    f state = (Map.fromList [entry], [(state, ())]) where
+        entry = (node, (vvX state - w/2, vvY state - h/2, w, h, vob))
+        (w,h) = defaultSize vob
+        
+changeState :: (VVState -> VVState) -> VV ()
+changeState f = VV (\state -> (Map.empty, [(f state, ())]))
+
+moveTo :: Double -> Double -> VV ()
+moveTo x y = changeState (\s -> s { vvX = vvX s + x, vvY = vvY s + y })
+
+movePolar :: Dir -> Double -> VV ()
+movePolar dir distance = changeState result where
+    distance' = mul dir distance
+    result s = s { vvX = vvX s + distance' * cos (vvAngle s),
+                   vvY = vvY s + distance' * sin (vvAngle s) }
+                   
+changeAngle :: Double -> VV ()
+changeAngle delta = changeState result where
+    result s = s { vvAngle = vvAngle s + delta }
+
 
 
 handleKey :: ViewSettings -> Handler Rotation
@@ -121,7 +173,7 @@ testGraph = [(home, lbl, lit "Home"),
 main :: IO ()
 main = do
     let vs = ViewSettings { hiddenProps=[rdfs_label] }
-        view = vanishingView vs 3
+        view = vanishingView vs 8
         startState = Rotation testGraph home 0
 
     stateRef <- newIORef startState
