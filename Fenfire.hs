@@ -9,7 +9,7 @@ import Data.IORef
 import Maybe (fromJust, isJust, isNothing, maybeToList)
 import Monad (mplus)
 
-import Control.Monad.State (State, StateT(StateT), get, put, modify, 
+import Control.Monad.State (State, StateT, get, put, modify, 
                             runState, runStateT,
                             withState, execState, evalState, evalStateT)
 import Control.Monad.List  (ListT(ListT), runListT)
@@ -69,27 +69,27 @@ vanishingView vs depth startRotation w h = runVanishing depth view where
     view = do moveTo (w/2) (h/2)
               placeNode startRotation
               dir <- choose [Pos, Neg]
-              call $ placeConns startRotation dir True
+              placeConns startRotation dir True
                 
-    placeConns rotation xdir placeFirst = do
+    placeConns rotation xdir placeFirst = call $ do
         increaseDepth 1
         if placeFirst then call $ placeConn rotation xdir else return ()
         ydir <- choose [-1, 1]
-        call $ placeConns' rotation xdir ydir
+        placeConns' rotation xdir ydir
         
-    placeConns' rotation xdir ydir = do
+    placeConns' rotation xdir ydir = call $ do
         increaseDepth 1
         rotation' <- choose $ maybeToList $ rotate vs rotation ydir
         changeAngle (fromIntegral ydir * mul xdir pi / 14)
-        call $ placeConn rotation' xdir
-        call $ placeConns' rotation' xdir ydir
+        placeConn rotation' xdir
+        placeConns' rotation' xdir ydir
         
-    placeConn rotation dir = do
+    placeConn rotation dir = call $ do
         rotation' <- choose $ maybeToList $ move vs rotation dir
         movePolar dir 200
         placeNode rotation'
-        call $ placeConns rotation' dir True
-        call $ placeConns rotation' (rev dir) False
+        placeConns rotation' dir True
+        placeConns rotation' (rev dir) False
         
     placeNode (Rotation graph node _) = place node $ nodeView graph node
     
@@ -104,7 +104,7 @@ runVanishing depth vv =
     execState (runListT $ evalStateT vv $ VVState depth 0 0 0) Map.empty
     
 choose :: [a] -> VV a
-choose xs = StateT $ \s -> ListT (return [(x, s) | x <- xs])
+choose xs = lift $ ListT (return xs)
 
 call :: VV a -> VV ()   -- get the parameter's vobs without changing the state
 call vv = do state <- get; scene <- lift get
