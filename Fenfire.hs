@@ -9,6 +9,13 @@ import Data.IORef
 import Maybe (fromJust, isJust, isNothing, maybeToList)
 import Monad (mplus)
 
+import Control.Monad.State (State, StateT(StateT), get, put, modify, 
+                            runState, runStateT,
+                            withState, execState, evalState, evalStateT)
+import Control.Monad.List  (ListT(ListT), runListT)
+import Control.Monad.Trans (lift)
+import Control.Monad (mzero)
+
 import Graphics.UI.Gtk hiding (get)
 
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
@@ -89,58 +96,44 @@ vanishingView vs depth startRotation w h = runVanishing depth view where
     
 data VVState = VVState { vvDepth :: Int, vvX :: Double, vvY :: Double,
                          vvAngle :: Double }
-                           
-newtype VV a = VV (VVState -> ( Scene Node, [(VVState, a)] ))
+                         
+type VV a = StateT VVState (ListT (State (Scene Node))) a
 
-instance Monad VV where
-    return x = choose [x]
+runVanishing :: Int -> VV () -> Scene Node
+runVanishing depth vv =
+    execState (runListT $ evalStateT vv $ VVState depth 0 0 0) Map.empty
     
-    (VV f) >>= g = VV h where
-        h state = (hScene, hResults) where
-            unVV (VV fn) = fn
-            (fScene,  fResults) = f state
-            (gScenes, gResults) = 
-                unzip $ map (\(state', x) -> unVV (g x) state') fResults
-
-            hScene   = Map.unions (fScene : gScenes)
-            hResults = concat gResults
-    
-runVanishing :: Int -> VV a -> Scene Node
-runVanishing depth (VV f) = fst $ f (VVState depth 0 0 0)
-
 choose :: [a] -> VV a
-choose xs = VV $ \state -> (Map.empty, map (\x -> (state,x)) xs)
+choose xs = StateT $ \s -> ListT (return [(x, s) | x <- xs])
 
 call :: VV a -> VV ()   -- get the parameter's vobs without changing the state
-call (VV f) = VV g where
-    g state = (scene, [(state, ())])  where  (scene, _) = f state
+call vv = do state <- get; scene <- lift get
+             let scene' = execState (runListT (evalStateT vv state)) scene
+             lift $ put scene'
 
 increaseDepth :: Int -> VV ()
-increaseDepth n = VV f where
-    f state | depth <= 0 = (Map.empty, [])
-            | otherwise  = (Map.empty, [(state { vvDepth=depth }, ())])
-        where depth = vvDepth state - n
+increaseDepth n = do state <- get; let depth = (vvDepth state - n)
+                     if depth <= 0 then mzero
+                                   else modify (\s -> s { vvDepth=depth })
 
 place :: Node -> Vob -> VV ()
-place node vob = VV f where
-    f state = (Map.fromList [entry], [(state, ())]) where
-        entry = (node, (vvX state - w/2, vvY state - h/2, w, h, vob))
-        (w,h) = defaultSize vob
+place node vob = do
+    state <- get
+    let (w,h) = defaultSize vob
+        (x,y) = (vvX state - w/2, vvY state - h/2)
+    lift $ modify (Map.insert node (x,y,w,h,vob)) where
         
-changeState :: (VVState -> VVState) -> VV ()
-changeState f = VV (\state -> (Map.empty, [(f state, ())]))
-
 moveTo :: Double -> Double -> VV ()
-moveTo x y = changeState (\s -> s { vvX = vvX s + x, vvY = vvY s + y })
+moveTo x y = modify (\s -> s { vvX = vvX s + x, vvY = vvY s + y })
 
 movePolar :: Dir -> Double -> VV ()
-movePolar dir distance = changeState result where
+movePolar dir distance = modify result where
     distance' = mul dir distance
     result s = s { vvX = vvX s + distance' * cos (vvAngle s),
                    vvY = vvY s + distance' * sin (vvAngle s) }
                    
 changeAngle :: Double -> VV ()
-changeAngle delta = changeState result where
+changeAngle delta = modify result where
     result s = s { vvAngle = vvAngle s + delta }
 
 
