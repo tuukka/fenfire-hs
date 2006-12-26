@@ -6,15 +6,14 @@ import RDF
 import qualified Data.Map as Map
 import qualified Data.List
 import Data.IORef
-import Maybe (fromJust, isJust, isNothing, maybeToList)
-import Monad (mplus)
+import Data.Maybe (fromJust, isJust, isNothing)
 
+import Control.Monad (MonadPlus, mzero, mplus, msum)
 import Control.Monad.State (State, StateT, get, put, modify, 
                             runState, runStateT,
                             withState, execState, evalState, evalStateT)
 import Control.Monad.List  (ListT(ListT), runListT)
 import Control.Monad.Trans (lift)
-import Control.Monad (mzero)
 
 import Graphics.UI.Gtk hiding (get)
 
@@ -22,9 +21,16 @@ data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 
-getRotation :: ViewSettings -> Graph -> Node -> Node -> Dir -> Node ->
-               Maybe Rotation
-getRotation vs graph node prop dir node' = do
+returnMaybe :: MonadPlus m => Maybe a -> m a
+returnMaybe (Just x) = return x
+returnMaybe Nothing  = mzero
+
+returnList :: MonadPlus m => [a] -> m a
+returnList = msum . map return
+
+getRotation :: MonadPlus maybe => ViewSettings -> Graph -> 
+                   Node -> Node -> Dir -> Node -> maybe Rotation
+getRotation vs graph node prop dir node' = returnMaybe $ do
     i <- Data.List.elemIndex (prop, node') (conns vs graph node dir)
     return (Rotation graph node (i-length (conns vs graph node dir) `div` 2))
     
@@ -34,24 +40,25 @@ conns vs g node Pos = [(p,o) | (s,p,o) <- g, s == node,
 conns vs g node Neg = [(p,s) | (s,p,o) <- g, o == node,
                                not $ p `elem` hiddenProps vs]
 
-rotate :: ViewSettings -> Rotation -> Int -> Maybe Rotation
+rotate :: MonadPlus maybe => ViewSettings -> Rotation -> Int -> maybe Rotation
 rotate vs (Rotation g n r) dir = 
-    if abs (r+dir) > h then Nothing else Just $ Rotation g n (r+dir)
+    if abs (r+dir) > h then mzero else return $ Rotation g n (r+dir)
   where 
     h = max (length $ conns vs g n Pos) (length $ conns vs g n Neg) `div` 2
 
-move :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
+move :: MonadPlus maybe => ViewSettings -> Rotation -> Dir -> maybe Rotation
 move vs (Rotation graph node rot) dir = result where
     c = conns vs graph node dir
     index = (length c `div` 2) + rot
     result = if index >= 0 && index < length c 
              then let (p,n) = c !! index in 
                   getRotation vs graph n p (rev dir) node
-             else Nothing
+             else mzero
 
-getText :: Graph -> Node -> Maybe String
-getText g n = fmap (\(_s,_p,o) -> fromNode o)
-                   (Data.List.find (\(s,p,_o) -> s==n && p==rdfs_label) g)
+getText :: MonadPlus maybe => Graph -> Node -> maybe String
+getText g n = returnMaybe $ 
+                  fmap (\(_s,_p,o) -> fromNode o)
+                       (Data.List.find (\(s,p,_o) -> s==n && p==rdfs_label) g)
                     
 setText :: Graph -> Node -> String -> Graph
 setText g n t = (n, rdfs_label, PlainLiteral t) :
@@ -68,24 +75,24 @@ vanishingView :: ViewSettings -> Int -> Rotation -> Double -> Double ->
 vanishingView vs depth startRotation w h = runVanishing depth view where
     view = do moveTo (w/2) (h/2)
               placeNode startRotation
-              dir <- choose [Pos, Neg]
+              dir <- returnList [Pos, Neg]
               placeConns startRotation dir True
                 
     placeConns rotation xdir placeFirst = call $ do
         increaseDepth 1
         if placeFirst then call $ placeConn rotation xdir else return ()
-        ydir <- choose [-1, 1]
+        ydir <- returnList [-1, 1]
         placeConns' rotation xdir ydir
         
     placeConns' rotation xdir ydir = call $ do
         increaseDepth 1
-        rotation' <- choose $ maybeToList $ rotate vs rotation ydir
+        rotation' <- rotate vs rotation ydir
         changeAngle (fromIntegral ydir * mul xdir pi / 14)
         placeConn rotation' xdir
         placeConns' rotation' xdir ydir
         
     placeConn rotation dir = call $ do
-        rotation' <- choose $ maybeToList $ move vs rotation dir
+        rotation' <- move vs rotation dir
         movePolar dir 200
         placeNode rotation'
         placeConns rotation' dir True
@@ -103,9 +110,6 @@ runVanishing :: Int -> VV () -> Scene Node
 runVanishing depth vv =
     execState (runListT $ evalStateT vv $ VVState depth 0 0 0) Map.empty
     
-choose :: [a] -> VV a
-choose xs = lift $ ListT (return xs)
-
 call :: VV a -> VV ()   -- get the parameter's vobs without changing the state
 call vv = do state <- get; scene <- lift get
              let scene' = execState (runListT (evalStateT vv state)) scene
@@ -121,7 +125,7 @@ place node vob = do
     state <- get
     let (w,h) = defaultSize vob
         (x,y) = (vvX state - w/2, vvY state - h/2)
-    lift $ modify (Map.insert node (x,y,w,h,vob)) where
+    lift $ modify (Map.insert node (x,y,w,h,vob))
         
 moveTo :: Double -> Double -> VV ()
 moveTo x y = modify (\s -> s { vvX = vvX s + x, vvY = vvY s + y })
