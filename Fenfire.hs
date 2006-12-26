@@ -7,6 +7,7 @@ import qualified Data.Map as Map
 import qualified Data.List
 import Data.IORef
 import Maybe (fromJust, isJust, isNothing, maybeToList)
+import Monad (mplus)
 
 import Graphics.UI.Gtk hiding (get)
 
@@ -146,13 +147,14 @@ changeAngle delta = changeState result where
 
 handleKey :: ViewSettings -> Handler Rotation
 handleKey vs (Key { eventModifier=_, eventKeyName=key }) rot = case key of
-    "Up"    -> m rotate (-1); "i" -> m rotate (-1)
-    "Down"  -> m rotate 1;    "," -> m rotate 1
+    "Up"    -> m rotate' (-1); "i" -> m rotate' (-1)
+    "Down"  -> m rotate' 1;    "," -> m rotate' 1
     "Left"  -> m move Neg;    "j" -> m move Neg
     "Right" -> m move Pos;    "l" -> m move Pos
     "q"     -> Just $ do mainQuit; return undefined
     _       -> Nothing
   where m f x = fmap (\rot' -> return (rot', True)) $ f vs rot x
+        rotate' vs' rot' x' = rotate vs' rot' x' `mplus` Just rot'
 
 handleKey _ _ _ = Nothing
             
