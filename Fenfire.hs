@@ -41,9 +41,10 @@ conns vs g node Neg = [(p,s) | (s,p,o) <- g, o == node,
 
 rotate :: ViewSettings -> Rotation -> Int -> Maybe Rotation
 rotate vs (Rotation g n r) dir = 
-    if abs (r+dir) > h then Nothing else Just $ Rotation g n (r+dir)
+    if idx < 0 || idx >= h then Nothing else Just $ Rotation g n (r+dir)
   where 
-    h = max (length $ conns vs g n Pos) (length $ conns vs g n Neg) `div` 2
+    h = max (length $ conns vs g n Pos) (length $ conns vs g n Neg)
+    idx = r+dir+(h `div` 2)
 
 move :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
 move vs (Rotation graph node rot) dir = result where
