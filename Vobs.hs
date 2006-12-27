@@ -62,6 +62,9 @@ transformVob t vob = Vob (defaultSize vob) (\s -> transformLayout $ layoutVob vo
 render :: Size -> (Size -> Render ()) -> Vob k
 render s r = Vob s $ \s' -> Layout Map.empty $ \m _ -> do
     save; Cairo.transform m; r s'; restore
+
+decoration :: Ord k => (Matrix -> Scene k -> Render ()) -> Vob k
+decoration r = Vob (0,0) $ \_ -> Layout Map.empty r
     
 wrap :: (Matrix -> Size -> Render ()) -> Vob k -> Vob k
 wrap r v = Vob (defaultSize v) $ \s -> let l = layoutVob v s in
@@ -95,9 +98,13 @@ overlay vobs = Vob size layout where
 drawRect :: Size -> Vob k
 drawRect s = render s $ \(w,h) -> do 
     save; Cairo.rectangle 0 0 w h; Cairo.stroke; restore
+    
+fillRect :: Size -> Vob k
+fillRect s = render s $ \(w,h) -> do 
+    save; Cairo.rectangle 0 0 w h; Cairo.fill; restore
 
-rectBox :: Ord k => Vob k -> Vob k
-rectBox v = overlay [v, drawRect (0,0)]
+rectBox :: Ord k => Vob k -> Vob k   -- XXX don't force white bg?
+rectBox v = overlay [rgbColor 1 1 1 $ fillRect (0,0), v, drawRect (0,0)]
         
 
 pangoContext :: PangoContext
@@ -132,6 +139,14 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
     let w = if useTextWidth then max w2 w3 else w1
         h = maximum [h1, h2, h3]
     return $ render (realToFrac w, realToFrac h) (\_ -> showLayout layout)
+    
+connection :: Ord k => k -> k -> Vob k
+connection k1 k2 = decoration $ \_m sc -> do
+    let (m1,(w1,h1)) = sc ! k1
+        (m2,(w2,h2)) = sc ! k2
+        (x1,y1) = transformPoint m1 (w1/2, h1/2)
+        (x2,y2) = transformPoint m2 (w2/2, h2/2)
+    save; Cairo.moveTo x1 y1; Cairo.lineTo x2 y2; Cairo.stroke; restore
                           
 rgbaColor :: Double -> Double -> Double -> Double -> Vob k -> Vob k
 rgbaColor r g b a = wrap $ \_ _ -> Cairo.setSourceRGBA r g b a

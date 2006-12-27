@@ -87,10 +87,11 @@ vanishingView vs depth startRotation = runVanishing depth view where
         placeConn rotation' xdir
         placeConns' rotation' xdir ydir
         
-    placeConn rotation dir = call $ do
-        rotation' <- maybeReturn $ move vs rotation dir
+    placeConn rotation@(Rotation _ n1 _) dir = call $ do
+        rotation'@(Rotation _ n2 _) <- maybeReturn $ move vs rotation dir
         movePolar dir 200
         placeNode rotation'
+        addVob $ connection n1 n2
         placeConns rotation' dir True
         placeConns rotation' (rev dir) False
         
@@ -117,12 +118,13 @@ increaseDepth n = do state <- get; let depth = (vvDepth state - n)
                      if depth <= 0 then mzero
                                    else modify (\s -> s { vvDepth=depth })
 
+addVob :: Vob Node -> VV ()
+addVob vob = lift $ modify $ (vob:)
+
 placeVob :: Vob Node -> VV ()
 placeVob vob = do
     state <- get
-    let prepend = (:)
-    lift $ modify $
-        prepend (translateVob (vvX state) (vvY state) $ centerVob vob)
+    addVob $ translateVob (vvX state) (vvY state) $ centerVob vob
         
 movePolar :: Dir -> Double -> VV ()
 movePolar dir distance = modify result where
