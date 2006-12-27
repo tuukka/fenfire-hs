@@ -265,11 +265,14 @@ vobCanvas stateRef view handleEvent stateChanged = do
         updateAnim interpolate' = do
 	    state' <- readIORef stateRef
 	    
-	    (w,h) <- getWH;  time <- getTime;  (_,anim) <- readIORef animRef
+	    (w,h) <- getWH;  (_,anim) <- readIORef animRef
 
-	    let (scene, _rerender) = anim time
-	        layout' = layoutVob (view state') (w,h)
+	    let layout' = layoutVob (view state') (w,h)
 	        scene' = layoutScene layout'
+	        
+	    time <- scene' `seq` getTime
+	    
+	    let (scene, _rerender) = anim time
 	        anim' = if interpolate' && isInterpUseful scene scene'
                         then interpAnim time 0.5 scene scene'
 	                else noAnim scene'
