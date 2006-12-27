@@ -62,17 +62,15 @@ setText :: Graph -> Node -> String -> Graph
 setText g n t = (n, rdfs_label, PlainLiteral t) :
                 [(s,p,o) | (s,p,o) <- g, not (s == n && p == rdfs_label)]
 
-nodeView :: Graph -> Node -> Vob
+nodeView :: Graph -> Node -> Vob Node
 nodeView g n = rectBox $ clipVob $ pad 5 $ multiline False 20 s
     where s = maybe (show n) id (getText g n)
 
 
 
-vanishingView :: ViewSettings -> Int -> Rotation -> Double -> Double -> 
-                 Scene Node
-vanishingView vs depth startRotation w h = runVanishing depth view where
-    view = do moveTo (w/2) (h/2)
-              placeNode startRotation
+vanishingView :: ViewSettings -> Int -> Rotation -> Vob Node
+vanishingView vs depth startRotation = runVanishing depth view where
+    view = do placeNode startRotation
               dir <- returnEach [Pos, Neg]
               placeConns startRotation dir True
                 
@@ -96,17 +94,18 @@ vanishingView vs depth startRotation w h = runVanishing depth view where
         placeConns rotation' dir True
         placeConns rotation' (rev dir) False
         
-    placeNode (Rotation graph node _) = place node $ nodeView graph node
+    placeNode (Rotation graph node _) = 
+        placeVob $ keyVob node $ nodeView graph node
     
     
 data VVState = VVState { vvDepth :: Int, vvX :: Double, vvY :: Double,
                          vvAngle :: Double }
                          
-type VV a = StateT VVState (ListT (State (Scene Node))) a
+type VV a = StateT VVState (ListT (State [Vob Node])) a
 
-runVanishing :: Int -> VV () -> Scene Node
-runVanishing depth vv =
-    execState (runListT $ evalStateT vv $ VVState depth 0 0 0) Map.empty
+runVanishing :: Int -> VV () -> Vob Node
+runVanishing depth vv = comb (0,0) $ \(w,h) -> overlay $
+    execState (runListT $ evalStateT vv $ VVState depth (w/2) (h/2) 0) []
     
 call :: VV a -> VV ()   -- get the parameter's vobs without changing the state
 call vv = do state <- get; scene <- lift get
@@ -118,16 +117,13 @@ increaseDepth n = do state <- get; let depth = (vvDepth state - n)
                      if depth <= 0 then mzero
                                    else modify (\s -> s { vvDepth=depth })
 
-place :: Node -> Vob -> VV ()
-place node vob = do
+placeVob :: Vob Node -> VV ()
+placeVob vob = do
     state <- get
-    let (w,h) = defaultSize vob
-        (x,y) = (vvX state - w/2, vvY state - h/2)
-    lift $ modify (Map.insert node (x,y,w,h,vob))
+    let prepend = (:)
+    lift $ modify $
+        prepend (translateVob (vvX state) (vvY state) $ centerVob vob)
         
-moveTo :: Double -> Double -> VV ()
-moveTo x y = modify (\s -> s { vvX = vvX s + x, vvY = vvY s + y })
-
 movePolar :: Dir -> Double -> VV ()
 movePolar dir distance = modify result where
     distance' = mul dir distance

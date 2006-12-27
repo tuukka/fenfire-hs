@@ -6,12 +6,13 @@ import Data.IORef
 import Graphics.UI.Gtk
 
 
-myVob = rectBox $ pad 5 $ label "Hello World!"
+myVob = keyVob () $ rectBox $ pad 5 $ label "Hello World!"
 
-myScene1 = let (vw, vh) = defaultSize myVob 
-           in fromList [("Foo", (50, 50, vw, vh, myVob))]
-myScene2 = let (vw, vh) = defaultSize myVob 
-           in fromList [("Foo", (150, 150, vw+30, vh, myVob))]
+myScene1 :: Vob ()
+myScene1 = translateVob 50 50 myVob
+
+myScene2 :: Vob ()
+myScene2 = translateVob 150 150 $ addSize 30 0 myVob
 
 
 main = do 
@@ -22,7 +23,7 @@ main = do
 
     stateRef <- newIORef False
 
-    let view state _w _h    = if state then myScene1 else myScene2
+    let view state          = if state then myScene1 else myScene2
         handle _event state = Just $ return (not state, True)
 
     (canvas, _updateCanvas) <- vobCanvas stateRef view handle 
