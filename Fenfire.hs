@@ -21,16 +21,15 @@ data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 
-returnMaybe :: MonadPlus m => Maybe a -> m a
-returnMaybe (Just x) = return x
-returnMaybe Nothing  = mzero
+maybeReturn :: MonadPlus m => Maybe a -> m a
+maybeReturn = maybe mzero return
 
-returnList :: MonadPlus m => [a] -> m a
-returnList = msum . map return
+returnEach :: MonadPlus m => [a] -> m a
+returnEach = msum . map return
 
-getRotation :: MonadPlus maybe => ViewSettings -> Graph -> 
-                   Node -> Node -> Dir -> Node -> maybe Rotation
-getRotation vs graph node prop dir node' = returnMaybe $ do
+getRotation :: ViewSettings -> Graph -> Node -> Node -> Dir -> Node ->
+               Maybe Rotation
+getRotation vs graph node prop dir node' = do
     i <- Data.List.elemIndex (prop, node') (conns vs graph node dir)
     return (Rotation graph node (i-length (conns vs graph node dir) `div` 2))
     
@@ -40,25 +39,24 @@ conns vs g node Pos = [(p,o) | (s,p,o) <- g, s == node,
 conns vs g node Neg = [(p,s) | (s,p,o) <- g, o == node,
                                not $ p `elem` hiddenProps vs]
 
-rotate :: MonadPlus maybe => ViewSettings -> Rotation -> Int -> maybe Rotation
+rotate :: ViewSettings -> Rotation -> Int -> Maybe Rotation
 rotate vs (Rotation g n r) dir = 
-    if abs (r+dir) > h then mzero else return $ Rotation g n (r+dir)
+    if abs (r+dir) > h then Nothing else Just $ Rotation g n (r+dir)
   where 
     h = max (length $ conns vs g n Pos) (length $ conns vs g n Neg) `div` 2
 
-move :: MonadPlus maybe => ViewSettings -> Rotation -> Dir -> maybe Rotation
+move :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
 move vs (Rotation graph node rot) dir = result where
     c = conns vs graph node dir
     index = (length c `div` 2) + rot
     result = if index >= 0 && index < length c 
              then let (p,n) = c !! index in 
                   getRotation vs graph n p (rev dir) node
-             else mzero
+             else Nothing
 
-getText :: MonadPlus maybe => Graph -> Node -> maybe String
-getText g n = returnMaybe $ 
-                  fmap (\(_s,_p,o) -> fromNode o)
-                       (Data.List.find (\(s,p,_o) -> s==n && p==rdfs_label) g)
+getText :: Graph -> Node -> Maybe String
+getText g n = fmap (\(_s,_p,o) -> fromNode o)
+                   (Data.List.find (\(s,p,_o) -> s==n && p==rdfs_label) g)
                     
 setText :: Graph -> Node -> String -> Graph
 setText g n t = (n, rdfs_label, PlainLiteral t) :
@@ -75,24 +73,24 @@ vanishingView :: ViewSettings -> Int -> Rotation -> Double -> Double ->
 vanishingView vs depth startRotation w h = runVanishing depth view where
     view = do moveTo (w/2) (h/2)
               placeNode startRotation
-              dir <- returnList [Pos, Neg]
+              dir <- returnEach [Pos, Neg]
               placeConns startRotation dir True
                 
     placeConns rotation xdir placeFirst = call $ do
         increaseDepth 1
         if placeFirst then call $ placeConn rotation xdir else return ()
-        ydir <- returnList [-1, 1]
+        ydir <- returnEach [-1, 1]
         placeConns' rotation xdir ydir
         
     placeConns' rotation xdir ydir = call $ do
         increaseDepth 1
-        rotation' <- rotate vs rotation ydir
+        rotation' <- maybeReturn $ rotate vs rotation ydir
         changeAngle (fromIntegral ydir * mul xdir pi / 14)
         placeConn rotation' xdir
         placeConns' rotation' xdir ydir
         
     placeConn rotation dir = call $ do
-        rotation' <- move vs rotation dir
+        rotation' <- maybeReturn $ move vs rotation dir
         movePolar dir 200
         placeNode rotation'
         placeConns rotation' dir True

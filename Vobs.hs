@@ -222,7 +222,7 @@ vobCanvas stateRef view handleEvent stateChanged = do
 
 	    let (scene, _rerender) = anim time; scene' = view state' w h
 	        anim' = if interpolate' && isInterpUseful scene scene'
-                        then interpAnim time 5 scene scene'
+                        then interpAnim time 0.5 scene scene'
 	                else noAnim scene'
 	    writeIORef animRef anim'
 	
