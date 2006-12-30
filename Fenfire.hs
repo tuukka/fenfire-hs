@@ -157,15 +157,26 @@ changeAngle delta = modify $ \s -> s { vvAngle = vvAngle s + delta }
 
 
 
+newNode :: ViewSettings -> Rotation -> Dir -> IO Rotation
+newNode vs (Rotation graph node _) dir = do
+    time <- getTime
+    let node'  = URI $ "ex:" ++ show (round time :: Integer)
+        graph' = (if dir == Pos then (node, rdfs_seeAlso, node')
+                                else (node', rdfs_seeAlso, node))
+                     : (node', rdfs_label, PlainLiteral "") : graph
+    return $ fromJust $ getRotation vs graph' node' rdfs_seeAlso (rev dir) node
+
 handleKey :: ViewSettings -> Handler Rotation
 handleKey vs (Key { eventModifier=_, eventKeyName=key }) rot = case key of
     "Up"    -> m rotate' (-1); "i" -> m rotate' (-1)
     "Down"  -> m rotate' 1;    "," -> m rotate' 1
-    "Left"  -> m move Neg;    "j" -> m move Neg
-    "Right" -> m move Pos;    "l" -> m move Pos
+    "Left"  -> m move Neg;     "j" -> m move Neg
+    "Right" -> m move Pos;     "l" -> m move Pos
+    "n"     -> n newNode Pos;  "N" -> n newNode Neg
     "q"     -> Just $ do mainQuit; return undefined
     _       -> Nothing
   where m f x = fmap (\rot' -> return (rot', True)) $ f vs rot x
+        n f x = Just $ do rot' <- f vs rot x; return (rot', True)
         rotate' vs' rot' x' = rotate vs' rot' x' `mplus` Just rot'
 
 handleKey _ _ _ = Nothing
