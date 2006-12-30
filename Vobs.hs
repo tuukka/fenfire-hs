@@ -121,7 +121,7 @@ fillRect :: Size -> Vob k
 fillRect s = render s $ \(w,h) -> do 
     save; Cairo.rectangle 0 0 w h; Cairo.fill; restore
 
-rectBox :: Ord k => Vob k -> Vob k   -- XXX don't force white bg?
+rectBox :: Ord k => Vob k -> Vob k
 rectBox v = overlay [useBgColor $ fillRect (0,0), v, drawRect (0,0)]
         
 

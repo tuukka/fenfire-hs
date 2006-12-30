@@ -15,7 +15,7 @@ import Control.Monad.State (State, StateT, get, gets, modify, put,
 import Control.Monad.List  (ListT(ListT), runListT)
 import Control.Monad.Trans (lift)
 
-import Graphics.UI.Gtk hiding (get)
+import Graphics.UI.Gtk hiding (get, Color)
 
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 
@@ -76,8 +76,8 @@ propView g n = overlay [ useFadeColor $ fillRect (0,0),
 
 
 
-vanishingView :: ViewSettings -> Int -> Rotation -> Vob Node
-vanishingView vs depth startRotation = runVanishing depth view where
+vanishingView :: ViewSettings -> Int -> (Rotation, Mark) -> Vob Node
+vanishingView vs depth (startRotation, mark) = runVanishing depth view where
     view = do placeNode startRotation
               dir <- returnEach [Pos, Neg]
               placeConns startRotation dir True
@@ -111,8 +111,10 @@ vanishingView vs depth startRotation = runVanishing depth view where
         
     placeNode (Rotation graph node _) = call $ do
         scale <- getScale; fadeFactor <- getFade
+        let f vob = if Just node /= mark then vob
+                        else setBgColor (Color 1 0 0 1) vob
         placeVob $ scaleVob scale scale $ fadeVob fadeFactor $
-            keyVob node $ nodeView graph node
+            keyVob node $ f $ nodeView graph node
         
     getScale = do d <- gets vvDepth; return (0.97 ** fromIntegral (depth - d))
     getFade  = do d <- gets vvDepth
@@ -165,18 +167,38 @@ newNode vs (Rotation graph node _) dir = do
                                 else (node', rdfs_seeAlso, node))
                      : (node', rdfs_label, PlainLiteral "") : graph
     return $ fromJust $ getRotation vs graph' node' rdfs_seeAlso (rev dir) node
+    
+connect :: ViewSettings -> Rotation -> Dir -> Node -> Rotation
+connect vs (Rotation graph node _) dir node' =
+    let graph' = (if dir == Pos then (node, rdfs_seeAlso, node')
+                                else (node', rdfs_seeAlso, node))
+                     : (node', rdfs_label, PlainLiteral "") : graph
+    in fromJust $ getRotation vs graph' node' rdfs_seeAlso (rev dir) node
 
-handleKey :: ViewSettings -> Handler Rotation
-handleKey vs (Key { eventModifier=_, eventKeyName=key }) rot = case key of
+
+type Mark = Maybe Node
+
+toggleMark :: Node -> Mark -> Mark
+toggleMark n Nothing = Just n
+toggleMark n (Just n') | n == n'   = Nothing
+                       | otherwise = Just n
+
+handleKey :: ViewSettings -> Handler (Rotation, Mark)
+handleKey vs (Key { eventModifier=_, eventKeyName=key }) (rot,mk) = case key of
     "Up"    -> m rotate' (-1); "i" -> m rotate' (-1)
     "Down"  -> m rotate' 1;    "," -> m rotate' 1
     "Left"  -> m move Neg;     "j" -> m move Neg
     "Right" -> m move Pos;     "l" -> m move Pos
     "n"     -> n newNode Pos;  "N" -> n newNode Neg
+    "c"     -> o connect Pos;  "C" -> o connect Neg
+    "m"     -> let Rotation _ node _ = rot
+                in Just $ return ((rot, toggleMark node mk), False)
     "q"     -> Just $ do mainQuit; return undefined
     _       -> Nothing
-  where m f x = fmap (\rot' -> return (rot', True)) $ f vs rot x
-        n f x = Just $ do rot' <- f vs rot x; return (rot', True)
+  where m f x = fmap (\rot' -> return ((rot',mk), True)) $ f vs rot x
+        n f x = Just $ do rot' <- f vs rot x; return ((rot',mk), True)
+        o f x = flip fmap mk $ \node' -> 
+                    return ((f vs rot x node', Nothing), True)
         rotate' vs' rot' x' = rotate vs' rot' x' `mplus` Just rot'
 
 handleKey _ _ _ = Nothing
@@ -199,7 +221,7 @@ main :: IO ()
 main = do
     let vs = ViewSettings { hiddenProps=[rdfs_label] }
         view = vanishingView vs 20
-        startState = Rotation testGraph home 0
+        startState = (Rotation testGraph home 0, Nothing)
 
     stateRef <- newIORef startState
     
@@ -212,7 +234,7 @@ main = do
     textViewSetAcceptsTab textView False
     buf <- textViewGetBuffer textView
 
-    let stateChanged (Rotation g n _r) = do
+    let stateChanged (Rotation g n _r, _mark) = do
         textBufferSetText buf (maybe "" id $ getText g n)
         
     stateChanged startState
@@ -223,9 +245,9 @@ main = do
     afterBufferChanged buf $ do start <- textBufferGetStartIter buf
                                 end   <- textBufferGetEndIter buf
                                 text  <- textBufferGetText buf start end True
-                                Rotation g n r <- readIORef stateRef
+                                (Rotation g n r, mk) <- readIORef stateRef
                                 let g' = setText g n text
-                                writeIORef stateRef $ Rotation g' n r
+                                writeIORef stateRef $ (Rotation g' n r, mk)
                                 updateCanvas True
 
     paned <- vPanedNew
