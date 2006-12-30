@@ -93,17 +93,19 @@ vanishingView vs depth startRotation = runVanishing depth view where
         scale <- getScale
         movePolar dir (200 * scale)
         placeNode rotation'
-        addVob $ connection n1 n2
+        getFade >>= \fade -> addVob $ fadeVob fade $ connection n1 n2
         placeConns rotation' dir True
         increaseDepth 3
         placeConns rotation' (rev dir) False
         
     placeNode (Rotation graph node _) = call $ do
-        sc <- getScale
-        placeVob $ scaleVob sc sc $ rgbaColor 0 0 0 sc $
+        scale <- getScale; fadeFactor <- getFade
+        placeVob $ scaleVob scale scale $ fadeVob fadeFactor $
             keyVob node $ nodeView graph node
         
     getScale = do d <- gets vvDepth; return (0.95 ** fromIntegral (depth - d))
+    getFade  = do d <- gets vvDepth
+                  return (fromIntegral d / fromIntegral (depth+2))
     
     
 data VVState = VVState { vvDepth :: Int, vvX :: Double, vvY :: Double,
@@ -116,9 +118,9 @@ runVanishing depth vv = comb (0,0) $ \(w,h) -> overlay $
     execState (runListT $ evalStateT vv $ VVState depth (w/2) (h/2) 0) []
     
 call :: VV a -> VV ()   -- get the parameter's vobs without changing the state
-call vv = do state <- get; scene <- lift get
-             let scene' = execState (runListT (evalStateT vv state)) scene
-             lift $ put scene'
+call vv = do state <- get; vobs <- lift get
+             let vobs' = execState (runListT (evalStateT vv state)) vobs
+             lift $ put vobs'
 
 increaseDepth :: Int -> VV ()
 increaseDepth n = do state <- get; let depth = (vvDepth state - n)
@@ -194,7 +196,7 @@ main = do
     stateChanged startState
     
     (canvas, updateCanvas) <- 
-        vobCanvas stateRef view (handleKey vs) stateChanged
+        vobCanvas stateRef view (handleKey vs) stateChanged lightGray
     
     afterBufferChanged buf $ do start <- textBufferGetStartIter buf
                                 end   <- textBufferGetEndIter buf

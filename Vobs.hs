@@ -5,7 +5,7 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import Control.Monad.Trans (liftIO, MonadIO)
 
-import Graphics.UI.Gtk hiding (Size, Layout)
+import Graphics.UI.Gtk hiding (Size, Layout, Color)
 import Graphics.Rendering.Cairo (Render, save, restore)
 import qualified Graphics.Rendering.Cairo as Cairo
 import Graphics.Rendering.Cairo.Matrix
@@ -21,12 +21,20 @@ import qualified System.Time
 type Size = (Double, Double)
 type Scene k = Map k (Matrix, Size)
 
+data Color = Color Double Double Double Double
+
+data RenderContext k = RenderContext { 
+    rcMatrix :: Matrix, rcScene :: Scene k, rcFade :: Double,
+    rcColor :: Color, rcBgColor :: Color, rcFadeColor :: Color }
+
 data Vob k    = Vob    { defaultSize :: Size, layoutVob :: Size -> Layout k }
 data Layout k = Layout { layoutScene :: Scene k,
-                         renderLayout :: Matrix -> Scene k -> Render () }
+                         renderLayout :: RenderContext k -> Render () }
 
 defaultWidth  (Vob (w,_) _) = w
 defaultHeight (Vob (_,h) _) = h
+
+[black, gray, lightGray, white] = [Color x x x 1 | x <- [0, 0.5, 0.8, 1]]
 
 
 type View s k  = s -> Vob k
@@ -56,20 +64,28 @@ transformVob :: Matrix -> Vob k -> Vob k
 transformVob t vob = Vob (defaultSize vob) (\s -> transformLayout $ layoutVob vob s)
     where transformLayout l =
               Layout (transformScene $ layoutScene l)
-                     (\m sc -> renderLayout l (t*m) sc)
+                     (\cx -> renderLayout l $ cx { rcMatrix=t * rcMatrix cx })
           transformScene scene = Map.map (\(m,s) -> (m*t, s)) scene
 
-render :: Size -> (Size -> Render ()) -> Vob k
-render s r = Vob s $ \s' -> Layout Map.empty $ \m _ -> do
-    save; Cairo.transform m; r s'; restore
+setRenderColor :: RenderContext k -> Render ()
+setRenderColor cx = Cairo.setSourceRGBA r g b a where
+    Color r g b a = interpolate (rcFade cx) (rcFadeColor cx) (rcColor cx)
 
-decoration :: Ord k => (Matrix -> Scene k -> Render ()) -> Vob k
-decoration r = Vob (0,0) $ \_ -> Layout Map.empty r
+render :: Size -> (Size -> Render ()) -> Vob k
+render s ren = Vob s $ \s' -> Layout Map.empty $ \cx -> do
+    save; setRenderColor cx; Cairo.transform (rcMatrix cx); ren s'; restore
+
+decoration :: Ord k => (RenderContext k -> Render ()) -> Vob k
+decoration r = Vob (0,0) $ \_ -> Layout Map.empty $ \cx -> do 
+    save; setRenderColor cx; r cx; restore
     
-wrap :: (Matrix -> Size -> Render ()) -> Vob k -> Vob k
+changeContext :: (RenderContext k -> RenderContext k) -> Vob k -> Vob k
+changeContext f v = Vob (defaultSize v) $ \s -> let l = layoutVob v s in
+    Layout (layoutScene l) (\cx -> renderLayout l (f cx))
+
+wrap :: (RenderContext k -> Size -> Render ()) -> Vob k -> Vob k
 wrap r v = Vob (defaultSize v) $ \s -> let l = layoutVob v s in
-    Layout (layoutScene l) (\m sc -> do save; r m s;
-                                        renderLayout l m sc; restore)
+    Layout (layoutScene l) (\cx -> do save; r cx s; renderLayout l cx; restore)
                                         
                                                                        
 keyVob :: Ord k => k -> Vob k -> Vob k 
@@ -77,9 +93,10 @@ keyVob key vob = Vob (defaultSize vob) layout where
     layout size = Layout scene' ren where
         scene  = layoutScene $ layoutVob vob size
         scene' = Map.insert key (identity,size) scene
-        ren m sc = maybe (return ()) 
-                       (\(m',size') -> renderLayout (layoutVob vob size') m' sc)
-                       (Map.lookup key sc)
+        ren cx = case Map.lookup key (rcScene cx) of
+            Just (m',size') -> renderLayout (layoutVob vob size') $
+                                   cx { rcMatrix=m' }
+            Nothing         -> return ()
 
 
 nullVob :: Ord k => Vob k
@@ -93,7 +110,7 @@ overlay vobs = Vob size layout where
     layout size' = Layout scene ren where
         layouts = map (flip layoutVob size') vobs
         scene = Map.unions (map layoutScene layouts)
-        ren m sc = sequence_ $ map (\l -> renderLayout l m sc) layouts
+        ren cx = sequence_ $ map (\l -> renderLayout l cx) layouts
         
 
 drawRect :: Size -> Vob k
@@ -105,7 +122,7 @@ fillRect s = render s $ \(w,h) -> do
     save; Cairo.rectangle 0 0 w h; Cairo.fill; restore
 
 rectBox :: Ord k => Vob k -> Vob k   -- XXX don't force white bg?
-rectBox v = overlay [rgbColor 1 1 1 $ fillRect (0,0), v, drawRect (0,0)]
+rectBox v = overlay [useBgColor $ fillRect (0,0), v, drawRect (0,0)]
         
 
 pangoContext :: PangoContext
@@ -142,7 +159,7 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
     return $ render (realToFrac w, realToFrac h) (\_ -> showLayout layout)
     
 connection :: Ord k => k -> k -> Vob k
-connection k1 k2 = decoration $ \_m sc -> 
+connection k1 k2 = decoration $ \cx -> let sc = rcScene cx in
     if k1 `Map.member` sc && k2 `Map.member` sc then do
         let (m1,(w1,h1)) = sc ! k1
             (m2,(w2,h2)) = sc ! k2
@@ -151,11 +168,20 @@ connection k1 k2 = decoration $ \_m sc ->
         save; Cairo.moveTo x1 y1; Cairo.lineTo x2 y2; Cairo.stroke; restore
     else return ()
                           
-rgbaColor :: Double -> Double -> Double -> Double -> Vob k -> Vob k
-rgbaColor r g b a = wrap $ \_ _ -> Cairo.setSourceRGBA r g b a
+setColor :: Color -> Vob k -> Vob k
+setColor c = changeContext $ \cx -> cx { rcColor = c }
 
-rgbColor :: Double -> Double -> Double -> Vob k -> Vob k
-rgbColor r g b = rgbaColor r g b 1
+setBgColor :: Color -> Vob k -> Vob k
+setBgColor c = changeContext $ \cx -> cx { rcBgColor = c }
+
+useBgColor :: Vob k -> Vob k
+useBgColor = changeContext $ \cx -> cx { rcColor = rcBgColor cx }
+
+useFadeColor :: Vob k -> Vob k
+useFadeColor = changeContext $ \cx -> cx { rcColor = rcFadeColor cx }
+
+fadeVob :: Double -> Vob k -> Vob k
+fadeVob a = changeContext $ \cx -> cx { rcFade = rcFade cx * a }
 
 
 ownSize :: Vob k -> Vob k
@@ -195,24 +221,33 @@ resize w h = changeSize $ const (w,h)
 
 
 clipVob :: Vob k -> Vob k
-clipVob = wrap $ \m (w,h) -> do 
+clipVob = wrap $ \cx (w,h) -> let m = rcMatrix cx in do
     save; Cairo.transform m; Cairo.rectangle 0 0 w h; restore; Cairo.clip
     
     
+class Interpolate a where
+    interpolate :: Double -> a -> a -> a
     
-interpolate :: Ord k => Double -> Scene k -> Scene k -> Scene k
-interpolate fract sc1 sc2 = let
-      interpKeys = intersect (keys sc1) (keys sc2)
-      interp a b = (a*(1-fract)) + (b*fract)   -- interpolate two Doubles
-      addMatrix (Matrix u v w x y z) (Matrix u' v' w' x' y' z') =
-          Matrix (u+u') (v+v') (w+w') (x+x') (y+y') (z+z')
-      interpMatrix a b = scalarMultiply (1-fract) a `addMatrix`
-                         scalarMultiply fract b
-      f (m1,(w1,h1)) (m2,(w2,h2)) = 
-          (interpMatrix m1 m2, (interp w1 w2, interp h1 h2))
-   in fromList [(key, f (sc1 ! key) (sc2 ! key)) | key <- interpKeys]
-             
+instance Interpolate Double where
+    interpolate fract x y = (1-fract)*x + fract*y
+    
+instance Interpolate Color where
+    interpolate fract (Color r g b a) (Color r' g' b' a') =
+        Color (i r r') (i g g') (i b b') (i a a') where
+            i = interpolate fract
 
+instance Interpolate Matrix where
+    interpolate fract (Matrix u v w x y z) (Matrix u' v' w' x' y' z') =
+        Matrix (i u u') (i v v') (i w w') (i x x') (i y y') (i z z') where
+            i = interpolate fract
+
+interpolateScene :: Ord k => Double -> Scene k -> Scene k -> Scene k
+interpolateScene fract sc1 sc2 =
+    fromList [(key, f (sc1 ! key) (sc2 ! key)) | key <- interpKeys] where
+        interpKeys = intersect (keys sc1) (keys sc2)
+        f (m1,(w1,h1)) (m2,(w2,h2)) = (i m1 m2, (i w1 w2, i h1 h2))
+        i x y = interpolate fract x y
+             
 
 isInterpUseful :: Ord k => Scene k -> Scene k -> Bool             
 isInterpUseful sc1 sc2 = 
@@ -247,15 +282,15 @@ bounceFract x = (y,cont) where     -- ported from AbstractUpdateManager.java
 
 interpAnim :: Ord a => Time -> TimeDiff -> Scene a -> Scene a -> Anim a
 interpAnim startTime interpDuration sc1 sc2 time =
-    if continue then (interpolate fract sc1 sc2, True) else (sc2, False)
+    if continue then (interpolateScene fract sc1 sc2, True) else (sc2, False)
     where (fract, continue) = bounceFract ((time-startTime) / interpDuration)
     
 noAnim scene = const (scene, False)
     
 
 vobCanvas :: Ord b => IORef a -> View a b -> Handler a -> (a -> IO ()) ->
-                      IO (DrawingArea, Bool -> IO ())
-vobCanvas stateRef view handleEvent stateChanged = do
+                      Color -> IO (DrawingArea, Bool -> IO ())
+vobCanvas stateRef view handleEvent stateChanged bgColor = do
     canvas <- drawingAreaNew
     
     widgetSetCanFocus canvas True
@@ -265,13 +300,16 @@ vobCanvas stateRef view handleEvent stateChanged = do
     let getWH = do (cw, ch) <- drawingAreaGetSize canvas
                    return (fromIntegral cw, fromIntegral ch)
                    
+        getLayout = do (w,h) <- getWH; state <- readIORef stateRef
+                       let bg = useFadeColor $ render (0,0) $ const Cairo.paint
+                           vob = overlay [bg, view state]
+                       return $ layoutVob vob (w,h)
+                   
         updateAnim interpolate' = do
-	    state' <- readIORef stateRef
-	    
-	    (w,h) <- getWH;  (_,anim) <- readIORef animRef
+	    (_,anim) <- readIORef animRef
+	    layout'  <- getLayout
 
-	    let layout' = layoutVob (view state') (w,h)
-	        scene' = layoutScene layout'
+	    let scene' = layoutScene layout'
 	        
 	    time <- scene' `seq` getTime
 	    
@@ -284,9 +322,8 @@ vobCanvas stateRef view handleEvent stateChanged = do
 	
 	    widgetQueueDraw canvas
 
-    onRealize canvas $ do (w,h) <- getWH; state <- readIORef stateRef
-                          let layout = layoutVob (view state) (w,h)
-                              scene = layoutScene layout
+    onRealize canvas $ do layout <- getLayout
+                          let scene = layoutScene layout
                           writeIORef animRef (layout, noAnim scene)
     
     onConfigure canvas $ \_event -> do updateAnim False; return True
@@ -313,8 +350,11 @@ vobCanvas stateRef view handleEvent stateChanged = do
         (layout, anim) <- readIORef animRef;  time <- getTime
         let (scene, rerender) = anim time
         
-        renderWithDrawable drawable $ timeDbg "redraw" $ 
-            renderLayout layout identity scene
+        renderWithDrawable drawable $ timeDbg "redraw" $
+            renderLayout layout $ RenderContext {
+                rcMatrix=identity, rcScene=scene, rcFade=1,
+                rcColor=black, rcBgColor=white, rcFadeColor=bgColor
+            }
 	
 	if rerender then widgetQueueDraw canvas else return ()
 

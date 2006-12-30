@@ -27,7 +27,7 @@ main = do
         handle _event state = Just $ return (not state, True)
 
     (canvas, _updateCanvas) <- vobCanvas stateRef view handle 
-                                         (const $ return ())
+                                         (const $ return ()) lightGray
 
     set window [ containerChild := canvas ]
     
