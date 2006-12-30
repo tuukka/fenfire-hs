@@ -1,6 +1,6 @@
 
 GHC?=ghc
-GHCFLAGS=-Wall -fno-warn-unused-imports -fno-warn-missing-signatures -fno-warn-orphans
+GHCFLAGS=-fglasgow-exts -Wall -fno-warn-unused-imports -fno-warn-missing-signatures -fno-warn-orphans
 
 GHCCMD = $(GHC) $(GHCFLAGS)
 

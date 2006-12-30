@@ -218,7 +218,7 @@ testGraph = [(home, lbl, lit "Home"),
           lit = PlainLiteral
 
 main :: IO ()
-main = do
+main = mdo
     let vs = ViewSettings { hiddenProps=[rdfs_label] }
         view = vanishingView vs 20
         startState = (Rotation testGraph home 0, Nothing)
@@ -232,24 +232,25 @@ main = do
     
     textView <- textViewNew
     textViewSetAcceptsTab textView False
-    buf <- textViewGetBuffer textView
 
-    let stateChanged (Rotation g n _r, _mark) = do
+    let stateChanged (Rotation g n _r) = do
         textBufferSetText buf (maybe "" id $ getText g n)
-        
-    stateChanged startState
-    
-    (canvas, updateCanvas) <- 
-        vobCanvas stateRef view (handleKey vs) stateChanged lightGray
-    
-    afterBufferChanged buf $ do start <- textBufferGetStartIter buf
+        afterBufferChanged buf $ do 
+                                start <- textBufferGetStartIter buf
                                 end   <- textBufferGetEndIter buf
                                 text  <- textBufferGetText buf start end True
                                 (Rotation g n r, mk) <- readIORef stateRef
                                 let g' = setText g n text
                                 writeIORef stateRef $ (Rotation g' n r, mk)
                                 updateCanvas True
-
+        textViewSetBuffer textView buf
+        return ()
+    
+    stateChanged startState
+    
+    (canvas, updateCanvas) <- 
+        vobCanvas stateRef view (handleKey vs) stateChanged lightGray
+    
     paned <- vPanedNew
     panedAdd1 paned canvas
     panedAdd2 paned textView
