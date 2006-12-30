@@ -167,6 +167,24 @@ connection k1 k2 = decoration $ \cx -> let sc = rcScene cx in
             (x2,y2) = transformPoint m2 (w2/2, h2/2)
         save; Cairo.moveTo x1 y1; Cairo.lineTo x2 y2; Cairo.stroke; restore
     else return ()
+    
+onConnection :: Ord k => k -> k -> Vob k -> Vob k
+onConnection k1 k2 (Vob (w,h) getLayout) = Vob (0,0) (const layout') where
+    layout  = getLayout (w,h)
+    layout' = layout { renderLayout=render' }
+    render' cx = let { sc = rcScene cx } in
+        if k1 `Map.member` sc && k2 `Map.member` sc then do
+            let (m1,(w1,h1)) = sc ! k1
+                (m2,(w2,h2)) = sc ! k2
+                (x1,y1) = transformPoint m1 (w1/2, h1/2)
+                (x2,y2) = transformPoint m2 (w2/2, h2/2)
+                (x,y)   = ((x1+x2)/2, (y1+y2)/2)
+                sign    = if x2 < x1 then -1 else 1
+                angle   = atan2 ((y2-y1) * sign) ((x2-x1) * sign)
+                m = translate x y (rotate angle (translate (-w/2) (-h/2) identity)) * rcMatrix cx
+            renderLayout layout $ cx { rcMatrix=m }
+        else return ()
+
                           
 setColor :: Color -> Vob k -> Vob k
 setColor c = changeContext $ \cx -> cx { rcColor = c }
