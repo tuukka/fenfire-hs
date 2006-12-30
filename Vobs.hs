@@ -56,8 +56,8 @@ transformVob :: Matrix -> Vob k -> Vob k
 transformVob t vob = Vob (defaultSize vob) (\s -> transformLayout $ layoutVob vob s)
     where transformLayout l =
               Layout (transformScene $ layoutScene l)
-                     (\m sc -> renderLayout l (m*t) sc)
-          transformScene scene = Map.map (\(m,s) -> (t*m, s)) scene
+                     (\m sc -> renderLayout l (t*m) sc)
+          transformScene scene = Map.map (\(m,s) -> (m*t, s)) scene
 
 render :: Size -> (Size -> Render ()) -> Vob k
 render s r = Vob s $ \s' -> Layout Map.empty $ \m _ -> do
@@ -77,8 +77,9 @@ keyVob key vob = Vob (defaultSize vob) layout where
     layout size = Layout scene' ren where
         scene  = layoutScene $ layoutVob vob size
         scene' = Map.insert key (identity,size) scene
-        ren m sc = renderLayout (layoutVob vob size') m' sc where
-            (m', size') = Map.findWithDefault (m, size) key sc
+        ren m sc = maybe (return ()) 
+                       (\(m',size') -> renderLayout (layoutVob vob size') m' sc)
+                       (Map.lookup key sc)
 
 
 nullVob :: Ord k => Vob k
@@ -141,12 +142,14 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
     return $ render (realToFrac w, realToFrac h) (\_ -> showLayout layout)
     
 connection :: Ord k => k -> k -> Vob k
-connection k1 k2 = decoration $ \_m sc -> do
-    let (m1,(w1,h1)) = sc ! k1
-        (m2,(w2,h2)) = sc ! k2
-        (x1,y1) = transformPoint m1 (w1/2, h1/2)
-        (x2,y2) = transformPoint m2 (w2/2, h2/2)
-    save; Cairo.moveTo x1 y1; Cairo.lineTo x2 y2; Cairo.stroke; restore
+connection k1 k2 = decoration $ \_m sc -> 
+    if k1 `Map.member` sc && k2 `Map.member` sc then do
+        let (m1,(w1,h1)) = sc ! k1
+            (m2,(w2,h2)) = sc ! k2
+            (x1,y1) = transformPoint m1 (w1/2, h1/2)
+            (x2,y2) = transformPoint m2 (w2/2, h2/2)
+        save; Cairo.moveTo x1 y1; Cairo.lineTo x2 y2; Cairo.stroke; restore
+    else return ()
                           
 rgbaColor :: Double -> Double -> Double -> Double -> Vob k -> Vob k
 rgbaColor r g b a = wrap $ \_ _ -> Cairo.setSourceRGBA r g b a
@@ -163,7 +166,7 @@ translateVob :: Double -> Double -> Vob k -> Vob k
 translateVob x y = transformVob (translate x y identity) . ownSize
                   
 scaleVob :: Double -> Double -> Vob k -> Vob k
-scaleVob sx sy = transformVob (scale sx sy identity) 
+scaleVob sx sy = transformVob (Matrix sx 0 0 sy 0 0) 
                . changeSize (\(w,h) -> (sx*w, sy*h))
 
 

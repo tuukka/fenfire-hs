@@ -9,7 +9,7 @@ import Data.IORef
 import Data.Maybe (fromJust, isJust, isNothing)
 
 import Control.Monad (MonadPlus, mzero, mplus, msum)
-import Control.Monad.State (State, StateT, get, put, modify, 
+import Control.Monad.State (State, StateT, get, gets, modify, put,
                             runState, runStateT,
                             withState, execState, evalState, evalStateT)
 import Control.Monad.List  (ListT(ListT), runListT)
@@ -90,14 +90,20 @@ vanishingView vs depth startRotation = runVanishing depth view where
         
     placeConn rotation@(Rotation _ n1 _) dir = call $ do
         rotation'@(Rotation _ n2 _) <- maybeReturn $ move vs rotation dir
-        movePolar dir 200
+        scale <- getScale
+        movePolar dir (200 * scale)
         placeNode rotation'
         addVob $ connection n1 n2
         placeConns rotation' dir True
+        increaseDepth 3
         placeConns rotation' (rev dir) False
         
-    placeNode (Rotation graph node _) = 
-        placeVob $ keyVob node $ nodeView graph node
+    placeNode (Rotation graph node _) = call $ do
+        sc <- getScale
+        placeVob $ scaleVob sc sc $ rgbaColor 0 0 0 sc $
+            keyVob node $ nodeView graph node
+        
+    getScale = do d <- gets vvDepth; return (0.95 ** fromIntegral (depth - d))
     
     
 data VVState = VVState { vvDepth :: Int, vvX :: Double, vvY :: Double,
@@ -134,8 +140,7 @@ movePolar dir distance = modify result where
                    vvY = vvY s + distance' * sin (vvAngle s) }
                    
 changeAngle :: Double -> VV ()
-changeAngle delta = modify result where
-    result s = s { vvAngle = vvAngle s + delta }
+changeAngle delta = modify $ \s -> s { vvAngle = vvAngle s + delta }
 
 
 
