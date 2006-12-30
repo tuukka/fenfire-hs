@@ -233,7 +233,8 @@ main = mdo
     textView <- textViewNew
     textViewSetAcceptsTab textView False
 
-    let stateChanged (Rotation g n _r) = do
+    let stateChanged (Rotation g n _r, _mark) = do
+        buf <- textBufferNew Nothing
         textBufferSetText buf (maybe "" id $ getText g n)
         afterBufferChanged buf $ do 
                                 start <- textBufferGetStartIter buf
