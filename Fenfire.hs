@@ -188,7 +188,7 @@ toggleMark n (Just n') | n == n'   = Nothing
 handleKey :: ViewSettings -> Handler (Rotation, Mark)
 handleKey vs (Key { eventModifier=_, eventKeyName=key }) (rot,mk) = case key of
     "Up"    -> m rotate' (-1); "i" -> m rotate' (-1)
-    "Down"  -> m rotate' 1;    "," -> m rotate' 1
+    "Down"  -> m rotate' 1;    "comma" -> m rotate' 1
     "Left"  -> m move Neg;     "j" -> m move Neg
     "Right" -> m move Pos;     "l" -> m move Pos
     "n"     -> n newNode Pos;  "N" -> n newNode Neg
