@@ -6,7 +6,7 @@ import RDF
 import qualified Data.Map as Map
 import qualified Data.List
 import Data.IORef
-import Data.Maybe (fromJust, isJust, isNothing)
+import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
 
 import Control.Monad (MonadPlus, mzero, mplus, msum)
 import Control.Monad.State (State, StateT, get, gets, modify, put,
@@ -161,11 +161,14 @@ changeAngle delta = modify $ \s -> s { vvAngle = vvAngle s + delta }
 
 
 
+newURI :: IO Node
+newURI = do rand <- randomIO
+            return $ URI $ "ex:" ++ show (rand :: Int)
+
 newNode :: ViewSettings -> Rotation -> Dir -> IO Rotation
 newNode vs (Rotation graph node _) dir = do
-    rand <- randomIO
-    let node'  = URI $ "ex:" ++ show (rand :: Int)
-        graph' = (if dir == Pos then (node, rdfs_seeAlso, node')
+    node' <- newURI
+    let graph' = (if dir == Pos then (node, rdfs_seeAlso, node')
                                 else (node', rdfs_seeAlso, node))
                      : (node', rdfs_label, PlainLiteral "") : graph
     return $ fromJust $ getRotation vs graph' node' rdfs_seeAlso (rev dir) node
@@ -184,9 +187,41 @@ toggleMark :: Node -> Mark -> Mark
 toggleMark n Nothing = Just n
 toggleMark n (Just n') | n == n'   = Nothing
                        | otherwise = Just n
+                       
+openFile :: ViewSettings -> Rotation -> IO Rotation
+openFile vs rot0 = do
+    dialog <- fileChooserDialogNew Nothing Nothing FileChooserActionOpen
+                                   [("Open", ResponseAccept),
+                                    ("Cancel", ResponseCancel)]
+    widgetShow dialog
+    response <- dialogRun dialog
+    widgetHide dialog
+    case response of
+        ResponseAccept -> do Just fileName <- fileChooserGetFilename dialog
+                             file <- readFile fileName
+                             graph <- fromNTriples file
+                             let rots = catMaybes $ flip map graph $
+                                     \(s,p,o) -> getRotation vs graph s p Pos o
+                             return $ head rots
+        _              -> return rot0
+        
+saveFile :: Rotation -> IO ()
+saveFile (Rotation graph _ _) = do
+    dialog <- fileChooserDialogNew Nothing Nothing FileChooserActionSave
+                                   [("Save", ResponseAccept),
+                                    ("Cancel", ResponseCancel)]
+    widgetShow dialog
+    response <- dialogRun dialog
+    widgetHide dialog
+    case response of
+        ResponseAccept -> do Just fileName <- fileChooserGetFilename dialog
+                             writeFile fileName (toNTriples graph)
+        _              -> return ()
+
 
 handleKey :: ViewSettings -> Handler (Rotation, Mark)
-handleKey vs (Key { eventModifier=_, eventKeyName=key }) (rot,mk) = case key of
+handleKey vs (Key { eventModifier=_, eventKeyName=key }) (rot,mk) = 
+  case key of
     "Up"    -> m rotate' (-1); "i" -> m rotate' (-1)
     "Down"  -> m rotate' 1;    "comma" -> m rotate' 1
     "Left"  -> m move Neg;     "j" -> m move Neg
@@ -195,6 +230,8 @@ handleKey vs (Key { eventModifier=_, eventKeyName=key }) (rot,mk) = case key of
     "c"     -> o connect Pos;  "C" -> o connect Neg
     "m"     -> let Rotation _ node _ = rot
                 in Just $ return ((rot, toggleMark node mk), False)
+    "O"     -> Just $ do rot' <- openFile vs rot; return ((rot',Nothing),False)
+    "S"     -> Just $ do saveFile rot; return ((rot,mk), False)
     "q"     -> Just $ do mainQuit; return undefined
     _       -> Nothing
   where m f x = fmap (\rot' -> return ((rot',mk), True)) $ f vs rot x
@@ -205,25 +242,14 @@ handleKey vs (Key { eventModifier=_, eventKeyName=key }) (rot,mk) = case key of
 
 handleKey _ _ _ = Nothing
             
-home = URI "ex:0"
-nodeA = URI "ex:A"
-nodeAA = URI "ex:AA"
-nodeAB = URI "ex:AB"
-nodeB = URI "ex:B"
-testGraph = [(home, lbl, lit "Home"),
-             (home, prop, nodeA), (nodeA, lbl, lit "Node A"),
-             (nodeA, prop, nodeAA),
-             (nodeA, prop, nodeAB),
-             (home, prop, nodeB), (nodeB, lbl, lit "Node B")]
-    where prop = rdfs_seeAlso
-          lbl = rdfs_label
-          lit = PlainLiteral
-
 main :: IO ()
 main = mdo
+    home <- newURI
+
     let vs = ViewSettings { hiddenProps=[rdfs_label] }
         view = vanishingView vs 20
-        startState = (Rotation testGraph home 0, Nothing)
+        graph = [(home, rdfs_label, PlainLiteral "")]
+        startState = (Rotation graph home 0, Nothing)
 
     stateRef <- newIORef startState
     
