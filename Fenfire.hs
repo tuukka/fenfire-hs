@@ -232,7 +232,7 @@ handleKey vs (Key { eventModifier=_, eventKeyName=key }) (rot,mk) =
                 in Just $ return ((rot, toggleMark node mk), False)
     "O"     -> Just $ do rot' <- openFile vs rot; return ((rot',Nothing),False)
     "S"     -> Just $ do saveFile rot; return ((rot,mk), False)
-    "q"     -> Just $ do mainQuit; return undefined
+    "q"     -> Just $ do mainQuit; return ((rot,mk), False)
     _       -> Nothing
   where m f x = fmap (\rot' -> return ((rot',mk), True)) $ f vs rot x
         n f x = Just $ do rot' <- f vs rot x; return ((rot',mk), True)
