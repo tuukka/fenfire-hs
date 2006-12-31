@@ -109,7 +109,7 @@ overlay vobs = Vob size layout where
             
     layout size' = Layout scene ren where
         layouts = map (flip layoutVob size') vobs
-        scene = Map.unions (map layoutScene layouts)
+        scene = Map.unions $ reverse (map layoutScene layouts)
         ren cx = sequence_ $ map (\l -> renderLayout l cx) layouts
         
 
