@@ -1,6 +1,6 @@
 module Vobs where
 
--- Copyright (c) 2006, Benja Fallenstein, Tuukka Hastrup
+-- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.
 -- 
 -- Fenfire is free software; you can redistribute it and/or modify it under
