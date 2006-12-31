@@ -17,6 +17,8 @@ import Control.Monad.Trans (lift)
 
 import Graphics.UI.Gtk hiding (get, Color)
 
+import System.Random (randomIO)
+
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
@@ -161,8 +163,8 @@ changeAngle delta = modify $ \s -> s { vvAngle = vvAngle s + delta }
 
 newNode :: ViewSettings -> Rotation -> Dir -> IO Rotation
 newNode vs (Rotation graph node _) dir = do
-    time <- getTime
-    let node'  = URI $ "ex:" ++ show (round time :: Integer)
+    rand <- randomIO
+    let node'  = URI $ "ex:" ++ show (rand :: Int)
         graph' = (if dir == Pos then (node, rdfs_seeAlso, node')
                                 else (node', rdfs_seeAlso, node))
                      : (node', rdfs_label, PlainLiteral "") : graph
