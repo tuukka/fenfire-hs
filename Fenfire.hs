@@ -242,9 +242,9 @@ main = mdo
                                 start <- textBufferGetStartIter buf
                                 end   <- textBufferGetEndIter buf
                                 text  <- textBufferGetText buf start end True
-                                (Rotation g n r, mk) <- readIORef stateRef
-                                let g' = setText g n text
-                                writeIORef stateRef $ (Rotation g' n r, mk)
+                                (Rotation g' n' r', mk') <- readIORef stateRef
+                                let g'' = setText g' n' text
+                                writeIORef stateRef $ (Rotation g'' n' r', mk')
                                 updateCanvas True
         textViewSetBuffer textView buf
         return ()
