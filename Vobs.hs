@@ -361,6 +361,10 @@ vobCanvas stateRef view handleEvent stateChanged bgColor = do
                             updateAnim interpolate'
 	                    return True
           Nothing     -> return False
+
+    onButtonPress canvas $ \(Button {}) -> do
+        widgetGrabFocus canvas
+        return True
     
     onExpose canvas $ \(Expose {}) -> do
         drawable <- drawingAreaGetDrawWindow canvas
