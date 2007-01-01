@@ -54,11 +54,10 @@ data RenderContext k = RenderContext {
     rcMatrix :: Matrix, rcScene :: Scene k, rcFade :: Double,
     rcColor :: Color, rcBgColor :: Color, rcFadeColor :: Color }
     
-newtype StateChangeT s m a = StateChangeT (StateT (s, Bool) m a)
-    deriving (Functor, Monad, MonadTrans, MonadIO)
-
 type View s k  = s -> Vob k
-type Handler s = Event -> StateChangeT s (StateT Bool IO) ()
+type Handler s = Event -> HandlerAction s
+
+type HandlerAction s = StateT s (StateT (Bool, Bool) IO) ()
 
 
 defaultWidth  (Vob (w,_) _) = w
@@ -67,19 +66,11 @@ defaultHeight (Vob (_,h) _) = h
 [black, gray, lightGray, white] = [Color x x x 1 | x <- [0, 0.5, 0.9, 1]]
 
 
-instance Monad m => MonadState s (StateChangeT s m) where
-    get   = StateChangeT $ do (x, _) <- get; return x
-    put x = StateChangeT $ put (x, True)
-    
-hasStateChanged :: Monad m => StateChangeT s m Bool
-hasStateChanged = StateChangeT $ do (_,chg) <- get; return chg
-    
-runStateChangeT :: Monad m => StateChangeT s m a -> s -> m (a, (s, Bool))
-runStateChangeT (StateChangeT m) s = runStateT m (s, False)
-    
-    
-setInterp :: Bool -> StateChangeT s (StateT Bool IO) ()
-setInterp i = lift $ put i
+setInterp :: Bool -> HandlerAction s
+setInterp interp = lift $ modify $ \(_,handled) -> (interp, handled)
+
+unhandledEvent :: HandlerAction s
+unhandledEvent = lift $ modify $ \(interp,_) -> (interp, False)
 
 
 getTime :: IO Time
@@ -390,17 +381,16 @@ vobCanvas stateRef view handleEvent stateChanged bgColor = do
         putStrLn $ show mods++" "++key++" ("++show char++")"
 
         when (Alt `elem` mods && key == "q") mainQuit
-
+        
         state <- readIORef stateRef
         
-        (((), (state', changed)), interpolate') <- 
-            runStateT (runStateChangeT (handleEvent event) state) False
+        (((), state'), (interpolate', handled)) <- 
+            runStateT (runStateT (handleEvent event) state) (False, True)
         
-        when changed $ do writeIORef stateRef state'
+        when handled $ do writeIORef stateRef state'
                           stateChanged state'
-                          updateAnim interpolate'
-                          
-        return changed
+                          updateAnim interpolate'    
+        return handled
 
     onButtonPress canvas $ \(Button {}) -> do
         widgetGrabFocus canvas

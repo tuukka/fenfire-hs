@@ -255,13 +255,13 @@ handleKey vs (Key { eventModifier=_, eventKeyName=key }) = do
                   put (rot', Nothing)
     "S"     -> liftIO $ saveFile rot
     "q"     -> liftIO $ mainQuit
-    _       -> return ()
+    _       -> unhandledEvent
   where maybeDo m f     = case m of Just x -> f x; Nothing -> return ()
         putRotation rot = do modify $ \(_,mk)  -> (rot,mk); setInterp True
         putMark mk      = do modify $ \(rot,_) -> (rot,mk)
         putState rot mk = do putMark mk; putRotation rot
 
-handleKey _ _ = return ()
+handleKey _ _ = unhandledEvent
             
 main :: IO ()
 main = mdo
