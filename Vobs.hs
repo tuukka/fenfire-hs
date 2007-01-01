@@ -203,8 +203,7 @@ onConnection k1 k2 (Vob (w,h) getLayout) = Vob (0,0) (const layout') where
                 (x1,y1) = transformPoint m1 (w1/2, h1/2)
                 (x2,y2) = transformPoint m2 (w2/2, h2/2)
                 (x,y)   = ((x1+x2)/2, (y1+y2)/2)
-                sign    = if x2 < x1 then -1 else 1
-                angle   = atan2 ((y2-y1) * sign) ((x2-x1) * sign)
+                angle   = atan2 (y2-y1) (x2-x1)
                 m = translate x y (rotate angle (translate (-w/2) (-h/2) identity)) * rcMatrix cx
             renderLayout layout $ cx { rcMatrix=m }
         else return ()

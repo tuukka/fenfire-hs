@@ -122,9 +122,10 @@ vanishingView vs depth (startRotation, mark) = runVanishing depth view where
         movePolar dir (250 * scale)
         placeNode rotation'
         getFade >>= \fade -> do
-            addVob $ onConnection n1 n2 $ fadeVob fade $ 
+            let (nl,nr) = if dir==Pos then (n1,n2) else (n2,n1)
+            addVob $ onConnection nl nr $ fadeVob fade $ 
                scaleVob scale scale $ propView graph prop
-            addVob $ fadeVob fade $ connection n1 n2
+            addVob $ fadeVob fade $ connection nl nr
         placeConns rotation' dir True
         increaseDepth 3
         placeConns rotation' (rev dir) False
