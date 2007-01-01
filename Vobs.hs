@@ -23,7 +23,7 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import Control.Monad.Trans (liftIO, MonadIO)
 
-import Graphics.UI.Gtk hiding (Size, Layout, Color)
+import Graphics.UI.Gtk hiding (Size, Layout, Color, get)
 import Graphics.Rendering.Cairo (Render, save, restore)
 import qualified Graphics.Rendering.Cairo as Cairo
 import Graphics.Rendering.Cairo.Matrix
@@ -32,48 +32,63 @@ import Graphics.UI.Gtk.Cairo
 import Data.List (intersect)
 import Data.Map (Map, keys, (!), fromList, toList, insert, empty)
 import qualified Data.Map as Map
-import Monad (when)
+
+import Control.Monad (when)
+import Control.Monad.State
 
 import qualified System.Time
 
-type Size = (Double, Double)
-type Scene k = Map k (Matrix, Size)
 
 data Color = Color Double Double Double Double
-
-data RenderContext k = RenderContext { 
-    rcMatrix :: Matrix, rcScene :: Scene k, rcFade :: Double,
-    rcColor :: Color, rcBgColor :: Color, rcFadeColor :: Color }
-
-data Vob k    = Vob    { defaultSize :: Size, layoutVob :: Size -> Layout k }
-data Layout k = Layout { layoutScene :: Scene k,
-                         renderLayout :: RenderContext k -> Render () }
-
-defaultWidth  (Vob (w,_) _) = w
-defaultHeight (Vob (_,h) _) = h
-
-[black, gray, lightGray, white] = [Color x x x 1 | x <- [0, 0.5, 0.8, 1]]
-
-
-type View s k  = s -> Vob k
-type Handler s = Event -> s -> Maybe (IO (s, Bool))
-    -- bool is whether to interpolate
+type Size  = (Double, Double)
 
 type Time     = Double -- seconds since the epoch
 type TimeDiff = Double -- in seconds
 
-type Anim a = Time -> (Scene a, Bool)  -- bool is whether to re-render
+type Scene k  = Map k (Matrix, Size)
+data Vob k    = Vob    { defaultSize :: Size, layoutVob :: Size -> Layout k }
+data Layout k = Layout { layoutScene :: Scene k,
+                         renderLayout :: RenderContext k -> Render () }
+
+data RenderContext k = RenderContext { 
+    rcMatrix :: Matrix, rcScene :: Scene k, rcFade :: Double,
+    rcColor :: Color, rcBgColor :: Color, rcFadeColor :: Color }
+    
+newtype StateChangeT s m a = StateChangeT (StateT (s, Bool) m a)
+    deriving (Functor, Monad, MonadTrans, MonadIO)
+
+type View s k  = s -> Vob k
+type Handler s = Event -> StateChangeT s IO Bool
+    -- bool is whether to interpolate
+
+
+defaultWidth  (Vob (w,_) _) = w
+defaultHeight (Vob (_,h) _) = h
+
+[black, gray, lightGray, white] = [Color x x x 1 | x <- [0, 0.5, 0.9, 1]]
+
+
+instance Monad m => MonadState s (StateChangeT s m) where
+    get   = StateChangeT $ do (x, _) <- get; return x
+    put x = StateChangeT $ put (x, True)
+    
+hasStateChanged :: Monad m => StateChangeT s m Bool
+hasStateChanged = StateChangeT $ do (_,chg) <- get; return chg
+    
+runStateChangeT :: Monad m => StateChangeT s m a -> s -> m (a, s, Bool)
+runStateChangeT (StateChangeT m) s = do
+    (x, (s', chg)) <- runStateT m (s, False)
+    return (x, s', chg)
+    
+
 
 getTime :: IO Time
-getTime = do (System.Time.TOD secs pics) <- System.Time.getClockTime
-             return $ fromInteger secs + fromInteger pics / (10**(3*4))
+getTime = do (System.Time.TOD secs picosecs) <- System.Time.getClockTime
+             return $ fromInteger secs + fromInteger picosecs / (10**(3*4))
              
              
 changeSize :: (Size -> Size) -> Vob k -> Vob k
 changeSize f vob = Vob (f $ defaultSize vob) (layoutVob vob)
-
-addSize :: Double -> Double -> Vob k -> Vob k
-addSize x y = changeSize $ \(w,h) -> (w+x, h+y)
 
 comb :: Size -> (Size -> Vob k) -> Vob k
 comb ds f = Vob { defaultSize = ds, layoutVob = \s -> layoutVob (f s) s }
@@ -89,8 +104,8 @@ setRenderColor :: RenderContext k -> Render ()
 setRenderColor cx = Cairo.setSourceRGBA r g b a where
     Color r g b a = interpolate (rcFade cx) (rcFadeColor cx) (rcColor cx)
 
-render :: Size -> (Size -> Render ()) -> Vob k
-render s ren = Vob s $ \s' -> Layout Map.empty $ \cx -> do
+renderable :: Size -> (Size -> Render ()) -> Vob k
+renderable s ren = Vob s $ \s' -> Layout Map.empty $ \cx -> do
     save; setRenderColor cx; Cairo.transform (rcMatrix cx); ren s'; restore
 
 decoration :: Ord k => (RenderContext k -> Render ()) -> Vob k
@@ -118,7 +133,7 @@ keyVob key vob = Vob (defaultSize vob) layout where
 
 
 nullVob :: Ord k => Vob k
-nullVob = render (0,0) $ const $ return ()
+nullVob = renderable (0,0) $ const $ return ()
 
 overlay :: Ord k => [Vob k] -> Vob k
 overlay vobs = Vob size layout where
@@ -132,11 +147,11 @@ overlay vobs = Vob size layout where
         
 
 drawRect :: Size -> Vob k
-drawRect s = render s $ \(w,h) -> do 
+drawRect s = renderable s $ \(w,h) -> do 
     save; Cairo.rectangle 0 0 w h; Cairo.stroke; restore
     
 fillRect :: Size -> Vob k
-fillRect s = render s $ \(w,h) -> do 
+fillRect s = renderable s $ \(w,h) -> do 
     save; Cairo.rectangle 0 0 w h; Cairo.fill; restore
 
 rectBox :: Ord k => Vob k -> Vob k
@@ -157,7 +172,7 @@ label :: Ord k => String -> Vob k
 label s = unsafePerformIO $ do 
     layout  <- layoutText pangoContext s
     (PangoRectangle _ _ w h, _) <- layoutGetExtents layout
-    return $ render (realToFrac w, realToFrac h) (\_ -> showLayout layout)
+    return $ renderable (realToFrac w, realToFrac h) (\_ -> showLayout layout)
     
 multiline :: Ord k => Bool -> Int -> String -> Vob k
 multiline useTextWidth widthInChars s = unsafePerformIO $ do 
@@ -174,7 +189,7 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
         <- layoutGetExtents layout
     let w = if useTextWidth then max w2 w3 else w1
         h = maximum [h1, h2, h3]
-    return $ render (realToFrac w, realToFrac h) (\_ -> showLayout layout)
+    return $ renderable (realToFrac w, realToFrac h) (\_ -> showLayout layout)
     
 connection :: Ord k => k -> k -> Vob k
 connection k1 k2 = decoration $ \cx -> let sc = rcScene cx in
@@ -237,7 +252,8 @@ centerVob vob = translateVob (-w/2) (-h/2) vob where (w,h) = defaultSize vob
                
                
 pad4 :: Double -> Double -> Double -> Double -> Vob k -> Vob k
-pad4 x1 x2 y1 y2 = translateVob x1 x2 . addSize (x1+x2) (y1+y2)
+pad4 x1 x2 y1 y2 = translateVob x1 x2 
+                 . changeSize (\(w,h) -> (x1+w+x2, y1+h+y2))
     
 pad2 :: Double -> Double -> Vob k -> Vob k
 pad2 x y   = pad4 x x y y
@@ -316,6 +332,10 @@ bounceFract x = (y,cont) where     -- ported from AbstractUpdateManager.java
     cont = -(x + x*x)*r >= log 0.02
     (n,r) = (0.4, 2)
 
+
+
+type Anim a = Time -> (Scene a, Bool)  -- bool is whether to re-render
+
 interpAnim :: Ord a => Time -> TimeDiff -> Scene a -> Scene a -> Anim a
 interpAnim startTime interpDuration sc1 sc2 time =
     if continue then (interpolateScene fract sc1 sc2, True) else (sc2, False)
@@ -337,7 +357,8 @@ vobCanvas stateRef view handleEvent stateChanged bgColor = do
                    return (fromIntegral cw, fromIntegral ch)
                    
         getLayout = do (w,h) <- getWH; state <- readIORef stateRef
-                       let bg = useFadeColor $ render (0,0) $ const Cairo.paint
+                       let bg = useFadeColor $ 
+                                    renderable (0,0) $ const Cairo.paint
                            vob = overlay [bg, view state]
                        return $ layoutVob vob (w,h)
                    
@@ -371,14 +392,15 @@ vobCanvas stateRef view handleEvent stateChanged bgColor = do
         when (Alt `elem` mods && key == "q") mainQuit
 
         state <- readIORef stateRef
-	
-	case handleEvent event state of
-          Just action -> do (state', interpolate') <- action
-                            writeIORef stateRef state'
-                            stateChanged state'
-                            updateAnim interpolate'
-	                    return True
-          Nothing     -> return False
+        
+        (interpolate', state', changed) <- 
+            runStateChangeT (handleEvent event) state
+        
+        when changed $ do writeIORef stateRef state'
+                          stateChanged state'
+                          updateAnim interpolate'
+                          
+        return changed
 
     onButtonPress canvas $ \(Button {}) -> do
         widgetGrabFocus canvas

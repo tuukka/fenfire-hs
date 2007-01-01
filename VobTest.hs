@@ -21,6 +21,7 @@ module VobTest where
 import Vobs
 import Data.Map (fromList)
 import Data.IORef
+import Control.Monad.State
 import Graphics.UI.Gtk
 
 
@@ -30,7 +31,7 @@ myScene1 :: Vob ()
 myScene1 = translateVob 50 50 myVob
 
 myScene2 :: Vob ()
-myScene2 = translateVob 150 150 $ addSize 30 0 myVob
+myScene2 = translateVob 150 150 $ changeSize (\(w,h) -> (w+30, h)) myVob
 
 
 main = do 
@@ -41,8 +42,8 @@ main = do
 
     stateRef <- newIORef False
 
-    let view state          = if state then myScene1 else myScene2
-        handle _event state = Just $ return (not state, True)
+    let view state    = if state then myScene1 else myScene2
+        handle _event = do modify not; return True
 
     (canvas, _updateCanvas) <- vobCanvas stateRef view handle 
                                          (const $ return ()) lightGray

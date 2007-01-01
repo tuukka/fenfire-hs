@@ -31,7 +31,7 @@ import Control.Monad.State (State, StateT, get, gets, modify, put,
                             runState, runStateT,
                             withState, execState, evalState, evalStateT)
 import Control.Monad.List  (ListT(ListT), runListT)
-import Control.Monad.Trans (lift)
+import Control.Monad.Trans (lift, liftIO)
 
 import Graphics.UI.Gtk hiding (get, Color)
 
@@ -238,7 +238,12 @@ saveFile (Rotation graph _ _) = do
 
 
 handleKey :: ViewSettings -> Handler (Rotation, Mark)
-handleKey vs (Key { eventModifier=_, eventKeyName=key }) (rot,mk) = 
+handleKey vs (Key { eventModifier=_, eventKeyName=key }) = do
+  (rot@(Rotation _ node _), mk) <- get
+  let m f x = maybeDo (f vs rot x) putRotation
+      n f x = do rot' <- liftIO $ f vs rot x; putRotation rot'
+      o f x = maybeDo mk $ \node' -> do put (f vs rot x node', Nothing)
+                                        return True
   case key of
     "Up"    -> m rotate' (-1); "i" -> m rotate' (-1)
     "Down"  -> m rotate' 1;    "comma" -> m rotate' 1
@@ -246,19 +251,18 @@ handleKey vs (Key { eventModifier=_, eventKeyName=key }) (rot,mk) =
     "Right" -> m move Pos;     "l" -> m move Pos
     "n"     -> n newNode Pos;  "N" -> n newNode Neg
     "c"     -> o connect Pos;  "C" -> o connect Neg
-    "m"     -> let Rotation _ node _ = rot
-                in Just $ return ((rot, toggleMark node mk), False)
-    "O"     -> Just $ do rot' <- openFile vs rot; return ((rot',Nothing),False)
-    "S"     -> Just $ do saveFile rot; return ((rot,mk), False)
-    "q"     -> Just $ do mainQuit; return ((rot,mk), False)
-    _       -> Nothing
-  where m f x = fmap (\rot' -> return ((rot',mk), True)) $ f vs rot x
-        n f x = Just $ do rot' <- f vs rot x; return ((rot',mk), True)
-        o f x = flip fmap mk $ \node' -> 
-                    return ((f vs rot x node', Nothing), True)
-        rotate' vs' rot' x' = rotate vs' rot' x' `mplus` Just rot'
+    "m"     -> do putMark $ toggleMark node mk; return False
+    "O"     -> do rot' <- liftIO $ openFile vs rot
+                  put (rot',Nothing); return False
+    "S"     -> do liftIO $ saveFile rot; return  False
+    "q"     -> do liftIO $ mainQuit; return False
+    _       -> return False
+  where rotate' vs' rot' x' = rotate vs' rot' x' `mplus` Just rot'
+        maybeDo m f     = case m of Just x -> f x; Nothing -> return False
+        putRotation rot = do modify $ \(_,mk)  -> (rot,mk); return True
+        putMark     mk  = do modify $ \(rot,_) -> (rot,mk); return False
 
-handleKey _ _ _ = Nothing
+handleKey _ _ = return False
             
 main :: IO ()
 main = mdo
