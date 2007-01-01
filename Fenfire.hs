@@ -241,28 +241,27 @@ handleKey :: ViewSettings -> Handler (Rotation, Mark)
 handleKey vs (Key { eventModifier=_, eventKeyName=key }) = do
   (rot@(Rotation _ node _), mk) <- get
   let m f x = maybeDo (f vs rot x) putRotation
-      n f x = do rot' <- liftIO $ f vs rot x; putRotation rot'
-      o f x = maybeDo mk $ \node' -> do put (f vs rot x node', Nothing)
-                                        return True
+      n f x = liftIO (f vs rot x) >>= putRotation
+      o f x = maybeDo mk $ \node' -> putState (f vs rot x node') Nothing
   case key of
-    "Up"    -> m rotate' (-1); "i" -> m rotate' (-1)
-    "Down"  -> m rotate' 1;    "comma" -> m rotate' 1
+    "Up"    -> m rotate (-1);  "i" -> m rotate (-1)
+    "Down"  -> m rotate 1;     "comma" -> m rotate 1
     "Left"  -> m move Neg;     "j" -> m move Neg
     "Right" -> m move Pos;     "l" -> m move Pos
     "n"     -> n newNode Pos;  "N" -> n newNode Neg
     "c"     -> o connect Pos;  "C" -> o connect Neg
-    "m"     -> do putMark $ toggleMark node mk; return False
+    "m"     -> putMark $ toggleMark node mk
     "O"     -> do rot' <- liftIO $ openFile vs rot
-                  put (rot',Nothing); return False
-    "S"     -> do liftIO $ saveFile rot; return  False
-    "q"     -> do liftIO $ mainQuit; return False
-    _       -> return False
-  where rotate' vs' rot' x' = rotate vs' rot' x' `mplus` Just rot'
-        maybeDo m f     = case m of Just x -> f x; Nothing -> return False
-        putRotation rot = do modify $ \(_,mk)  -> (rot,mk); return True
-        putMark     mk  = do modify $ \(rot,_) -> (rot,mk); return False
+                  put (rot', Nothing)
+    "S"     -> liftIO $ saveFile rot
+    "q"     -> liftIO $ mainQuit
+    _       -> return ()
+  where maybeDo m f     = case m of Just x -> f x; Nothing -> return ()
+        putRotation rot = do modify $ \(_,mk)  -> (rot,mk); setInterp True
+        putMark mk      = do modify $ \(rot,_) -> (rot,mk)
+        putState rot mk = do putMark mk; putRotation rot
 
-handleKey _ _ = return False
+handleKey _ _ = return ()
             
 main :: IO ()
 main = mdo

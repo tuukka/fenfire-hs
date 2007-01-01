@@ -58,8 +58,7 @@ newtype StateChangeT s m a = StateChangeT (StateT (s, Bool) m a)
     deriving (Functor, Monad, MonadTrans, MonadIO)
 
 type View s k  = s -> Vob k
-type Handler s = Event -> StateChangeT s IO Bool
-    -- bool is whether to interpolate
+type Handler s = Event -> StateChangeT s (StateT Bool IO) ()
 
 
 defaultWidth  (Vob (w,_) _) = w
@@ -75,11 +74,12 @@ instance Monad m => MonadState s (StateChangeT s m) where
 hasStateChanged :: Monad m => StateChangeT s m Bool
 hasStateChanged = StateChangeT $ do (_,chg) <- get; return chg
     
-runStateChangeT :: Monad m => StateChangeT s m a -> s -> m (a, s, Bool)
-runStateChangeT (StateChangeT m) s = do
-    (x, (s', chg)) <- runStateT m (s, False)
-    return (x, s', chg)
+runStateChangeT :: Monad m => StateChangeT s m a -> s -> m (a, (s, Bool))
+runStateChangeT (StateChangeT m) s = runStateT m (s, False)
     
+    
+setInterp :: Bool -> StateChangeT s (StateT Bool IO) ()
+setInterp i = lift $ put i
 
 
 getTime :: IO Time
@@ -393,8 +393,8 @@ vobCanvas stateRef view handleEvent stateChanged bgColor = do
 
         state <- readIORef stateRef
         
-        (interpolate', state', changed) <- 
-            runStateChangeT (handleEvent event) state
+        (((), (state', changed)), interpolate') <- 
+            runStateT (runStateChangeT (handleEvent event) state) False
         
         when changed $ do writeIORef stateRef state'
                           stateChanged state'

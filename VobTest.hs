@@ -43,7 +43,7 @@ main = do
     stateRef <- newIORef False
 
     let view state    = if state then myScene1 else myScene2
-        handle _event = do modify not; return True
+        handle _event = do modify not; setInterp True
 
     (canvas, _updateCanvas) <- vobCanvas stateRef view handle 
                                          (const $ return ()) lightGray
