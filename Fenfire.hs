@@ -33,7 +33,7 @@ import Control.Monad.State (State, StateT, get, gets, modify, put,
 import Control.Monad.List  (ListT(ListT), runListT)
 import Control.Monad.Trans (lift, liftIO)
 
-import Graphics.UI.Gtk hiding (get, Color)
+import Graphics.UI.Gtk hiding (get, Color, disconnect)
 
 import System.Random (randomIO)
 import System (getArgs)
@@ -200,6 +200,24 @@ connect vs (Rotation graph node _) dir node' =
                      : (node', rdfs_label, PlainLiteral "") : graph
     in fromJust $ getRotation vs graph' node' rdfs_seeAlso (rev dir) node
 
+disconnect :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
+disconnect vs (Rotation graph node rot) dir = 
+    let
+        c = conns vs graph node dir
+        index = (length c `div` 2) + rot
+        (p,n) = c !! index
+        triple = case dir of Pos -> (node,p,n)
+                             Neg -> (n,p,node)
+        graph' = filter (/= triple) graph
+        index' = ((length c-1) `div` 2) + rot
+        rot' = case index' of n | n == -1                   -> rot+1
+                                | n == length c-1 && n /= 0 -> rot-1
+                                | otherwise                 -> rot
+    in 
+        if index >= 0 && index < length c 
+        then Just $ Rotation graph' node rot'
+        else Nothing
+
 
 type Mark = Maybe Node
 
@@ -250,12 +268,13 @@ handleKey vs (Key { eventModifier=_, eventKeyName=key }) = do
       n f x = liftIO (f vs rot x) >>= putRotation
       o f x = maybeDo mk $ \node' -> putState (f vs rot x node') Nothing
   case key of
-    "Up"    -> m rotate (-1);  "i" -> m rotate (-1)
-    "Down"  -> m rotate 1;     "comma" -> m rotate 1
-    "Left"  -> m move Neg;     "j" -> m move Neg
-    "Right" -> m move Pos;     "l" -> m move Pos
-    "n"     -> n newNode Pos;  "N" -> n newNode Neg
-    "c"     -> o connect Pos;  "C" -> o connect Neg
+    "Up"    -> m rotate (-1);    "i" -> m rotate (-1)
+    "Down"  -> m rotate 1;       "comma" -> m rotate 1
+    "Left"  -> m move Neg;       "j" -> m move Neg
+    "Right" -> m move Pos;       "l" -> m move Pos
+    "n"     -> n newNode Pos;    "N" -> n newNode Neg
+    "c"     -> o connect Pos;    "C" -> o connect Neg
+    "b"     -> m disconnect Pos; "B" -> m disconnect Neg
     "m"     -> putMark $ toggleMark node mk
     "O"     -> do rot' <- liftIO $ openFile vs rot
                   put (rot', Nothing)
