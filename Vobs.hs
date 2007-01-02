@@ -181,32 +181,31 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
     let w = if useTextWidth then max w2 w3 else w1
         h = maximum [h1, h2, h3]
     return $ renderable (realToFrac w, realToFrac h) (\_ -> showLayout layout)
-    
+
+getCenter :: (Ord k, Monad m) => Scene k -> k -> m (Double,Double)
+getCenter sc k = do (m,(w,h)) <- Map.lookup k sc
+                    return $ transformPoint m (w/2, h/2)
+
 connection :: Ord k => k -> k -> Vob k
-connection k1 k2 = decoration $ \cx -> let sc = rcScene cx in
-    if k1 `Map.member` sc && k2 `Map.member` sc then do
-        let (m1,(w1,h1)) = sc ! k1
-            (m2,(w2,h2)) = sc ! k2
-            (x1,y1) = transformPoint m1 (w1/2, h1/2)
-            (x2,y2) = transformPoint m2 (w2/2, h2/2)
-        save; Cairo.moveTo x1 y1; Cairo.lineTo x2 y2; Cairo.stroke; restore
-    else return ()
+connection k1 k2 = decoration $ \(RenderContext {rcScene=sc}) -> draw sc
+    where draw sc | Just (x1,y1) <- getCenter sc k1
+                  , Just (x2,y2) <- getCenter sc k2
+                  = do Cairo.moveTo x1 y1; Cairo.lineTo x2 y2; Cairo.stroke
+          draw _  = return ()
     
 onConnection :: Ord k => k -> k -> Vob k -> Vob k
 onConnection k1 k2 (Vob (w,h) getLayout) = Vob (0,0) (const layout') where
     layout  = getLayout (w,h)
     layout' = layout { renderLayout=render' }
-    render' cx = let { sc = rcScene cx } in
-        if k1 `Map.member` sc && k2 `Map.member` sc then do
-            let (m1,(w1,h1)) = sc ! k1
-                (m2,(w2,h2)) = sc ! k2
-                (x1,y1) = transformPoint m1 (w1/2, h1/2)
-                (x2,y2) = transformPoint m2 (w2/2, h2/2)
+    render' cx | sc <- rcScene cx
+               , Just (x1,y1) <- getCenter sc k1
+               , Just (x2,y2) <- getCenter sc k2
+               = let
                 (x,y)   = ((x1+x2)/2, (y1+y2)/2)
                 angle   = atan2 (y2-y1) (x2-x1)
-                m = translate x y (rotate angle (translate (-w/2) (-h/2) identity)) * rcMatrix cx
-            renderLayout layout $ cx { rcMatrix=m }
-        else return ()
+                tr = translate x y . rotate angle . translate (-w/2) (-h/2)
+                in renderLayout layout $ cx { rcMatrix=tr (rcMatrix cx) }
+    render' _  =  return ()
 
                           
 setColor :: Color -> Vob k -> Vob k
