@@ -195,9 +195,10 @@ newNode vs (Rotation graph node _) dir = do
     
 connect :: ViewSettings -> Rotation -> Dir -> Node -> Rotation
 connect vs (Rotation graph node _) dir node' =
-    let graph' = (if dir == Pos then (node, rdfs_seeAlso, node')
+    let triple = (if dir == Pos then (node, rdfs_seeAlso, node')
                                 else (node', rdfs_seeAlso, node))
-                     : graph
+        graph' = if triple `elem` graph then graph
+                                        else triple:graph
     in fromJust $ getRotation vs graph' node rdfs_seeAlso dir node'
 
 disconnect :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
