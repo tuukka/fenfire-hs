@@ -197,8 +197,8 @@ connect :: ViewSettings -> Rotation -> Dir -> Node -> Rotation
 connect vs (Rotation graph node _) dir node' =
     let graph' = (if dir == Pos then (node, rdfs_seeAlso, node')
                                 else (node', rdfs_seeAlso, node))
-                     : (node', rdfs_label, PlainLiteral "") : graph
-    in fromJust $ getRotation vs graph' node' rdfs_seeAlso (rev dir) node
+                     : graph
+    in fromJust $ getRotation vs graph' node rdfs_seeAlso dir node'
 
 disconnect :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
 disconnect vs (Rotation graph node rot) dir = 
