@@ -36,6 +36,7 @@ import Control.Monad.Trans (lift, liftIO)
 import Graphics.UI.Gtk hiding (get, Color)
 
 import System.Random (randomIO)
+import System (getArgs)
 
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 
@@ -206,6 +207,14 @@ toggleMark :: Node -> Mark -> Mark
 toggleMark n Nothing = Just n
 toggleMark n (Just n') | n == n'   = Nothing
                        | otherwise = Just n
+
+loadGraph :: ViewSettings -> String -> IO Rotation
+loadGraph vs fileName = do
+    file <- readFile fileName
+    graph <- fromNTriples file >>= return . reverse
+    let rots = catMaybes $ flip map graph $
+                        \(s,p,o) -> getRotation vs graph s p Pos o
+    return $ last rots
                        
 openFile :: ViewSettings -> Rotation -> IO Rotation
 openFile vs rot0 = do
@@ -217,11 +226,7 @@ openFile vs rot0 = do
     widgetHide dialog
     case response of
         ResponseAccept -> do Just fileName <- fileChooserGetFilename dialog
-                             file <- readFile fileName
-                             graph <- fromNTriples file
-                             let rots = catMaybes $ flip map graph $
-                                     \(s,p,o) -> getRotation vs graph s p Pos o
-                             return $ head rots
+                             loadGraph vs fileName
         _              -> return rot0
         
 saveFile :: Rotation -> IO ()
@@ -234,7 +239,7 @@ saveFile (Rotation graph _ _) = do
     widgetHide dialog
     case response of
         ResponseAccept -> do Just fileName <- fileChooserGetFilename dialog
-                             writeFile fileName (toNTriples graph)
+                             writeFile fileName $ toNTriples $ reverse graph
         _              -> return ()
 
 
@@ -266,15 +271,22 @@ handleKey _ _ = unhandledEvent
             
 main :: IO ()
 main = mdo
+    args <- getArgs
+
     home <- newURI
 
     let vs = ViewSettings { hiddenProps=[rdfs_label] }
         view = vanishingView vs 20
         graph = [(home, rdfs_label, PlainLiteral "")]
-        startState = (Rotation graph home 0, Nothing)
+        rot = (Rotation graph home 0)
+        startState = (rot, Nothing)
 
     stateRef <- newIORef startState
-    
+
+    case args of [fileName] -> do rot' <- loadGraph vs fileName
+                                  writeIORef stateRef (rot', Nothing)
+                 _          -> return ()
+
     initGUI
     window <- windowNew
     windowSetTitle window "Fenfire"

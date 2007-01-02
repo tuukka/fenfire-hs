@@ -17,8 +17,9 @@ run-vobtest: vobtest
 fenfire: Fenfire.hs *.hs
 	$(GHCCMD) -o $@ -main-is $(shell basename $< .hs).main --make $<
 
+run-fenfire: ARGS=test.n3
 run-fenfire: fenfire
-	./$<
+	./$< $(ARGS)
 
 clean:
 	rm -f *.hi *.o $(TARGETS)
