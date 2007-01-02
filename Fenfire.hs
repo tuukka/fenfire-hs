@@ -26,7 +26,7 @@ import qualified Data.List
 import Data.IORef
 import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
 
-import Control.Monad (MonadPlus, mzero, mplus, msum)
+import Control.Monad (MonadPlus, mzero, mplus, msum, when)
 import Control.Monad.State (State, StateT, get, gets, modify, put,
                             runState, runStateT,
                             withState, execState, evalState, evalStateT)
@@ -35,8 +35,9 @@ import Control.Monad.Trans (lift, liftIO)
 
 import Graphics.UI.Gtk hiding (get, Color, disconnect)
 
-import System.Random (randomIO)
 import System (getArgs)
+import System.Random (randomIO)
+import System.Directory (canonicalizePath)
 
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 
@@ -97,8 +98,8 @@ propView g n = overlay [ useFadeColor $ fillRect (0,0),
 
 
 
-vanishingView :: ViewSettings -> Int -> (Rotation, Mark) -> Vob Node
-vanishingView vs depth (startRotation, mark) = runVanishing depth view where
+vanishingView :: ViewSettings -> Int -> (Rotation, Mark, FilePath) -> Vob Node
+vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view where
     view = do placeNode startRotation
               dir <- returnEach [Pos, Neg]
               placeConns startRotation dir True
@@ -227,7 +228,7 @@ toggleMark n Nothing = Just n
 toggleMark n (Just n') | n == n'   = Nothing
                        | otherwise = Just n
 
-loadGraph :: ViewSettings -> String -> IO Rotation
+loadGraph :: ViewSettings -> FilePath -> IO Rotation
 loadGraph vs fileName = do
     file <- readFile fileName
     graph <- fromNTriples file >>= return . reverse
@@ -235,36 +236,45 @@ loadGraph vs fileName = do
                         \(s,p,o) -> getRotation vs graph s p Pos o
     return $ last rots
                        
-openFile :: ViewSettings -> Rotation -> IO Rotation
-openFile vs rot0 = do
+openFile :: ViewSettings -> Rotation -> FilePath -> IO (Rotation,FilePath)
+openFile vs rot0 fileName0 = do
     dialog <- fileChooserDialogNew Nothing Nothing FileChooserActionOpen
-                                   [("Open", ResponseAccept),
-                                    ("Cancel", ResponseCancel)]
+                                   [("gtk-cancel", ResponseCancel),
+                                    ("gtk-open", ResponseAccept)]
+    when (fileName0 /= "") $ fileChooserSetFilename dialog fileName0 >> return ()
     widgetShow dialog
     response <- dialogRun dialog
     widgetHide dialog
     case response of
         ResponseAccept -> do Just fileName <- fileChooserGetFilename dialog
-                             loadGraph vs fileName
-        _              -> return rot0
+                             rot <- loadGraph vs fileName
+                             return (rot, fileName)
+        _              -> return (rot0, fileName0)
         
-saveFile :: Rotation -> IO ()
-saveFile (Rotation graph _ _) = do
+saveFile :: Rotation -> FilePath -> IO FilePath
+saveFile (Rotation graph _ _) fileName0 = do
     dialog <- fileChooserDialogNew Nothing Nothing FileChooserActionSave
-                                   [("Save", ResponseAccept),
-                                    ("Cancel", ResponseCancel)]
-    widgetShow dialog
+                                   [("gtk-cancel", ResponseCancel),
+                                    ("gtk-save", ResponseAccept)]
+    fileChooserSetDoOverwriteConfirmation dialog True
+    dialogSetDefaultResponse dialog ResponseAccept
+    when (fileName0 /= "") $ fileChooserSetFilename dialog fileName0 >> return ()
+    onConfirmOverwrite dialog $ do Just fileName <- fileChooserGetFilename dialog
+                                   if fileName == fileName0
+                                       then return FileChooserConfirmationAcceptFilename
+                                       else return FileChooserConfirmationConfirm
     response <- dialogRun dialog
     widgetHide dialog
     case response of
         ResponseAccept -> do Just fileName <- fileChooserGetFilename dialog
                              writeFile fileName $ toNTriples $ reverse graph
-        _              -> return ()
+                             return fileName
+        _              -> return fileName0
 
 
-handleKey :: ViewSettings -> Handler (Rotation, Mark)
+handleKey :: ViewSettings -> Handler (Rotation, Mark, FilePath)
 handleKey vs (Key { eventModifier=_, eventKeyName=key }) = do
-  (rot@(Rotation _ node _), mk) <- get
+  (rot@(Rotation _ node _), mk, fileName) <- get
   let m f x = maybeDo (f vs rot x) putRotation
       n f x = liftIO (f vs rot x) >>= putRotation
       o f x = maybeDo mk $ \node' -> putState (f vs rot x node') Nothing
@@ -277,14 +287,14 @@ handleKey vs (Key { eventModifier=_, eventKeyName=key }) = do
     "c"     -> o connect Pos;    "C" -> o connect Neg
     "b"     -> m disconnect Pos; "B" -> m disconnect Neg
     "m"     -> putMark $ toggleMark node mk
-    "O"     -> do rot' <- liftIO $ openFile vs rot
-                  put (rot', Nothing)
-    "S"     -> liftIO $ saveFile rot
+    "O"     -> do (rot',fp') <- liftIO $ openFile vs rot fileName
+                  put (rot', Nothing, fp')
+    "S"     -> liftIO ( saveFile rot fileName ) >>= \fp' -> put (rot, mk, fp')
     "q"     -> liftIO $ mainQuit
     _       -> unhandledEvent
   where maybeDo m f     = case m of Just x -> f x; Nothing -> return ()
-        putRotation rot = do modify $ \(_,mk)  -> (rot,mk); setInterp True
-        putMark mk      = do modify $ \(rot,_) -> (rot,mk)
+        putRotation rot = do modify $ \(_,mk,fp)  -> (rot,mk,fp); setInterp True
+        putMark mk      = do modify $ \(rot,_,fp) -> (rot,mk,fp)
         putState rot mk = do putMark mk; putRotation rot
 
 handleKey _ _ = unhandledEvent
@@ -299,12 +309,13 @@ main = mdo
         view = vanishingView vs 20
         graph = [(home, rdfs_label, PlainLiteral "")]
         rot = (Rotation graph home 0)
-        startState = (rot, Nothing)
+        startState = (rot, Nothing, "")
 
     stateRef <- newIORef startState
 
-    case args of [fileName] -> do rot' <- loadGraph vs fileName
-                                  writeIORef stateRef (rot', Nothing)
+    case args of [fileName] -> do fn <- canonicalizePath fileName
+                                  rot' <- loadGraph vs fn
+                                  writeIORef stateRef (rot', Nothing, fn)
                  _          -> return ()
 
     initGUI
@@ -315,16 +326,16 @@ main = mdo
     textView <- textViewNew
     textViewSetAcceptsTab textView False
 
-    let stateChanged (Rotation g n _r, _mark) = do
+    let stateChanged (Rotation g n _r, _mark, _fileName) = do
         buf <- textBufferNew Nothing
         textBufferSetText buf (maybe "" id $ getText g n)
         afterBufferChanged buf $ do 
                                 start <- textBufferGetStartIter buf
                                 end   <- textBufferGetEndIter buf
                                 text  <- textBufferGetText buf start end True
-                                (Rotation g' n' r', mk') <- readIORef stateRef
+                                (Rotation g' n' r', mk', fp') <- readIORef stateRef
                                 let g'' = setText g' n' text
-                                writeIORef stateRef $ (Rotation g'' n' r', mk')
+                                writeIORef stateRef $ (Rotation g'' n' r', mk', fp')
                                 updateCanvas True
         textViewSetBuffer textView buf
         return ()
