@@ -83,7 +83,7 @@ main = do
   outfile <- withCString "w" $ fdopen stdOutput
 
   initRaptor
-  rdf_parser <- withCString "rdfxml" new_parser 
+  rdf_parser <- withCString "guess" new_parser 
   mkHandler (print_triple outfile) >>= set_statement_handler rdf_parser nullPtr
   uri <- withCString filename uri_filename_to_uri_string >>= new_uri
   base_uri <- uri_copy uri

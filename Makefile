@@ -27,6 +27,7 @@ Raptor.hs: Raptor.chs
 raptor: Raptor.hs *.hs
 	$(GHCCMD) -fvia-C -lraptor -o $@ -main-is $(shell basename $< .hs).main --make $<
 
+run-raptor: ARGS=test.n3
 run-raptor: raptor
 	./$< $(ARGS)
 
