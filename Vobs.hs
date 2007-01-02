@@ -203,9 +203,9 @@ onConnection k1 k2 (Vob (w,h) getLayout) = Vob (0,0) (const layout') where
                = let
                 (x,y)   = ((x1+x2)/2, (y1+y2)/2)
                 angle   = atan2 (y2-y1) (x2-x1)
-                m = translate x y (rotate angle (translate (-w/2) (-h/2) identity)) * rcMatrix cx
-            renderLayout layout $ cx { rcMatrix=m }
-        else return ()
+                tr = translate x y . rotate angle . translate (-w/2) (-h/2)
+                in renderLayout layout $ cx { rcMatrix = tr identity }
+    render' _  =  return ()
 
                           
 setColor :: Color -> Vob k -> Vob k
