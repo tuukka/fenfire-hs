@@ -210,8 +210,8 @@ disconnect vs (Rotation graph node rot) dir =
                              Neg -> (n,p,node)
         graph' = filter (/= triple) graph
         index' = ((length c-1) `div` 2) + rot
-        rot' = case index' of n | n == -1                   -> rot+1
-                                | n == length c-1 && n /= 0 -> rot-1
+        rot' = case index' of x | x == -1                   -> rot+1
+                                | x == length c-1 && x /= 0 -> rot-1
                                 | otherwise                 -> rot
     in 
         if index >= 0 && index < length c 
