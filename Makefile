@@ -21,6 +21,9 @@ run-fenfire: ARGS=test.n3
 run-fenfire: fenfire
 	./$< $(ARGS)
 
+Raptor.hs: Raptor.chs
+	c2hs $<
+
 raptor: Raptor.hs *.hs
 	$(GHCCMD) -fvia-C -lraptor -o $@ -main-is $(shell basename $< .hs).main --make $<
 
@@ -28,4 +31,4 @@ run-raptor: raptor
 	./$< $(ARGS)
 
 clean:
-	rm -f *.hi *.o $(TARGETS)
+	rm -f *.hi Raptor.chi Raptor.h Raptor.hs Raptor_stub.* *.o $(TARGETS)
