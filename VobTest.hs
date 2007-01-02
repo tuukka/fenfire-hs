@@ -25,13 +25,13 @@ import Control.Monad.State
 import Graphics.UI.Gtk
 
 
-myVob = keyVob () $ rectBox $ pad 5 $ label "Hello World!"
+myVob = keyVob () $ rectBox $ clipVob $ pad 5 $ multiline False 20 "Hello World!"
 
 myScene1 :: Vob ()
-myScene1 = translateVob 50 50 myVob
+myScene1 = {- translateVob 50 50 -} myVob
 
 myScene2 :: Vob ()
-myScene2 = translateVob 150 150 $ changeSize (\(w,h) -> (w+30, h)) myVob
+myScene2 = translateVob 150 150 $ changeSize (\(w,h) -> (w-30, h)) myVob
 
 
 main = do 
