@@ -4,7 +4,7 @@ GHCFLAGS=-fglasgow-exts -Wall -fno-warn-unused-imports -fno-warn-missing-signatu
 
 GHCCMD = $(GHC) $(GHCFLAGS)
 
-TARGETS=vobtest fenfire
+TARGETS=vobtest fenfire raptor
 
 all: $(TARGETS)
 
@@ -19,6 +19,12 @@ fenfire: Fenfire.hs *.hs
 
 run-fenfire: ARGS=test.n3
 run-fenfire: fenfire
+	./$< $(ARGS)
+
+raptor: Raptor.hs *.hs
+	$(GHCCMD) -fvia-C -lraptor -o $@ -main-is $(shell basename $< .hs).main --make $<
+
+run-raptor: raptor
 	./$< $(ARGS)
 
 clean:
