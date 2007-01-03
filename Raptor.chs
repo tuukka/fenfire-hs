@@ -8,18 +8,22 @@ import System.Posix.IO (stdOutput)
 import System.Posix.Types (Fd)
 import System (getArgs)
 
-data Parser
--- data Statement
--- data URI
+import Data.IORef
 
-
-
--- stop c2hs chocking on __attribute__(deprecated):
+-- stop c2hs choking on __attribute__(deprecated):
+#ifndef RAPTOR_DEPRECATED
 #define RAPTOR_DEPRECATED
 #define __APPLE_CC__
-
+#endif
 
 #include <raptor.h>
+
+
+cToEnum :: (Integral i, Enum e) => i -> e
+cToEnum  = toEnum . cIntConv
+
+cIntConv :: (Integral a, Integral b) => a -> b
+cIntConv  = fromIntegral
 
 
 {#context lib="raptor" prefix="raptor"#}
@@ -30,32 +34,35 @@ data Parser
 
 {#pointer raptor_uri as URI newtype#}
 
-{#pointer *raptor_statement as StatementPtr -> Statement#}
+{#pointer *statement as Statement newtype#}
 
-data Statement = Statement { subject :: Ptr (),
-                             subject_type :: IdType,
-                             predicate :: Ptr (),
-                             predicate_type :: IdType,
-                             object :: Ptr (),
-                             object_type :: IdType,
-                             object_literal_datatype :: Ptr URI,
-                             object_literal_language :: CString
-                           } deriving (Show)
+{#pointer *parser as Parser newtype#}
 
-instance Storable Statement where
-    sizeOf _ = {#sizeof raptor_statement#}
-    alignment _ = alignment (undefined :: CDouble)
-    peek p = do
-      subject <- {#get raptor_statement->subject#} p
-      subject_type <- {#get raptor_statement->subject_type#} p >>= return . toEnum . fromIntegral
-      predicate <- {#get raptor_statement->predicate#} p
-      predicate_type <- {#get raptor_statement->predicate_type#} p >>= return . toEnum . fromIntegral
-      object <- {#get raptor_statement->object#} p
-      object_type <- {#get raptor_statement->object_type#} p >>= return . toEnum . fromIntegral
-      object_literal_datatype <- {#get raptor_statement->object_literal_datatype#} p
-      object_literal_language <- {#get raptor_statement->object_literal_language#} p >>= return . castPtr
-      return $ Statement subject subject_type predicate predicate_type object object_type object_literal_datatype object_literal_language
-    poke p (Statement subject subject_type predicate predicate_type object object_type object_literal_datatype object_literal_language) = undefined
+type Triple = (Identifier, Identifier, Identifier)
+
+data Identifier = Uri String | Blank String | Literal String
+                  deriving (Show)
+
+mkIdentifier value format = do
+  value' <- value
+  format' <- format
+  f (castPtr value') (cToEnum format')
+    where f v IDENTIFIER_TYPE_RESOURCE = do
+                              cstr <- {#call uri_as_string#} (castPtr v) 
+                              str <- peekCString (castPtr cstr) 
+                              return $ Uri str
+          f v IDENTIFIER_TYPE_LITERAL = peekCString v >>= return . Literal
+          f v IDENTIFIER_TYPE_ANONYMOUS = peekCString v >>= return . Blank
+          f _ _ = error "Raptor.mkIdentifier: deprecated identifier type"
+
+getSubject s = mkIdentifier ({#get statement->subject#} s)
+                            ({#get statement->subject_type#} s)
+
+getPredicate s = mkIdentifier ({#get statement->predicate#} s)
+                              ({#get statement->predicate_type#} s)
+
+getObject s = mkIdentifier ({#get statement->object#} s)
+                           ({#get statement->object_type#} s)
 
 type Handler a = Ptr a -> Ptr Statement -> IO ()
 foreign import ccall "wrapper"
@@ -77,9 +84,28 @@ foreign import ccall "stdio.h fputc" fputc :: CChar -> Ptr CFile -> IO ()
 print_triple :: Ptr CFile -> Handler a
 print_triple outfile _user_data s = do print_statement_as_ntriples s outfile
                                        fputc (castCharToCChar '\n') outfile
-                                       peek s >>= print
-main = do
-  [filename] <- getArgs
+
+collect_triple :: IORef [Triple] -> Handler a
+collect_triple result _user_data t = do
+                                       s <- getSubject t
+                                       p <- getPredicate t
+                                       o <- getObject t
+                                       modifyIORef result ((s,p,o):)
+
+filenameToTriples filename = do 
+  result <- newIORef []
+
+  initRaptor
+  rdf_parser <- withCString "guess" new_parser 
+  handler <- mkHandler (collect_triple result)
+  set_statement_handler rdf_parser nullPtr handler
+  uri <- withCString filename uri_filename_to_uri_string >>= new_uri
+  base_uri <- uri_copy uri
+  parse_file rdf_parser uri base_uri
+
+  readIORef result
+
+filenameToStdout filename = do
   outfile <- withCString "w" $ fdopen stdOutput
 
   initRaptor

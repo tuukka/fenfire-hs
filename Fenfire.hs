@@ -21,6 +21,8 @@ module Fenfire where
 import Vobs
 import RDF
 
+import qualified Raptor (filenameToTriples, Identifier(..))
+
 import qualified Data.Map as Map
 import qualified Data.List
 import Data.IORef
@@ -230,8 +232,13 @@ toggleMark n (Just n') | n == n'   = Nothing
 
 loadGraph :: ViewSettings -> FilePath -> IO Rotation
 loadGraph vs fileName = do
-    file <- readFile fileName
-    graph <- fromNTriples file >>= return . reverse
+    --file <- readFile fileName
+    --graph <- fromNTriples file >>= return . reverse-}
+    let convert (s,p,o) = (f s, f p, f o)
+        f (Raptor.Uri s) = URI s
+        f (Raptor.Literal s) = PlainLiteral s
+        f (Raptor.Blank s) = URI $ "blank:" ++ s
+    graph <- Raptor.filenameToTriples fileName >>= return . map convert
     let rots = catMaybes $ flip map graph $
                         \(s,p,o) -> getRotation vs graph s p Pos o
     return $ last rots
