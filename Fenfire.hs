@@ -18,7 +18,8 @@ module Fenfire where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Vobs
+import Vobs hiding (rotate)
+import Utils
 import RDF
 
 import qualified Raptor (filenameToTriples, Identifier(..))
@@ -44,12 +45,6 @@ import System.Directory (canonicalizePath)
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
-
-maybeReturn :: MonadPlus m => Maybe a -> m a
-maybeReturn = maybe mzero return
-
-returnEach :: MonadPlus m => [a] -> m a
-returnEach = msum . map return
 
 getRotation :: ViewSettings -> Graph -> Node -> Node -> Dir -> Node ->
                Maybe Rotation
@@ -95,7 +90,7 @@ nodeView g n = rectBox $ clipVob $ pad 5 $ multiline False 20 s
     where s = maybe (show n) id (getText g n)
     
 propView :: Graph -> Node -> Vob Node
-propView g n = overlay [ useFadeColor $ fillRect (0,0),
+propView g n = overlay [ changeLayout (const useFadeColor) $ fillRect (0,0),
                          pad 5 $ label $ maybe (show n) id (getText g n) ]
 
 
@@ -122,24 +117,25 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view wher
     placeConn rotation@(Rotation graph n1 _) dir = call $ do
         (prop, rotation'@(Rotation _ n2 _))
             <- maybeReturn $ getConn vs rotation dir
-        scale <- getScale
-        movePolar dir (250 * scale)
+        scale' <- getScale
+        movePolar dir (250 * scale')
         placeNode rotation'
-        getFade >>= \fade -> do
+        getFade >>= \factor -> do
             let (nl,nr) = if dir==Pos then (n1,n2) else (n2,n1)
-            addVob $ onConnection nl nr $ fadeVob fade $ 
-               scaleVob scale scale $ propView graph prop
-            addVob $ fadeVob fade $ connection nl nr
+            addVob $ asVob $ fade factor $ between (center nl) (center nr) $
+               centerVob $ scaleVob scale' scale' $ propView graph prop
+            addVob $ asVob $ fade factor $ line (center nl) (center nr)
         placeConns rotation' dir True
         increaseDepth 3
         placeConns rotation' (rev dir) False
         
     placeNode (Rotation graph node _) = call $ do
-        scale <- getScale; fadeFactor <- getFade
+        scale' <- getScale; fadeFactor <- getFade
         let f vob = if Just node /= mark then vob
-                        else setBgColor (Color 1 0 0 1) vob
-        placeVob $ scaleVob scale scale $ fadeVob fadeFactor $
-            keyVob node $ f $ nodeView graph node
+                     else changeLayout (\_ -> setBgColor $ Color 1 0 0 1) vob
+        placeVob $ scaleVob scale' scale' $ 
+            changeLayout (\_ -> fade fadeFactor) $
+                keyVob node $ f $ nodeView graph node
         
     getScale = do d <- gets vvDepth; return (0.97 ** fromIntegral (depth - d))
     getFade  = do d <- gets vvDepth
@@ -171,7 +167,7 @@ addVob vob = lift $ modify $ (vob:)
 placeVob :: Vob Node -> VV ()
 placeVob vob = do
     state <- get
-    addVob $ translateVob (vvX state) (vvY state) $ centerVob vob
+    addVob $ asVob $ translate (vvX state) (vvY state) $ centerVob vob
         
 movePolar :: Dir -> Double -> VV ()
 movePolar dir distance = modify result where
@@ -299,8 +295,7 @@ handleKey vs (Key { eventModifier=_, eventKeyName=key }) = do
     "S"     -> liftIO ( saveFile rot fileName ) >>= \fp' -> put (rot, mk, fp')
     "q"     -> liftIO $ mainQuit
     _       -> unhandledEvent
-  where maybeDo m f     = case m of Just x -> f x; Nothing -> return ()
-        putRotation rot = do modify $ \(_,mk,fp)  -> (rot,mk,fp); setInterp True
+  where putRotation rot = do modify $ \(_,mk,fp)  -> (rot,mk,fp); setInterp True
         putMark mk      = do modify $ \(rot,_,fp) -> (rot,mk,fp)
         putState rot mk = do putMark mk; putRotation rot
 
