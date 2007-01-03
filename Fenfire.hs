@@ -53,9 +53,9 @@ getRotation vs graph node prop dir node' = do
     return (Rotation graph node (i-length (conns vs graph node dir) `div` 2))
     
 conns :: ViewSettings -> Graph -> Node -> Dir -> [(Node, Node)]
-conns vs g node Pos = [(p,o) | (s,p,o) <- g, s == node,
+conns vs g node Pos = reverse [(p,o) | (s,p,o) <- g, s == node,
                                not $ p `elem` hiddenProps vs]
-conns vs g node Neg = [(p,s) | (s,p,o) <- g, o == node,
+conns vs g node Neg = reverse [(p,s) | (s,p,o) <- g, o == node,
                                not $ p `elem` hiddenProps vs]
 
 rotate :: ViewSettings -> Rotation -> Int -> Maybe Rotation
