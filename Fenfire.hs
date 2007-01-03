@@ -311,9 +311,9 @@ main = mdo
         view = vanishingView vs 20
         graph = [(home, rdfs_label, PlainLiteral "")]
         rot = (Rotation graph home 0)
-        startState = (rot, Nothing, "")
+        emptyState = (rot, Nothing, "")
 
-    stateRef <- newIORef startState
+    stateRef <- newIORef emptyState
 
     case args of [fileName] -> do fn <- canonicalizePath fileName
                                   rot' <- loadGraph vs fn
@@ -336,13 +336,14 @@ main = mdo
                                 end   <- textBufferGetEndIter buf
                                 text  <- textBufferGetText buf start end True
                                 (Rotation g' n' r', mk', fp') <- readIORef stateRef
-                                let g'' = setText g' n' text
+                                -- buf corresponds to n, not to n'
+                                let g'' = setText g' n text
                                 writeIORef stateRef $ (Rotation g'' n' r', mk', fp')
                                 updateCanvas True
         textViewSetBuffer textView buf
         return ()
     
-    stateChanged startState
+    readIORef stateRef >>= stateChanged
     
     (canvas, updateCanvas) <- 
         vobCanvas stateRef view (handleKey vs) stateChanged lightGray
