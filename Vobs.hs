@@ -114,9 +114,13 @@ changeContext f = changeRender $ \ren cx -> ren (f cx)
 comb :: Size -> (Size -> Vob k) -> Vob k
 comb size f = Vob size $ \size' -> layoutVob (f size') size'
 
-transform :: Ord k => Matrix -> Endo (Layout k)
-transform t = changeScene (\sc -> Map.map (\(m,s) -> (m*t,s)) sc)
-            . changeContext (\cx -> cx { rcMatrix = t * rcMatrix cx })
+-- | Given a matrix transformation, transforms a layout.
+-- Suitable transformations, such as Matrix.rotate, multiply from the right.
+--
+transform :: Ord k => Endo Matrix -> Endo (Layout k)
+transform t = changeScene (\sc -> Map.map (\(m,s) -> (t m,s)) sc)
+            . changeContext (\cx -> cx { rcMatrix = t' (rcMatrix cx) })
+    where t' = (t Matrix.identity *)
 
 renderable :: Size -> (Size -> Render ()) -> Vob k
 renderable s ren = Vob s $ \s' -> decoration $ \cx -> do
@@ -227,14 +231,20 @@ fade :: Ord k => Double -> Endo (Layout k)
 fade a = changeContext $ \cx -> cx { rcFade = rcFade cx * a }
 
 
+-- | Moves a layout by x and y.
+--
 translate :: Ord k => Double -> Double -> Endo (Layout k)
-translate x y = transform (Matrix 1 0 0 1 x y)
+translate x y = transform $ Matrix.translate x y
 
+-- | Rotates a layout by angle.
+--
 rotate :: Ord k => Double -> Endo (Layout k)
-rotate angle = transform (Matrix.rotate angle Matrix.identity)
+rotate angle = transform $ Matrix.rotate angle
 
+-- | Scales a layout by sx and sy.
+--
 scale :: Ord k => Double -> Double -> Endo (Layout k)
-scale sx sy = transform (Matrix sx 0 0 sy 0 0)
+scale sx sy = transform $ Matrix.scale sx sy
 
 scaleVob :: Ord k => Double -> Double -> Endo (Vob k)
 scaleVob sx sy = changeLayout (\_ -> scale sx sy)
