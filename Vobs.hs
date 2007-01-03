@@ -273,8 +273,10 @@ resize w h = changeSize $ const (w,h)
 clipVob :: Ord k => Endo (Vob k)
 clipVob = changeLayout $ \(w,h) -> changeRender $ \render cx -> do
     let m = rcMatrix cx
+    Cairo.save
     Cairo.save; Cairo.transform m; Cairo.rectangle 0 0 w h; Cairo.restore
     Cairo.clip; render cx
+    Cairo.restore
     
     
 class Interpolate a where
