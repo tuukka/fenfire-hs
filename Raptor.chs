@@ -52,6 +52,7 @@ mkIdentifier value format = do
                               cstr <- {#call uri_as_string#} (castPtr v) 
                               str <- peekCString (castPtr cstr) 
                               return $ Uri str
+          f v IDENTIFIER_TYPE_PREDICATE = f v IDENTIFIER_TYPE_RESOURCE
           f v IDENTIFIER_TYPE_LITERAL = peekCString v >>= return . Literal
           f v IDENTIFIER_TYPE_ANONYMOUS = peekCString v >>= return . Blank
           f _ i = error $ "Raptor.mkIdentifier: Deprecated type: " ++ show i
