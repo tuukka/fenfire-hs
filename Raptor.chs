@@ -8,6 +8,7 @@ import System.Posix.IO (stdOutput)
 import System.Posix.Types (Fd)
 import System (getArgs)
 
+import Control.Monad (when)
 import Data.IORef
 
 -- stop c2hs choking on __attribute__(deprecated):
@@ -97,6 +98,7 @@ filenameToTriples filename = do
 
   initRaptor
   rdf_parser <- withCString "guess" new_parser 
+  when (rdf_parser == nullPtr) $ fail "parser is null"
   handler <- mkHandler (collect_triple result)
   set_statement_handler rdf_parser nullPtr handler
   uri <- withCString filename uri_filename_to_uri_string >>= new_uri
@@ -110,6 +112,7 @@ filenameToStdout filename = do
 
   initRaptor
   rdf_parser <- withCString "guess" new_parser 
+  when (rdf_parser == nullPtr) $ fail "parser is null"
   mkHandler (print_triple outfile) >>= set_statement_handler rdf_parser nullPtr
   uri <- withCString filename uri_filename_to_uri_string >>= new_uri
   base_uri <- uri_copy uri

@@ -28,4 +28,4 @@ Raptor.hs: Raptor.chs
 	c2hs $<
 
 clean:
-	rm -f *.hi Raptor.chi Raptor.h Raptor.hs Raptor_stub.* *.o $(TARGETS)
+	rm -f *.hi *.i Raptor.chi Raptor.h Raptor.hs Raptor_stub.* *.o $(TARGETS)
