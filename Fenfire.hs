@@ -29,7 +29,7 @@ import qualified Data.List
 import Data.IORef
 import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
 
-import Control.Monad (MonadPlus, mzero, mplus, msum, when)
+import Control.Monad (when, guard)
 import Control.Monad.State (State, StateT, get, gets, modify, put,
                             runState, runStateT,
                             withState, execState, evalState, evalStateT)
@@ -96,24 +96,26 @@ propView g n = overlay [ changeLayout (const useFadeColor) $ fillRect (0,0),
 
 
 vanishingView :: ViewSettings -> Int -> (Rotation, Mark, FilePath) -> Vob Node
-vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view where
+vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
+    where
+    -- place the center of the view and all subtrees in both directions
     view = do placeNode startRotation
               dir <- returnEach [Pos, Neg]
               placeConns startRotation dir True
-                
+    -- place all subtrees in xdir
     placeConns rotation xdir placeFirst = call $ do
         increaseDepth 2
-        if placeFirst then call $ placeConn rotation xdir else return ()
+        when placeFirst $ call $ placeConn rotation xdir
         ydir <- returnEach [-1, 1]
         placeConns' rotation xdir ydir
-        
+    -- place rest of the subtrees in (xdir, ydir)
     placeConns' rotation xdir ydir = call $ do
         increaseDepth 1
         rotation' <- maybeReturn $ rotate vs rotation ydir
         changeAngle (fromIntegral ydir * mul xdir pi / 14)
         placeConn rotation' xdir
         placeConns' rotation' xdir ydir
-        
+    -- place one subtree
     placeConn rotation@(Rotation graph n1 _) dir = call $ do
         (prop, rotation'@(Rotation _ n2 _))
             <- maybeReturn $ getConn vs rotation dir
@@ -128,7 +130,7 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view wher
         placeConns rotation' dir True
         increaseDepth 3
         placeConns rotation' (rev dir) False
-        
+    -- place one node view    
     placeNode (Rotation graph node _) = call $ do
         scale' <- getScale; fadeFactor <- getFade
         let f vob = if Just node /= mark then vob
@@ -156,10 +158,13 @@ call vv = do state <- get; vobs <- lift get
              let vobs' = execState (runListT (evalStateT vv state)) vobs
              lift $ put vobs'
 
+-- |Decrease remaining recursion depth by given amount of steps, and
+-- cut execution when no depth is left.
+--
 increaseDepth :: Int -> VV ()
-increaseDepth n = do state <- get; let depth = (vvDepth state - n)
-                     if depth <= 0 then mzero
-                                   else modify (\s -> s { vvDepth=depth })
+increaseDepth n = do state <- get; let depth = vvDepth state - n
+                     guard $ depth > 0
+                     put $ state { vvDepth=depth }
 
 addVob :: Vob Node -> VV ()
 addVob vob = lift $ modify $ (vob:)
