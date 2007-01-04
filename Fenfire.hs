@@ -118,7 +118,7 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view wher
         (prop, rotation'@(Rotation _ n2 _))
             <- maybeReturn $ getConn vs rotation dir
         scale' <- getScale
-        movePolar dir (250 * scale')
+        movePolar dir (280 * (scale'**3))
         placeNode rotation'
         getFade >>= \factor -> do
             let (nl,nr) = if dir==Pos then (n1,n2) else (n2,n1)
