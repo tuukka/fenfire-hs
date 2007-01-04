@@ -53,7 +53,7 @@ mkIdentifier value format = do
                               return $ Uri str
           f v IDENTIFIER_TYPE_LITERAL = peekCString v >>= return . Literal
           f v IDENTIFIER_TYPE_ANONYMOUS = peekCString v >>= return . Blank
-          f _ _ = error "Raptor.mkIdentifier: deprecated identifier type"
+          f _ i = error $ "Raptor.mkIdentifier: Deprecated type: " ++ show i
 
 getSubject s = mkIdentifier ({#get statement->subject#} s)
                             ({#get statement->subject_type#} s)
