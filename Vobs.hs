@@ -25,7 +25,7 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import Control.Monad.Trans (liftIO, MonadIO)
 
-import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get)
+import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get, fill)
 import qualified Graphics.Rendering.Cairo as Cairo
 import Graphics.Rendering.Cairo.Matrix (Matrix(Matrix))
 import qualified Graphics.Rendering.Cairo.Matrix as Matrix
@@ -55,12 +55,14 @@ data Vob k    = Vob    { defaultSize :: Size, layoutVob :: Size -> Layout k }
 data Layout k = Layout { layoutScene :: Scene k, 
                          renderLayout :: RenderContext k -> Render () }
 
-type Cx k a = RenderContext k -> Maybe a
+type Cx k a = Size -> RenderContext k -> Maybe a
 type Render a = Cairo.Render a
 
 data RenderContext k = RenderContext { 
     rcMatrix :: Matrix, rcScene :: Scene k, rcFade :: Double,
     rcColor :: Color, rcBgColor :: Color, rcFadeColor :: Color }
+    
+newtype Path = Path { renderPath :: Render () }
     
 type View s k  = s -> Vob k
 type Handler s = Event -> HandlerAction s
@@ -86,13 +88,31 @@ getTime = do (System.Time.TOD secs picosecs) <- System.Time.getClockTime
              return $ fromInteger secs + fromInteger picosecs / (10**(3*4))
              
              
-anchor :: Ord k => Double -> Double -> k -> Cx k Point
-anchor x y key cx = fmap (\(m,(w,h)) -> Matrix.transformPoint m (x*w, y*h))
-                         (Map.lookup key $ rcScene cx)
-                    
-center :: Ord k => k -> Cx k Point
+(@@) :: Ord k => Cx k a -> k -> Cx k a   -- pronounce 'of'
+(@@) f key _ cx = do (m,(w,h)) <- Map.lookup key (rcScene cx)
+                     f (w,h) $ cx { rcMatrix=m }
+                      
+point :: Ord k => Double -> Double -> Cx k Point
+point x y _ _ = Just (x,y)
+
+anchor :: Ord k => Double -> Double -> Cx k Point
+anchor x y (w,h) cx = Just $ transformPt (rcMatrix cx) (x*w, y*h) where
+    transformPt (Matrix xx xy yx yy x0 y0) (dx,dy) =
+        (xx*dx + yx*dy + x0, xy*dx + yy*dy + y0) -- the gtk2hs impl is buggy
+
+center :: Ord k => Cx k Point
 center = anchor 0.5 0.5
-             
+
+path :: Ord k => [Cx k Point] -> Cx k Path
+path points s cx = flip fmap (mapM (\p -> p s cx) points) $ \((x0,y0):ps) ->
+    Path $ do Cairo.moveTo x0 y0; mapM_ (\(x,y) -> Cairo.lineTo x y) ps
+    
+line :: Ord k => Cx k Point -> Cx k Point -> Cx k Path
+line p1 p2 = path [p1, p2]
+
+extents :: Ord k => Cx k Path
+extents = path [anchor 0 0, anchor 0 1, anchor 1 1, anchor 1 0, anchor 0 0]
+
 
 changeSize :: Ord k => Endo Size -> Endo (Vob k)
 changeSize f vob = vob { defaultSize = f $ defaultSize vob }
@@ -121,8 +141,7 @@ comb size f = Vob size $ \size' -> layoutVob (f size') size'
 renderVob :: Ord k => Vob k -> RenderContext k -> Render ()
 renderVob vob = renderLayout (layoutVob vob (defaultSize vob))
 
--- | Given a matrix transformation, transforms a layout.
--- Suitable transformations, such as Matrix.rotate, multiply from the right.
+-- | Applies a matrix transformation to a vob.
 --
 transform :: Ord k => Endo Matrix -> Endo (Vob k)
 transform t = ownSize . changeScene (\_ sc -> Map.map (\(m,s) -> (t m,s)) sc)
@@ -137,9 +156,6 @@ decoration :: (Size -> RenderContext k -> Render ()) -> Vob k
 decoration ren = Vob (0,0) $ \size -> Layout (Map.empty) $ \cx -> do
     let Color r g b a = interpolate (rcFade cx) (rcFadeColor cx) (rcColor cx)
     Cairo.save; Cairo.setSourceRGBA r g b a; ren size cx; Cairo.restore
-    
-asVob :: Ord k => Layout k -> Vob k
-asVob layout = Vob (0,0) (const layout)
 
 
 keyVob :: Ord k => k -> Endo (Vob k)
@@ -147,10 +163,19 @@ keyVob key vob = flip ($) vob $
     changeScene (\size -> Map.insert key (Matrix.identity, size))
   . changeRender (\_ _ cx -> maybeDo (Map.lookup key $ rcScene cx) $ \(m,s) ->
         renderLayout (layoutVob vob s) $ cx { rcMatrix = m })
-
+        
 
 nullVob :: Ord k => Vob k
 nullVob = renderable (0,0) $ \_ _ -> return ()
+
+fill :: Ord k => Cx k Path -> Vob k
+fill p = decoration $ \s cx -> 
+    maybeDo (p s cx) $ \p' -> do renderPath p'; Cairo.fill
+
+stroke :: Ord k => Cx k Path -> Vob k
+stroke p = decoration $ \s cx -> 
+    maybeDo (p s cx) $ \p' -> do renderPath p'; Cairo.stroke
+
 
 overlay :: Ord k => [Vob k] -> Vob k
 overlay vobs = Vob size layout where
@@ -163,16 +188,9 @@ overlay vobs = Vob size layout where
         ren cx = sequence_ $ map (\l -> renderLayout l cx) layouts
         
 
-drawRect :: Ord k => Size -> Vob k
-drawRect s = renderable s $ \(w,h) _ -> do 
-    Cairo.rectangle 0 0 w h; Cairo.stroke
-    
-fillRect :: Ord k => Size -> Vob k
-fillRect s = renderable s $ \(w,h) _ -> do 
-    Cairo.rectangle 0 0 w h; Cairo.fill
-
 rectBox :: Ord k => Endo (Vob k)
-rectBox vob = overlay [useBgColor $ fillRect (0,0), vob, drawRect (0,0)]
+rectBox vob = 
+    overlay [useBgColor $ fill extents,  clip extents vob,  stroke extents]
         
 
 pangoContext :: PangoContext
@@ -210,14 +228,9 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
     return $ renderable (realToFrac w, realToFrac h) 
                         (\_ _ -> showLayout layout)
 
-line :: Ord k => Cx k Point -> Cx k Point -> Vob k
-line p1 p2 = decoration $ \_ cx ->
-    maybeDo (p1 cx) $ \(x1,y1) -> maybeDo (p2 cx) $ \(x2,y2) -> do
-        Cairo.moveTo x1 y1; Cairo.lineTo x2 y2; Cairo.stroke
-    
 between :: Ord k => Cx k Point -> Cx k Point -> Endo (Vob k)
-between p1 p2 vob = decoration $ \_ cx ->
-    maybeDo (p1 cx) $ \(x1,y1) -> maybeDo (p2 cx) $ \(x2,y2) -> do
+between p1 p2 vob = decoration $ \s cx ->
+    maybeDo (p1 s cx) $ \(x1,y1) -> maybeDo (p2 s cx) $ \(x2,y2) -> do
         let (x,y) = ((x1+x2)/2, (y1+y2)/2)
             angle = atan2 (y2-y1) (x2-x1)
         renderVob (translate x y $ rotate angle $ vob) cx
@@ -284,13 +297,9 @@ resize :: Ord k => Size -> Endo (Vob k)
 resize (w,h) = changeSize $ const (w,h)
 
 
-clipVob :: Ord k => Endo (Vob k)
-clipVob = changeRender $ \(w,h) render cx -> do
-    let m = rcMatrix cx
-    Cairo.save
-    Cairo.save; Cairo.transform m; Cairo.rectangle 0 0 w h; Cairo.restore
-    Cairo.clip; render cx
-    Cairo.restore
+clip :: Ord k => Cx k Path -> Endo (Vob k)
+clip p = changeRender $ \s render cx -> maybeDo (p s cx) $ \p' -> do 
+    Cairo.save; renderPath p'; Cairo.clip; render cx; Cairo.restore
     
     
 class Interpolate a where

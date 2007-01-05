@@ -36,7 +36,7 @@ import Control.Monad.State (State, StateT, get, gets, modify, put,
 import Control.Monad.List  (ListT(ListT), runListT)
 import Control.Monad.Trans (lift, liftIO)
 
-import Graphics.UI.Gtk hiding (get, Color, disconnect)
+import Graphics.UI.Gtk hiding (Color, get, disconnect, fill)
 
 import System (getArgs)
 import System.Random (randomIO)
@@ -86,11 +86,11 @@ setText g n t = (n, rdfs_label, PlainLiteral t) :
                 [(s,p,o) | (s,p,o) <- g, not (s == n && p == rdfs_label)]
 
 nodeView :: Graph -> Node -> Vob Node
-nodeView g n = rectBox $ clipVob $ pad 5 $ multiline False 20 s
+nodeView g n = rectBox $ pad 5 $ multiline False 20 s
     where s = maybe (show n) id (getText g n)
     
 propView :: Graph -> Node -> Vob Node
-propView g n = overlay [ useFadeColor $ fillRect (0,0),
+propView g n = overlay [ useFadeColor $ fill extents,
                          pad 5 $ label $ maybe (show n) id (getText g n) ]
 
 
@@ -124,9 +124,9 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
         placeNode rotation'
         getFade >>= \factor -> do
             let (nl,nr) = if dir==Pos then (n1,n2) else (n2,n1)
-            addVob $ fade factor $ between (center nl) (center nr) $
-               centerVob $ scale scale' scale' $ propView graph prop
-            addVob $ fade factor $ line (center nl) (center nr)
+            addVob $ fade factor $ between (center @@ nl) (center @@ nr) $
+                centerVob $ scale scale' scale' $ propView graph prop
+            addVob $ fade factor $ stroke $ line (center @@ nl) (center @@ nr)
         placeConns rotation' dir True
         increaseDepth 3
         placeConns rotation' (rev dir) False
