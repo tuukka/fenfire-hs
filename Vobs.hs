@@ -97,53 +97,60 @@ center = anchor 0.5 0.5
 changeSize :: Ord k => Endo Size -> Endo (Vob k)
 changeSize f vob = vob { defaultSize = f $ defaultSize vob }
 
-changeLayout :: Ord k => (Size -> Layout k -> Layout k) -> Endo (Vob k)
+changeLayout :: Ord k => (Size -> Endo (Layout k)) -> Endo (Vob k)
 changeLayout f vob = vob { layoutVob = \s -> f s (layoutVob vob s) }
 
-changeScene :: Ord k => Endo (Scene k) -> Endo (Layout k)
-changeScene f layout = layout { layoutScene = f (layoutScene layout) }
+changeScene :: Ord k => (Size -> Endo (Scene k)) -> Endo (Vob k)
+changeScene f = changeLayout $ \s l -> l { layoutScene = f s (layoutScene l) }
 
-changeRender :: Endo (RenderContext k -> Render ()) -> Endo (Layout k)
-changeRender f layout = 
-    layout { renderLayout = \cx -> f (renderLayout layout) cx }
+changeRender :: Ord k => (Size -> Endo (RenderContext k -> Render ())) 
+                      -> Endo (Vob k)
+changeRender f = changeLayout $ \s layout -> 
+    layout { renderLayout = \cx -> f s (renderLayout layout) cx }
+    
+changeContext :: Ord k => (Size -> Endo (RenderContext k)) -> Endo (Vob k)
+changeContext f = changeRender $ \s ren cx -> ren (f s cx)
 
-changeContext :: Endo (RenderContext k) -> Endo (Layout k)
-changeContext f = changeRender $ \ren cx -> ren (f cx)
+ownSize :: Endo (Vob k)
+ownSize (Vob size layout) = Vob size (const l') where l' = layout size
     
 
 comb :: Size -> (Size -> Vob k) -> Vob k
 comb size f = Vob size $ \size' -> layoutVob (f size') size'
 
+renderVob :: Ord k => Vob k -> RenderContext k -> Render ()
+renderVob vob = renderLayout (layoutVob vob (defaultSize vob))
+
 -- | Given a matrix transformation, transforms a layout.
 -- Suitable transformations, such as Matrix.rotate, multiply from the right.
 --
-transform :: Ord k => Endo Matrix -> Endo (Layout k)
-transform t = changeScene (\sc -> Map.map (\(m,s) -> (t m,s)) sc)
-            . changeContext (\cx -> cx { rcMatrix = t' (rcMatrix cx) })
+transform :: Ord k => Endo Matrix -> Endo (Vob k)
+transform t = ownSize . changeScene (\_ sc -> Map.map (\(m,s) -> (t m,s)) sc)
+            . changeContext (\_ cx -> cx { rcMatrix = t' (rcMatrix cx) })
     where t' = (t Matrix.identity *)
 
-renderable :: Size -> (Size -> Render ()) -> Vob k
-renderable s ren = Vob s $ \s' -> decoration $ \cx -> do
-    Cairo.save; Cairo.transform (rcMatrix cx); ren s'; Cairo.restore
+renderable :: Ord k => Size -> (Size -> RenderContext k -> Render ()) -> Vob k
+renderable size ren = resize size $ decoration $ \size' cx -> do
+    Cairo.save; Cairo.transform (rcMatrix cx); ren size' cx; Cairo.restore
     
-decoration :: (RenderContext k -> Render ()) -> Layout k
-decoration ren = Layout (Map.empty) $ \cx -> do
+decoration :: (Size -> RenderContext k -> Render ()) -> Vob k
+decoration ren = Vob (0,0) $ \size -> Layout (Map.empty) $ \cx -> do
     let Color r g b a = interpolate (rcFade cx) (rcFadeColor cx) (rcColor cx)
-    Cairo.save; Cairo.setSourceRGBA r g b a; ren cx; Cairo.restore
+    Cairo.save; Cairo.setSourceRGBA r g b a; ren size cx; Cairo.restore
     
 asVob :: Ord k => Layout k -> Vob k
 asVob layout = Vob (0,0) (const layout)
 
 
 keyVob :: Ord k => k -> Endo (Vob k)
-keyVob key vob = flip changeLayout vob $ \size ->
-    changeScene (Map.insert key (Matrix.identity, size))
-  . changeRender (\_ cx -> maybeDo (Map.lookup key $ rcScene cx) $ \(m,s) ->
+keyVob key vob = flip ($) vob $
+    changeScene (\size -> Map.insert key (Matrix.identity, size))
+  . changeRender (\_ _ cx -> maybeDo (Map.lookup key $ rcScene cx) $ \(m,s) ->
         renderLayout (layoutVob vob s) $ cx { rcMatrix = m })
 
 
 nullVob :: Ord k => Vob k
-nullVob = renderable (0,0) $ const $ return ()
+nullVob = renderable (0,0) $ \_ _ -> return ()
 
 overlay :: Ord k => [Vob k] -> Vob k
 overlay vobs = Vob size layout where
@@ -156,17 +163,16 @@ overlay vobs = Vob size layout where
         ren cx = sequence_ $ map (\l -> renderLayout l cx) layouts
         
 
-drawRect :: Size -> Vob k
-drawRect s = renderable s $ \(w,h) -> do 
+drawRect :: Ord k => Size -> Vob k
+drawRect s = renderable s $ \(w,h) _ -> do 
     Cairo.rectangle 0 0 w h; Cairo.stroke
     
-fillRect :: Size -> Vob k
-fillRect s = renderable s $ \(w,h) -> do 
+fillRect :: Ord k => Size -> Vob k
+fillRect s = renderable s $ \(w,h) _ -> do 
     Cairo.rectangle 0 0 w h; Cairo.fill
 
 rectBox :: Ord k => Endo (Vob k)
-rectBox vob = overlay [changeLayout (const useBgColor) $ fillRect (0,0), 
-                       vob, drawRect (0,0)]
+rectBox vob = overlay [useBgColor $ fillRect (0,0), vob, drawRect (0,0)]
         
 
 pangoContext :: PangoContext
@@ -183,7 +189,8 @@ label :: Ord k => String -> Vob k
 label s = unsafePerformIO $ do 
     layout  <- layoutText pangoContext s
     (PangoRectangle _ _ w h, _) <- layoutGetExtents layout
-    return $ renderable (realToFrac w, realToFrac h) (\_ -> showLayout layout)
+    return $ renderable (realToFrac w, realToFrac h) 
+                        (\_ _ -> showLayout layout)
     
 multiline :: Ord k => Bool -> Int -> String -> Vob k
 multiline useTextWidth widthInChars s = unsafePerformIO $ do 
@@ -200,68 +207,65 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
         <- layoutGetExtents layout
     let w = if useTextWidth then max w2 w3 else w1
         h = maximum [h1, h2, h3]
-    return $ renderable (realToFrac w, realToFrac h) (\_ -> showLayout layout)
+    return $ renderable (realToFrac w, realToFrac h) 
+                        (\_ _ -> showLayout layout)
 
-line :: Ord k => Cx k Point -> Cx k Point -> Layout k
-line p1 p2 = decoration $ \cx ->
+line :: Ord k => Cx k Point -> Cx k Point -> Vob k
+line p1 p2 = decoration $ \_ cx ->
     maybeDo (p1 cx) $ \(x1,y1) -> maybeDo (p2 cx) $ \(x2,y2) -> do
         Cairo.moveTo x1 y1; Cairo.lineTo x2 y2; Cairo.stroke
     
-between :: Ord k => Cx k Point -> Cx k Point -> Endo (Layout k)
-between p1 p2 layout = decoration $ \cx ->
+between :: Ord k => Cx k Point -> Cx k Point -> Endo (Vob k)
+between p1 p2 vob = decoration $ \_ cx ->
     maybeDo (p1 cx) $ \(x1,y1) -> maybeDo (p2 cx) $ \(x2,y2) -> do
         let (x,y) = ((x1+x2)/2, (y1+y2)/2)
             angle = atan2 (y2-y1) (x2-x1)
-        renderLayout (translate x y $ rotate angle $ layout) cx
+        renderVob (translate x y $ rotate angle $ vob) cx
 
                           
-setColor :: Ord k => Color -> Endo (Layout k)
-setColor c = changeContext $ \cx -> cx { rcColor = c }
+setColor :: Ord k => Color -> Endo (Vob k)
+setColor c = changeContext $ \_ cx -> cx { rcColor = c }
 
-setBgColor :: Ord k => Color -> Endo (Layout k)
-setBgColor c = changeContext $ \cx -> cx { rcBgColor = c }
+setBgColor :: Ord k => Color -> Endo (Vob k)
+setBgColor c = changeContext $ \_ cx -> cx { rcBgColor = c }
 
-useBgColor :: Ord k => Endo (Layout k)
-useBgColor = changeContext $ \cx -> cx { rcColor = rcBgColor cx }
+useBgColor :: Ord k => Endo (Vob k)
+useBgColor = changeContext $ \_ cx -> cx { rcColor = rcBgColor cx }
 
-useFadeColor :: Ord k => Endo (Layout k)
-useFadeColor = changeContext $ \cx -> cx { rcColor = rcFadeColor cx }
+useFadeColor :: Ord k => Endo (Vob k)
+useFadeColor = changeContext $ \_ cx -> cx { rcColor = rcFadeColor cx }
 
-fade :: Ord k => Double -> Endo (Layout k)
-fade a = changeContext $ \cx -> cx { rcFade = rcFade cx * a }
+fade :: Ord k => Double -> Endo (Vob k)
+fade a = changeContext $ \_ cx -> cx { rcFade = rcFade cx * a }
 
 
--- | Moves a layout by x and y.
+-- | Moves a vob by x and y.
 --
-translate :: Ord k => Double -> Double -> Endo (Layout k)
+translate :: Ord k => Double -> Double -> Endo (Vob k)
 translate x y = transform $ Matrix.translate x y
 
--- | Rotates a layout by angle.
+-- | Rotates a vob by angle.
 --
-rotate :: Ord k => Double -> Endo (Layout k)
+rotate :: Ord k => Double -> Endo (Vob k)
 rotate angle = transform $ Matrix.rotate angle
 
--- | Scales a layout by sx and sy.
+-- | Scales a vob by sx and sy.
 --
-scale :: Ord k => Double -> Double -> Endo (Layout k)
-scale sx sy = transform $ Matrix.scale sx sy
-
-scaleVob :: Ord k => Double -> Double -> Endo (Vob k)
-scaleVob sx sy = changeLayout (\_ -> scale sx sy)
-               . changeSize (\(w,h) -> (sx*w, sy*h))
+scale :: Ord k => Double -> Double -> Endo (Vob k)
+scale sx sy vob = 
+    resize (defaultSize vob) $ transform (Matrix.scale sx sy) vob
 
 
-anchorVob :: Ord k => Double -> Double -> Vob k -> Layout k
-anchorVob x y vob = translate (-x*w) (-y*h) $ layoutVob vob (w,h)
-    where (w,h) = defaultSize vob
+anchorVob :: Ord k => Double -> Double -> Endo (Vob k)
+anchorVob x y vob = translate (-x*w) (-y*h) vob where (w,h) = defaultSize vob
     
-centerVob :: Ord k => Vob k -> Layout k
+centerVob :: Ord k => Endo (Vob k)
 centerVob = anchorVob 0.5 0.5
 
                
 pad4 :: Ord k => Double -> Double -> Double -> Double -> Endo (Vob k)
-pad4 x1 x2 y1 y2 = changeLayout (\_size -> translate x1 x2)
-                 . changeSize (\(w,h) -> (x1+w+x2, y1+h+y2))
+pad4 x1 x2 y1 y2 vob = resize (x1+w+x2, y1+h+y2) $ translate x1 x2 vob
+    where (w,h) = defaultSize vob
     
 pad2 :: Ord k => Double -> Double -> Endo (Vob k)
 pad2 x y   = pad4 x x y y
@@ -276,12 +280,12 @@ resizeX w = changeSize $ \(_,h) -> (w,h)
 resizeY :: Ord k => Double -> Endo (Vob k)
 resizeY h = changeSize $ \(w,_) -> (w,h)
 
-resize :: Ord k => Double -> Double -> Endo (Vob k)
-resize w h = changeSize $ const (w,h)
+resize :: Ord k => Size -> Endo (Vob k)
+resize (w,h) = changeSize $ const (w,h)
 
 
 clipVob :: Ord k => Endo (Vob k)
-clipVob = changeLayout $ \(w,h) -> changeRender $ \render cx -> do
+clipVob = changeRender $ \(w,h) render cx -> do
     let m = rcMatrix cx
     Cairo.save
     Cairo.save; Cairo.transform m; Cairo.rectangle 0 0 w h; Cairo.restore
@@ -369,8 +373,8 @@ vobCanvas stateRef view handleEvent stateChanged bgColor = do
                    return (fromIntegral cw, fromIntegral ch)
                    
         getLayout = do (w,h) <- getWH; state <- readIORef stateRef
-                       let bg = changeLayout (const useFadeColor) $ 
-                                    renderable (0,0) $ const Cairo.paint
+                       let bg = useFadeColor $ 
+                                    renderable (0,0) $ \_ _ -> Cairo.paint
                            vob = overlay [bg, view state]
                        return $ layoutVob vob (w,h)
                    

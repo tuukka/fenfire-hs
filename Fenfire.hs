@@ -90,7 +90,7 @@ nodeView g n = rectBox $ clipVob $ pad 5 $ multiline False 20 s
     where s = maybe (show n) id (getText g n)
     
 propView :: Graph -> Node -> Vob Node
-propView g n = overlay [ changeLayout (const useFadeColor) $ fillRect (0,0),
+propView g n = overlay [ useFadeColor $ fillRect (0,0),
                          pad 5 $ label $ maybe (show n) id (getText g n) ]
 
 
@@ -124,9 +124,9 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
         placeNode rotation'
         getFade >>= \factor -> do
             let (nl,nr) = if dir==Pos then (n1,n2) else (n2,n1)
-            addVob $ asVob $ fade factor $ between (center nl) (center nr) $
-               centerVob $ scaleVob scale' scale' $ propView graph prop
-            addVob $ asVob $ fade factor $ line (center nl) (center nr)
+            addVob $ fade factor $ between (center nl) (center nr) $
+               centerVob $ scale scale' scale' $ propView graph prop
+            addVob $ fade factor $ line (center nl) (center nr)
         placeConns rotation' dir True
         increaseDepth 3
         placeConns rotation' (rev dir) False
@@ -134,9 +134,8 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
     placeNode (Rotation graph node _) = call $ do
         scale' <- getScale; fadeFactor <- getFade
         let f vob = if Just node /= mark then vob
-                     else changeLayout (\_ -> setBgColor $ Color 1 0 0 1) vob
-        placeVob $ scaleVob scale' scale' $ 
-            changeLayout (\_ -> fade fadeFactor) $
+                     else setBgColor (Color 1 0 0 1) vob
+        placeVob $ scale scale' scale' $ fade fadeFactor $
                 keyVob node $ f $ nodeView graph node
         
     getScale = do d <- gets vvDepth; return (0.97 ** fromIntegral (depth - d))
@@ -172,7 +171,7 @@ addVob vob = lift $ modify $ (vob:)
 placeVob :: Vob Node -> VV ()
 placeVob vob = do
     state <- get
-    addVob $ asVob $ translate (vvX state) (vvY state) $ centerVob vob
+    addVob $ translate (vvX state) (vvY state) $ centerVob vob
         
 movePolar :: Dir -> Double -> VV ()
 movePolar dir distance = modify result where

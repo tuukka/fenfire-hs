@@ -29,12 +29,11 @@ myVob1 = keyVob 1 $ rectBox $ clipVob $ pad 5 $ multiline False 20 "Hello World!
 myVob2 = keyVob 2 $ rectBox $ label "Foo bar baz"
 
 myScene1 :: Vob Int
-myScene1 = overlay [ asVob $ translate 50 100 $ centerVob myVob2
-                   , asVob $ translate 50 50 $ centerVob myVob1 ]
+myScene1 = overlay [ translate 50 100 $ myVob2, translate 50 50 $ myVob1 ]
 
 myScene2 :: Vob Int
-myScene2 = Vob (0,0) $ const $ translate 150 150 $ rotate (-pi/5) $
-    scale 1.5 1.5 $ centerVob $ changeSize (\(w,h) -> (w-30, h)) $ myVob1
+myScene2 = translate 150 150 $ rotate (-pi/5) $
+    scale 1.5 1.5 $ changeSize (\(w,h) -> (w-30, h)) $ myVob1
 
 
 main = do 
