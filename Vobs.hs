@@ -23,6 +23,7 @@ import Utils
 import Data.IORef
 import System.IO.Unsafe (unsafePerformIO)
 
+import Control.Monad.Reader
 import Control.Monad.Trans (liftIO, MonadIO)
 
 import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get, fill)
@@ -55,7 +56,7 @@ data Vob k    = Vob    { defaultSize :: Size, layoutVob :: Size -> Layout k }
 data Layout k = Layout { layoutScene :: Scene k, 
                          renderLayout :: RenderContext k -> Render () }
 
-type Cx k a = Size -> RenderContext k -> Maybe a
+type Cx k a   = MaybeT (Reader (Size, RenderContext k)) a
 type Render a = Cairo.Render a
 
 data RenderContext k = RenderContext { 
@@ -88,24 +89,29 @@ getTime = do (System.Time.TOD secs picosecs) <- System.Time.getClockTime
              return $ fromInteger secs + fromInteger picosecs / (10**(3*4))
              
              
+fromCx :: Cx k a -> Size -> RenderContext k -> Maybe a
+fromCx x size cx = runReader (runMaybeT x) (size, cx)
+
 (@@) :: Ord k => Cx k a -> k -> Cx k a   -- pronounce 'of'
-(@@) f key _ cx = do (m,(w,h)) <- Map.lookup key (rcScene cx)
-                     f (w,h) $ cx { rcMatrix=m }
+(@@) x key = do (_, cx) <- ask; (m,size) <- Map.lookup key (rcScene cx)
+                maybeReturn $ fromCx x size (cx { rcMatrix=m })
                       
+transformPt :: Matrix -> Endo Point
+transformPt (Matrix xx xy yx yy x0 y0) (dx,dy) =
+    (xx*dx + yx*dy + x0, xy*dx + yy*dy + y0) -- the gtk2hs impl is buggy
+
 point :: Ord k => Double -> Double -> Cx k Point
-point x y _ _ = Just (x,y)
+point x y = do cx <- liftM snd ask; return $ transformPt (rcMatrix cx) (x,y)
 
 anchor :: Ord k => Double -> Double -> Cx k Point
-anchor x y (w,h) cx = Just $ transformPt (rcMatrix cx) (x*w, y*h) where
-    transformPt (Matrix xx xy yx yy x0 y0) (dx,dy) =
-        (xx*dx + yx*dy + x0, xy*dx + yy*dy + y0) -- the gtk2hs impl is buggy
+anchor x y = do (w,h) <- liftM fst ask; point (x*w) (y*h)
 
 center :: Ord k => Cx k Point
 center = anchor 0.5 0.5
 
 path :: Ord k => [Cx k Point] -> Cx k Path
-path points s cx = flip fmap (mapM (\p -> p s cx) points) $ \((x0,y0):ps) ->
-    Path $ do Cairo.moveTo x0 y0; mapM_ (\(x,y) -> Cairo.lineTo x y) ps
+path points = sequence points >>= \((x0,y0):ps) -> return $ Path $ do
+    Cairo.moveTo x0 y0; mapM_ (\(x,y) -> Cairo.lineTo x y) ps
     
 line :: Ord k => Cx k Point -> Cx k Point -> Cx k Path
 line p1 p2 = path [p1, p2]
@@ -149,13 +155,14 @@ transform t = ownSize . changeScene (\_ sc -> Map.map (\(m,s) -> (t m,s)) sc)
     where t' = (t Matrix.identity *)
 
 renderable :: Ord k => Size -> (Size -> RenderContext k -> Render ()) -> Vob k
-renderable size ren = resize size $ decoration $ \size' cx -> do
-    Cairo.save; Cairo.transform (rcMatrix cx); ren size' cx; Cairo.restore
+renderable size ren = resize size $ decoration $ ask >>= \(s',cx) -> return $
+    do Cairo.save; Cairo.transform (rcMatrix cx); ren s' cx; Cairo.restore
     
-decoration :: (Size -> RenderContext k -> Render ()) -> Vob k
-decoration ren = Vob (0,0) $ \size -> Layout (Map.empty) $ \cx -> do
+decoration :: (Cx k (Render ())) -> Vob k
+decoration render = Vob (0,0) $ \size -> Layout (Map.empty) $ \cx -> do
     let Color r g b a = interpolate (rcFade cx) (rcFadeColor cx) (rcColor cx)
-    Cairo.save; Cairo.setSourceRGBA r g b a; ren size cx; Cairo.restore
+    maybeDo (fromCx render size cx) $ \render' -> do
+        Cairo.save; Cairo.setSourceRGBA r g b a; render'; Cairo.restore
 
 
 keyVob :: Ord k => k -> Endo (Vob k)
@@ -169,12 +176,10 @@ nullVob :: Ord k => Vob k
 nullVob = renderable (0,0) $ \_ _ -> return ()
 
 fill :: Ord k => Cx k Path -> Vob k
-fill p = decoration $ \s cx -> 
-    maybeDo (p s cx) $ \p' -> do renderPath p'; Cairo.fill
+fill p = decoration $ do p' <- p; return $ do renderPath p'; Cairo.fill
 
 stroke :: Ord k => Cx k Path -> Vob k
-stroke p = decoration $ \s cx -> 
-    maybeDo (p s cx) $ \p' -> do renderPath p'; Cairo.stroke
+stroke p = decoration $ do p' <- p; return $ do renderPath p'; Cairo.stroke
 
 
 overlay :: Ord k => [Vob k] -> Vob k
@@ -229,11 +234,11 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
                         (\_ _ -> showLayout layout)
 
 between :: Ord k => Cx k Point -> Cx k Point -> Endo (Vob k)
-between p1 p2 vob = decoration $ \s cx ->
-    maybeDo (p1 s cx) $ \(x1,y1) -> maybeDo (p2 s cx) $ \(x2,y2) -> do
-        let (x,y) = ((x1+x2)/2, (y1+y2)/2)
-            angle = atan2 (y2-y1) (x2-x1)
-        renderVob (translate x y $ rotate angle $ vob) cx
+between p1 p2 vob = decoration $ do 
+    (x1,y1) <- p1;  (x2,y2) <- p2;  (_,cx) <- ask
+    let (x,y) = ((x1+x2)/2, (y1+y2)/2)
+        angle = atan2 (y2-y1) (x2-x1)
+    return $ do renderVob (translate x y $ rotate angle $ vob) cx
 
                           
 setColor :: Ord k => Color -> Endo (Vob k)
@@ -298,7 +303,7 @@ resize (w,h) = changeSize $ const (w,h)
 
 
 clip :: Ord k => Cx k Path -> Endo (Vob k)
-clip p = changeRender $ \s render cx -> maybeDo (p s cx) $ \p' -> do 
+clip p = changeRender $ \s render cx -> maybeDo (fromCx p s cx) $ \p' -> do 
     Cairo.save; renderPath p'; Cairo.clip; render cx; Cairo.restore
     
     

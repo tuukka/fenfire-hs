@@ -19,6 +19,7 @@ module Utils where
 -- MA  02111-1307  USA
 
 import Control.Monad
+import Control.Monad.Reader
 import Control.Monad.Trans
 
 
@@ -41,6 +42,7 @@ instance Monad m => Monad (MaybeT m) where
     return x = MaybeT $ return (Just x)
     m >>= f  = MaybeT $ do x <- runMaybeT m
                            maybe (return Nothing) (runMaybeT . f) x
+    fail _   = mzero
     
 instance MonadTrans MaybeT where
     lift m = MaybeT $ do x <- m; return (Just x)
@@ -49,6 +51,9 @@ instance Monad m => MonadPlus (MaybeT m) where
     mzero = MaybeT $ return Nothing
     mplus m n = MaybeT $ do
         x <- runMaybeT m; maybe (runMaybeT n) (return . Just) x
+        
+instance MonadReader w m => MonadReader w (MaybeT m) where
+    ask = lift ask
 
 callMaybeT :: Monad m => MaybeT m a -> MaybeT m (Maybe a)
 callMaybeT = lift . runMaybeT
