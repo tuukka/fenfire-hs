@@ -243,7 +243,11 @@ loadGraph vs fileName = do
     let rots = catMaybes $ flip map graph $
                         \(s,p,o) -> getRotation vs graph s p Pos o
     return $ last rots
-                       
+
+saveGraph :: Graph -> FilePath -> IO ()
+saveGraph graph fileName = do
+    writeFile fileName $ toNTriples $ reverse graph
+
 openFile :: ViewSettings -> Rotation -> FilePath -> IO (Rotation,FilePath)
 openFile vs rot0 fileName0 = do
     dialog <- fileChooserDialogNew Nothing Nothing FileChooserActionOpen
@@ -275,7 +279,7 @@ saveFile (Rotation graph _ _) fileName0 = do
     widgetHide dialog
     case response of
         ResponseAccept -> do Just fileName <- fileChooserGetFilename dialog
-                             writeFile fileName $ toNTriples $ reverse graph
+                             saveGraph graph fileName
                              return fileName
         _              -> return fileName0
 
