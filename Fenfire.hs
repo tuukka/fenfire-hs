@@ -28,6 +28,7 @@ import qualified Data.Map as Map
 import qualified Data.List
 import Data.IORef
 import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
+import Data.Monoid
 
 import Control.Monad (when, guard)
 import Control.Monad.State (State, StateT, get, gets, modify, put,
@@ -90,7 +91,7 @@ nodeView g n = rectBox $ pad 5 $ multiline False 20 s
     where s = maybe (show n) id (getText g n)
     
 propView :: Graph -> Node -> Vob Node
-propView g n = overlay [ useFadeColor $ fill extents,
+propView g n = mconcat [ useFadeColor $ fill extents,
                          pad 5 $ label $ maybe (show n) id (getText g n) ]
 
 
@@ -149,7 +150,7 @@ data VVState = VVState { vvDepth :: Int, vvX :: Double, vvY :: Double,
 type VV a = StateT VVState (ListT (State [Vob Node])) a
 
 runVanishing :: Int -> VV () -> Vob Node
-runVanishing depth vv = comb (0,0) $ \(w,h) -> overlay $
+runVanishing depth vv = comb (0,0) $ \(w,h) -> mconcat $
     execState (runListT $ evalStateT vv $ VVState depth (w/2) (h/2) 0) []
     
 call :: VV a -> VV ()   -- get the parameter's vobs without changing the state

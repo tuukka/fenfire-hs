@@ -21,6 +21,7 @@ module VobTest where
 import Vobs
 import Data.Map (fromList)
 import Data.IORef
+import Data.Monoid
 import Control.Monad.State
 import Graphics.UI.Gtk
 
@@ -29,7 +30,8 @@ myVob1 = keyVob 1 $ rectBox $ pad 5 $ multiline False 20 "Hello World!"
 myVob2 = keyVob 2 $ rectBox $ label "Foo bar baz"
 
 myScene1 :: Vob Int
-myScene1 = overlay [ translate 50 100 $ myVob2, translate 50 50 $ myVob1 ]
+myScene1 = mconcat [ stroke $ line (center @@ 1) (center @@ 2),
+                     translate 50 100 $ myVob2, translate 50 50 $ myVob1 ]
 
 myScene2 :: Vob Int
 myScene2 = translate 150 150 $ rotate (-pi/15) $

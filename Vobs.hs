@@ -35,6 +35,7 @@ import Graphics.UI.Gtk.Cairo
 import Data.List (intersect)
 import Data.Map (Map, keys, (!), fromList, toList, insert, empty)
 import qualified Data.Map as Map
+import Data.Monoid
 
 import Control.Monad (when)
 import Control.Monad.State
@@ -71,6 +72,22 @@ type Handler s = Event -> HandlerAction s
 type HandlerAction s = StateT s (StateT (Bool, Bool) IO) ()
 
 
+instance Ord k => Monoid (Vob k) where
+    mempty = Vob (0,0) $ \_ -> Layout (Map.empty) $ \_ -> return ()
+    mappend (Vob (w1,h1) l1) (Vob (w2,h2) l2) = Vob (w,h) l where
+        (w,h) = (max w1 w2, max h1 h2)
+        l size = Layout (Map.union sc1 sc2) (\cx -> r1 cx >> r2 cx) where
+            (Layout sc1 r1, Layout sc2 r2) = (l1 size, l2 size)
+
+instance Monoid a => Monoid (Cx k a) where
+    mempty  = return mempty
+    mappend = liftM2 mappend
+
+instance Monoid Path where
+    mempty      = Path $ return ()
+    mappend p q = Path $ renderPath p >> renderPath q
+
+
 defaultWidth  (Vob (w,_) _) = w
 defaultHeight (Vob (_,h) _) = h
 
@@ -94,14 +111,12 @@ fromCx x size cx = runReader (runMaybeT x) (size, cx)
 
 (@@) :: Ord k => Cx k a -> k -> Cx k a   -- pronounce 'of'
 (@@) x key = do (_, cx) <- ask; (m,size) <- Map.lookup key (rcScene cx)
-                maybeReturn $ fromCx x size (cx { rcMatrix=m })
+                local (\_ -> (size, cx { rcMatrix=m })) x
                       
-transformPt :: Matrix -> Endo Point
-transformPt (Matrix xx xy yx yy x0 y0) (dx,dy) =
-    (xx*dx + yx*dy + x0, xy*dx + yy*dy + y0) -- the gtk2hs impl is buggy
-
 point :: Ord k => Double -> Double -> Cx k Point
 point x y = do cx <- liftM snd ask; return $ transformPt (rcMatrix cx) (x,y)
+  where transformPt (Matrix xx xy yx yy x0 y0) (dx,dy) =
+          (xx*dx + yx*dy + x0, xy*dx + yy*dy + y0) -- the gtk2hs impl is buggy
 
 anchor :: Ord k => Double -> Double -> Cx k Point
 anchor x y = do (w,h) <- liftM fst ask; point (x*w) (y*h)
@@ -109,15 +124,18 @@ anchor x y = do (w,h) <- liftM fst ask; point (x*w) (y*h)
 center :: Ord k => Cx k Point
 center = anchor 0.5 0.5
 
-path :: Ord k => [Cx k Point] -> Cx k Path
-path points = sequence points >>= \((x0,y0):ps) -> return $ Path $ do
-    Cairo.moveTo x0 y0; mapM_ (\(x,y) -> Cairo.lineTo x y) ps
-    
+moveTo :: Cx k Point -> Cx k Path
+moveTo p = do (x,y) <- p; return $ Path $ do Cairo.moveTo x y
+
+lineTo :: Cx k Point -> Cx k Path
+lineTo p = do (x,y) <- p; return $ Path $ do Cairo.lineTo x y
+
 line :: Ord k => Cx k Point -> Cx k Point -> Cx k Path
-line p1 p2 = path [p1, p2]
+line p1 p2 = moveTo p1 & lineTo p2
 
 extents :: Ord k => Cx k Path
-extents = path [anchor 0 0, anchor 0 1, anchor 1 1, anchor 1 0, anchor 0 0]
+extents = moveTo (anchor 0 0) & lineTo (anchor 0 1) & lineTo (anchor 1 1)
+        & lineTo (anchor 1 0) & lineTo (anchor 0 0)
 
 
 changeSize :: Ord k => Endo Size -> Endo (Vob k)
@@ -172,30 +190,18 @@ keyVob key vob = flip ($) vob $
         renderLayout (layoutVob vob s) $ cx { rcMatrix = m })
         
 
-nullVob :: Ord k => Vob k
-nullVob = renderable (0,0) $ \_ _ -> return ()
-
 fill :: Ord k => Cx k Path -> Vob k
 fill p = decoration $ do p' <- p; return $ do renderPath p'; Cairo.fill
 
 stroke :: Ord k => Cx k Path -> Vob k
 stroke p = decoration $ do p' <- p; return $ do renderPath p'; Cairo.stroke
 
+paint :: Ord k => Vob k
+paint = decoration $ return $ Cairo.paint
 
-overlay :: Ord k => [Vob k] -> Vob k
-overlay vobs = Vob size layout where
-    size = (maximum $ map defaultWidth vobs, 
-            maximum $ map defaultHeight vobs)
-            
-    layout size' = Layout scene ren where
-        layouts = map (flip layoutVob size') vobs
-        scene = Map.unions $ reverse (map layoutScene layouts)
-        ren cx = sequence_ $ map (\l -> renderLayout l cx) layouts
-        
 
 rectBox :: Ord k => Endo (Vob k)
-rectBox vob = 
-    overlay [useBgColor $ fill extents,  clip extents vob,  stroke extents]
+rectBox vob = useBgColor (fill extents) & clip extents vob & stroke extents
         
 
 pangoContext :: PangoContext
@@ -381,15 +387,13 @@ vobCanvas stateRef view handleEvent stateChanged bgColor = do
     
     widgetSetCanFocus canvas True
     
-    animRef <- newIORef (layoutVob nullVob (0,0), noAnim Map.empty)
+    animRef <- newIORef (layoutVob mempty (0,0), noAnim Map.empty)
     
     let getWH = do (cw, ch) <- drawingAreaGetSize canvas
                    return (fromIntegral cw, fromIntegral ch)
                    
         getLayout = do (w,h) <- getWH; state <- readIORef stateRef
-                       let bg = useFadeColor $ 
-                                    renderable (0,0) $ \_ _ -> Cairo.paint
-                           vob = overlay [bg, view state]
+                       let vob = useFadeColor paint & view state
                        return $ layoutVob vob (w,h)
                    
         updateAnim interpolate' = do

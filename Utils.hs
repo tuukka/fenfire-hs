@@ -22,6 +22,8 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.Trans
 
+import Data.Monoid
+
 
 type Endo a = a -> a   -- just what it says, a function from a type to itself
 
@@ -34,6 +36,10 @@ returnEach = msum . map return
 
 maybeDo :: Monad m => Maybe a -> (a -> m ()) -> m ()
 maybeDo m f = maybe (return ()) f m
+
+
+(&) :: Monoid m => m -> m -> m
+(&) = mappend
 
 
 newtype MaybeT m a = MaybeT { runMaybeT :: m (Maybe a) }
@@ -54,6 +60,7 @@ instance Monad m => MonadPlus (MaybeT m) where
         
 instance MonadReader w m => MonadReader w (MaybeT m) where
     ask = lift ask
+    local f m = MaybeT $ local f (runMaybeT m)
 
 callMaybeT :: Monad m => MaybeT m a -> MaybeT m (Maybe a)
 callMaybeT = lift . runMaybeT
