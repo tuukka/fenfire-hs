@@ -1,3 +1,5 @@
+-- For (instance MonadReader w m => MonadReader w (MaybeT m)) in GHC 6.6:
+{-# OPTIONS_GHC -fallow-undecidable-instances #-}
 module Utils where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
