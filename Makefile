@@ -4,7 +4,7 @@ GHCFLAGS=-fglasgow-exts -Wall -fno-warn-unused-imports -fno-warn-missing-signatu
 
 GHCCMD = $(GHC) $(GHCFLAGS)
 
-SOURCES=*.hs *.chs Raptor.hs
+SOURCES=*.hs *.chs Raptor.hs Raptor.o
 TARGETS=vobtest fenfire
 
 all: $(TARGETS)
@@ -17,15 +17,19 @@ run-vobtest: vobtest
 	./$<
 
 fenfire: Fenfire.hs $(SOURCES)
-	$(GHCCMD) -fvia-C -lraptor -o $@ -main-is $(shell basename $< .hs).main --make $<
+	$(GHCCMD) -lraptor -o $@ -main-is $(shell basename $< .hs).main --make $<
 	touch $@
 
 run-fenfire: ARGS=test.nt
 run-fenfire: fenfire
 	./$< $(ARGS)
 
+# __attribute__ needs to be a no-op until c2hs learns to parse them in raptor.h
 Raptor.hs: Raptor.chs
-	c2hs $<
+	c2hs --cppopts '-D"__attribute__(A)= "' $<
+
+Raptor.o: Raptor.hs
+	$(GHCCMD) -c -fvia-C -o $@ $<
 
 clean:
 	rm -f *.hi *.i Raptor.chi Raptor.h Raptor.hs Raptor_stub.* *.o $(TARGETS)
