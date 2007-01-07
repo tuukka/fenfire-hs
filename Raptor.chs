@@ -23,6 +23,9 @@ import Data.IORef
 cToEnum :: (Integral i, Enum e) => i -> e
 cToEnum  = toEnum . cIntConv
 
+cFromEnum :: (Enum e, Integral i) => e -> i
+cFromEnum  = cIntConv . fromEnum
+
 cIntConv :: (Integral a, Integral b) => a -> b
 cIntConv  = fromIntegral
 
@@ -66,6 +69,23 @@ getPredicate s = mkIdentifier ({#get statement->predicate#} s)
 getObject s = mkIdentifier ({#get statement->object#} s)
                            ({#get statement->object_type#} s)
 
+setIdentifier setValue setFormat t (Uri s) = do 
+    setFormat t (cFromEnum IDENTIFIER_TYPE_RESOURCE)
+    uri <- withCString s $ {# call new_uri #} . castPtr
+    setValue t (castPtr uri)
+setIdentifier setValue setFormat t (Literal s) = do
+    setFormat t (cFromEnum IDENTIFIER_TYPE_LITERAL)
+    newCString s >>= setValue t . castPtr
+
+setSubject = setIdentifier {# set statement->subject #}
+                           {# set statement->subject_type #} 
+
+setPredicate = setIdentifier {# set statement->predicate #}
+                             {# set statement->predicate_type #}
+
+setObject = setIdentifier {# set statement->object #}
+                          {# set statement->object_type #}
+
 type Handler a = Ptr a -> Ptr Statement -> IO ()
 foreign import ccall "wrapper"
    mkHandler :: (Handler a) -> IO (FunPtr (Handler a))
@@ -83,9 +103,7 @@ foreign import ccall "raptor.h raptor_print_statement_as_ntriples" print_stateme
 foreign import ccall "stdio.h fdopen" fdopen :: Fd -> CString -> IO (Ptr CFile)
 foreign import ccall "stdio.h fputc" fputc :: CChar -> Ptr CFile -> IO ()
 
-print_triple :: Ptr CFile -> Handler a
-print_triple outfile _user_data s = do print_statement_as_ntriples s outfile
-                                       fputc (castCharToCChar '\n') outfile
+foreign import ccall "string.h memset" c_memset :: Ptr a -> CInt -> CSize -> IO (Ptr a)
 
 collect_triple :: IORef [Triple] -> Handler a
 collect_triple result _user_data t = do
@@ -93,6 +111,24 @@ collect_triple result _user_data t = do
                                        p <- getPredicate t
                                        o <- getObject t
                                        modifyIORef result ((s,p,o):)
+
+triplesToFilename triples filename = do 
+  initRaptor
+
+  serializer <- withCString "ntriples" {# call new_serializer #}
+  when (serializer == nullPtr) $ fail "serializer is null"
+  
+  withCString filename $ {# call serialize_start_to_filename #} serializer
+
+  allocaBytes {# sizeof statement #} $ flip (.) castPtr $ \t -> flip mapM_ triples $ \(s,p,o) ->do
+    c_memset (castPtr t) 0 {# sizeof statement #}
+    setSubject t s
+    setPredicate t p
+    setObject t o
+    {# call serialize_statement #} serializer (Statement t)
+  {# call serialize_end #} serializer
+  {# call free_serializer #} serializer
+  {# call finish #}
 
 filenameToTriples filename = do 
   result <- newIORef []
@@ -107,6 +143,13 @@ filenameToTriples filename = do
   parse_file rdf_parser uri base_uri
 
   readIORef result
+
+-- The following print_triple and filenameToStdout are an incomplete and 
+-- improved translation of raptor examples/rdfprint.c:
+
+print_triple :: Ptr CFile -> Handler a
+print_triple outfile _user_data s = do print_statement_as_ntriples s outfile
+                                       fputc (castCharToCChar '\n') outfile
 
 filenameToStdout filename = do
   outfile <- withCString "w" $ fdopen stdOutput
