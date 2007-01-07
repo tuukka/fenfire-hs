@@ -22,7 +22,7 @@ import Vobs hiding (rotate)
 import Utils
 import RDF
 
-import qualified Raptor (filenameToTriples, Identifier(..))
+import qualified Raptor (filenameToTriples, triplesToFilename, Identifier(..))
 
 import qualified Data.Map as Map
 import qualified Data.List
@@ -246,7 +246,11 @@ loadGraph vs fileName = do
 
 saveGraph :: Graph -> FilePath -> IO ()
 saveGraph graph fileName = do
-    writeFile fileName $ toNTriples $ reverse graph
+    --writeFile fileName $ toNTriples $ reverse graph
+    let convert (s,p,o) = (f s, f p, f o)
+        f (URI s) = Raptor.Uri s
+        f (PlainLiteral s) = Raptor.Literal s
+    Raptor.triplesToFilename (map convert $ reverse graph) fileName
 
 openFile :: ViewSettings -> Rotation -> FilePath -> IO (Rotation,FilePath)
 openFile vs rot0 fileName0 = do
