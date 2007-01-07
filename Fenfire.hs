@@ -83,8 +83,10 @@ getText g n = fmap (\(_s,_p,o) -> fromNode o)
                    (Data.List.find (\(s,p,_o) -> s==n && p==rdfs_label) g)
                     
 setText :: Graph -> Node -> String -> Graph
-setText g n t = (n, rdfs_label, PlainLiteral t) :
-                [(s,p,o) | (s,p,o) <- g, not (s == n && p == rdfs_label)]
+setText g n t = map update g
+    where update (s,p,o) | s == n && p == rdfs_label
+                         = (n, rdfs_label, PlainLiteral t)
+                         | otherwise = (s,p,o)
 
 nodeView :: Graph -> Node -> Vob Node
 nodeView g n = rectBox $ pad 5 $ multiline False 20 s
