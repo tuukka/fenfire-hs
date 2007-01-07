@@ -20,7 +20,7 @@ fenfire: Fenfire.hs $(SOURCES)
 	$(GHCCMD) -fvia-C -lraptor -o $@ -main-is $(shell basename $< .hs).main --make $<
 	touch $@
 
-run-fenfire: ARGS=test.n3
+run-fenfire: ARGS=test.nt
 run-fenfire: fenfire
 	./$< $(ARGS)
 
