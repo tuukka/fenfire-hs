@@ -23,7 +23,7 @@ import Foreign.C
 
 import System.Posix.IO (stdOutput)
 import System.Posix.Types (Fd)
-import System (getArgs)
+import System.Environment (getArgs)
 
 import Control.Monad (when)
 import Data.IORef

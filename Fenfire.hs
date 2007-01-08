@@ -39,7 +39,7 @@ import Control.Monad.Trans (lift, liftIO)
 
 import Graphics.UI.Gtk hiding (Color, get, disconnect, fill)
 
-import System (getArgs)
+import System.Environment (getArgs)
 import System.Random (randomIO)
 import System.Directory (canonicalizePath)
 

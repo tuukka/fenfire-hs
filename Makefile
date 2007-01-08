@@ -1,6 +1,6 @@
 
 GHC?=ghc
-GHCFLAGS=-fglasgow-exts -Wall -fno-warn-unused-imports -fno-warn-missing-signatures -fno-warn-orphans -fno-warn-deprecations
+GHCFLAGS=-fglasgow-exts -hide-package haskell98 -Wall -fno-warn-unused-imports -fno-warn-missing-signatures -fno-warn-orphans -fno-warn-deprecations
 
 GHCCMD = $(GHC) $(GHCFLAGS)
 
