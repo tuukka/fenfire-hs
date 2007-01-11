@@ -21,9 +21,12 @@ module Utils where
 -- MA  02111-1307  USA
 
 import Control.Monad
+import Control.Monad.List
 import Control.Monad.Reader
 import Control.Monad.Trans
+import Control.Monad.Writer
 
+import Data.Maybe (fromMaybe)
 import Data.Monoid
 
 
@@ -44,6 +47,44 @@ maybeDo m f = maybe (return ()) f m
 (&) = mappend
 
 
+-- XXX newer versions of Data.Monoid have this:
+newtype Dual m = Dual { getDual :: m } 
+
+instance Monoid m => Monoid (Dual m) where
+    mempty = Dual mempty
+    mappend (Dual m) (Dual n) = Dual (n & m)
+
+
+newtype BreadthT m a = BreadthT { runBreadthT :: WriterT (BreadthT m ()) m a }
+    
+scheduleBreadthT :: Monad m => BreadthT m a -> BreadthT m ()
+scheduleBreadthT m = BreadthT $ tell (m >> return ())
+
+execBreadthT :: Monad m => Int -> BreadthT m a -> m ()
+execBreadthT 0     _ = return ()
+execBreadthT (n+1) m = execWriterT (runBreadthT m) >>= execBreadthT n
+
+instance Monad m => Monoid (BreadthT m ()) where
+    mempty  = return ()
+    mappend = (>>)
+
+instance Monad m => Monad (BreadthT m) where
+    return  = BreadthT . return
+    m >>= f = BreadthT (runBreadthT m >>= runBreadthT . f)
+    
+instance MonadTrans BreadthT where
+    lift = BreadthT . lift
+    
+instance MonadWriter w m => MonadWriter w (BreadthT m) where
+    tell = lift . tell
+    listen m = BreadthT $ WriterT $ do
+        ((x,w),w') <- listen $ runWriterT (runBreadthT m)
+        return ((x,w'),w)
+    pass m = BreadthT $ WriterT $ pass $ do
+        ((x,f),w) <- runWriterT (runBreadthT m)
+        return ((x,w),f)
+
+
 newtype MaybeT m a = MaybeT { runMaybeT :: m (Maybe a) }
 
 instance Monad m => Monad (MaybeT m) where
@@ -60,9 +101,25 @@ instance Monad m => MonadPlus (MaybeT m) where
     mplus m n = MaybeT $ do
         x <- runMaybeT m; maybe (runMaybeT n) (return . Just) x
         
-instance MonadReader w m => MonadReader w (MaybeT m) where
+instance MonadReader r m => MonadReader r (MaybeT m) where
     ask = lift ask
     local f m = MaybeT $ local f (runMaybeT m)
+    
+instance MonadWriter w m => MonadWriter w (MaybeT m) where
+    tell = lift . tell
+    listen m = MaybeT $ do (x,w) <- listen $ runMaybeT m
+                           return $ maybe Nothing (\x' -> Just (x',w)) x
+    pass m = MaybeT $ pass $ do 
+        x <- runMaybeT m; return $ maybe (Nothing,id) (\(y,f) -> (Just y,f)) x
 
 callMaybeT :: Monad m => MaybeT m a -> MaybeT m (Maybe a)
 callMaybeT = lift . runMaybeT
+
+
+instance MonadWriter w m => MonadWriter w (ListT m) where
+    tell = lift . tell
+    listen m = ListT $ do (xs,w) <- listen $ runListT m
+                          return [(x,w) | x <- xs]
+    pass m = ListT $ pass $ do -- not ideal impl, but makes 'censor' work
+        ps <- runListT m
+        return $ if null ps then ([], id) else (map fst ps, snd (head ps))

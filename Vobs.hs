@@ -19,6 +19,7 @@ module Vobs where
 -- MA  02111-1307  USA
 
 import Utils
+import Utils (Dual, Endo)
 
 import Data.IORef
 import System.IO.Unsafe (unsafePerformIO)
@@ -35,7 +36,7 @@ import Graphics.UI.Gtk.Cairo
 import Data.List (intersect)
 import Data.Map (Map, keys, (!), fromList, toList, insert, empty)
 import qualified Data.Map as Map
-import Data.Monoid hiding (Endo)
+import Data.Monoid
 
 import Control.Monad (when)
 import Control.Monad.State

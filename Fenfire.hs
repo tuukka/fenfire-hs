@@ -20,6 +20,7 @@ module Fenfire where
 
 import Vobs hiding (rotate)
 import Utils
+import Utils (Dual, Endo)
 import RDF
 
 import qualified Raptor (filenameToTriples, triplesToFilename, Identifier(..))
@@ -36,6 +37,7 @@ import Control.Monad.State (State, StateT, get, gets, modify, put,
                             withState, execState, evalState, evalStateT)
 import Control.Monad.List  (ListT(ListT), runListT)
 import Control.Monad.Trans (lift, liftIO)
+import Control.Monad.Writer (Writer, execWriter, tell)
 
 import Graphics.UI.Gtk hiding (Color, get, disconnect, fill)
 
@@ -106,20 +108,18 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
               dir <- returnEach [Pos, Neg]
               placeConns startRotation dir True
     -- place all subtrees in xdir
-    placeConns rotation xdir placeFirst = call $ do
-        increaseDepth 2
-        when placeFirst $ call $ placeConn rotation xdir
+    placeConns rotation xdir placeFirst = increaseDepth 1 $ do
+        when placeFirst $ placeConn rotation xdir
         ydir <- returnEach [-1, 1]
         placeConns' rotation xdir ydir
     -- place rest of the subtrees in (xdir, ydir)
-    placeConns' rotation xdir ydir = call $ do
-        increaseDepth 1
+    placeConns' rotation xdir ydir = increaseDepth 1 $ do
         rotation' <- maybeReturn $ rotate vs rotation ydir
         changeAngle (fromIntegral ydir * mul xdir pi / 14)
         placeConn rotation' xdir
         placeConns' rotation' xdir ydir
     -- place one subtree
-    placeConn rotation@(Rotation graph n1 _) dir = call $ do
+    placeConn rotation@(Rotation graph n1 _) dir = increaseDepth 1 $ do
         (prop, rotation'@(Rotation _ n2 _))
             <- maybeReturn $ getConn vs rotation dir
         scale' <- getScale
@@ -131,10 +131,9 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
                 centerVob $ scale scale' scale' $ propView graph prop
             addVob $ fade factor $ stroke $ line (center @@ nl) (center @@ nr)
         placeConns rotation' dir True
-        increaseDepth 3
-        placeConns rotation' (rev dir) False
+        increaseDepth 3 $ placeConns rotation' (rev dir) False
     -- place one node view    
-    placeNode (Rotation graph node _) = call $ do
+    placeNode (Rotation graph node _) = do
         scale' <- getScale; fadeFactor <- getFade
         let f vob = if Just node /= mark then vob
                      else setBgColor (Color 1 0 0 1) vob
@@ -149,27 +148,24 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
 data VVState = VVState { vvDepth :: Int, vvX :: Double, vvY :: Double,
                          vvAngle :: Double }
                          
-type VV a = StateT VVState (ListT (State [Vob Node])) a
+type VV a = StateT VVState (ListT (BreadthT (Writer (Dual (Vob Node))))) a
 
 runVanishing :: Int -> VV () -> Vob Node
-runVanishing depth vv = comb (0,0) $ \(w,h) -> mconcat $
-    execState (runListT $ evalStateT vv $ VVState depth (w/2) (h/2) 0) []
+runVanishing depth vv = comb (0,0) $ \(w,h) -> 
+    getDual $ execWriter $ execBreadthT depth $ runListT $ 
+        evalStateT vv $ VVState depth (w/2) (h/2) 0
     
-call :: VV a -> VV ()   -- get the parameter's vobs without changing the state
-call vv = do state <- get; vobs <- lift get
-             let vobs' = execState (runListT (evalStateT vv state)) vobs
-             lift $ put vobs'
-
 -- |Decrease remaining recursion depth by given amount of steps, and
 -- cut execution when no depth is left.
 --
-increaseDepth :: Int -> VV ()
-increaseDepth n = do state <- get; let depth = vvDepth state - n
-                     guard $ depth > 0
-                     put $ state { vvDepth=depth }
+increaseDepth :: Int -> VV () -> VV ()
+increaseDepth n m = do
+    state <- get; let state' = state { vvDepth = vvDepth state - n }
+    if vvDepth state' < 0 then return () else
+        lift $ lift $ scheduleBreadthT $ runListT $ evalStateT m state'
 
 addVob :: Vob Node -> VV ()
-addVob vob = lift $ modify $ (vob:)
+addVob vob = tell (Dual vob)
 
 placeVob :: Vob Node -> VV ()
 placeVob vob = do
