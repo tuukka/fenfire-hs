@@ -115,22 +115,22 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
                   forM_ [Pos, Neg] $ \dir -> do
                       placeConns startRotation dir True
     -- place all subtrees in xdir
-    placeConns rotation xdir placeFirst = increaseDepth 1 $ do
+    placeConns rotation xdir placeFirst = withDepthIncreased 1 $ do
         when placeFirst $ placeConn rotation xdir
         forM_ [-1, 1] $ \ydir -> do
             placeConns' rotation xdir ydir
     -- place rest of the subtrees in (xdir, ydir)
-    placeConns' rotation xdir ydir = increaseDepth 1 $
+    placeConns' rotation xdir ydir = withDepthIncreased 1 $
         maybeDo (rotate vs rotation ydir) $ \rotation' -> do
-            changeAngle (fromIntegral ydir * mul xdir pi / 14) $ do
+            withAngleChanged (fromIntegral ydir * mul xdir pi / 14) $ do
                 placeConn rotation' xdir
                 placeConns' rotation' xdir ydir
     -- place one subtree
-    placeConn rotation@(Rotation graph n1 _) dir = increaseDepth 1 $
+    placeConn rotation@(Rotation graph n1 _) dir = withDepthIncreased 1 $
         maybeDo (getConn vs rotation dir) $ \(prop, rotation') ->
           let Rotation _ n2 _ = rotation' in visitNode n2 $ do
             scale' <- getScale
-            movePolar dir (280 * (scale'**3)) $ do
+            withCenterMoved dir (280 * (scale'**3)) $ do
                 placeNode rotation'
                 factor <- getFade
                 let (nl,nr) = if dir==Pos then (n1,n2) else (n2,n1)
@@ -139,8 +139,8 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
                 addVob $ fade factor $ stroke $ 
                     line (center @@ nl) (center @@ nr)
                 placeConns rotation' dir True
-                increaseDepth 3 $ placeConns rotation' (rev dir) False
-    -- place one node view    
+                withDepthIncreased 3 $ placeConns rotation' (rev dir) False
+    -- place one node view
     placeNode (Rotation graph node _) = do
         scale' <- getScale; fadeFactor <- getFade
         let f vob = if Just node /= mark then vob
@@ -148,29 +148,30 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
         placeVob $ scale scale' scale' $ fade fadeFactor $
                 keyVob node $ f $ nodeView graph node
         
-    getScale = do d <- asks vvDepth; return (0.97 ** fromIntegral (depth - d))
+    getScale = do d <- asks vvDepth; return (0.97 ** fromIntegral d)
     getFade  = do d <- asks vvDepth
-                  return (fromIntegral d / fromIntegral (depth+2))
+                  return (fromIntegral (depth - d) / fromIntegral (depth+2))
     
     
-data VVState = VVState { vvDepth :: Int, vvX :: Double, vvY :: Double,
-                         vvAngle :: Double }
+data VVState = VVState { vvDepth :: Int, vvMaxDepth :: Int,
+                         vvX :: Double, vvY :: Double, vvAngle :: Double }
                          
 type VV a = ReaderT VVState (BreadthT (StateT (Set Node) 
                                           (Writer (Dual (Vob Node))))) a
 
 runVanishing :: Int -> VV () -> Vob Node
-runVanishing depth vv = comb (0,0) $ \(w,h) -> 
-    getDual $ execWriter $ flip execStateT Set.empty $ execBreadthT depth $
-        runReaderT vv $ VVState depth (w/2) (h/2) 0
+runVanishing maxdepth vv = comb (0,0) $ \(w,h) -> 
+    getDual $ execWriter $ flip execStateT Set.empty $ execBreadthT $
+        runReaderT vv $ VVState 0 maxdepth (w/2) (h/2) 0
     
--- |Decrease remaining recursion depth by given amount of steps, and
--- cut execution when no depth is left.
+-- |Execute the passed action with the recursion depth increased by
+-- the given amount of steps, if it is still smaller than the maximum
+-- recursion depth.
 --
-increaseDepth :: Int -> VV () -> VV ()
-increaseDepth n m = do
-    state <- ask; let state' = state { vvDepth = vvDepth state - n }
-    if vvDepth state' < 0 then return () else
+withDepthIncreased :: Int -> VV () -> VV ()
+withDepthIncreased n m = do
+    state <- ask; let state' = state { vvDepth = vvDepth state + n }
+    if vvDepth state' >= vvMaxDepth state' then return () else
         lift $ scheduleBreadthT $ runReaderT m state'
         
 visitNode :: Node -> VV () -> VV ()
@@ -185,14 +186,14 @@ placeVob vob = do
     state <- ask
     addVob $ translate (vvX state) (vvY state) $ centerVob vob
         
-movePolar :: Dir -> Double -> VV () -> VV ()
-movePolar dir distance = local f where
+withCenterMoved :: Dir -> Double -> VV () -> VV ()
+withCenterMoved dir distance = local f where
     distance' = mul dir distance
     f s = s { vvX = vvX s + distance' * cos (vvAngle s),
               vvY = vvY s + distance' * sin (vvAngle s) }
                    
-changeAngle :: Double -> VV () -> VV ()
-changeAngle delta = local $ \s -> s { vvAngle = vvAngle s + delta }
+withAngleChanged :: Double -> VV () -> VV ()
+withAngleChanged delta = local $ \s -> s { vvAngle = vvAngle s + delta }
 
 
 

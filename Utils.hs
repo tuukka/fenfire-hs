@@ -64,18 +64,14 @@ instance Monoid m => Monoid (Dual m) where
     mappend (Dual m) (Dual n) = Dual (n & m)
 
 
-newtype BreadthT m a = BreadthT { runBreadthT :: WriterT (BreadthT m ()) m a }
+newtype BreadthT m a = BreadthT { runBreadthT :: WriterT [BreadthT m ()] m a }
     
 scheduleBreadthT :: Monad m => BreadthT m a -> BreadthT m ()
-scheduleBreadthT m = BreadthT $ tell (m >> return ())
+scheduleBreadthT m = BreadthT $ tell [m >> return ()]
 
-execBreadthT :: Monad m => Int -> BreadthT m a -> m ()
-execBreadthT 0     _ = return ()
-execBreadthT (n+1) m = execWriterT (runBreadthT m) >>= execBreadthT n
-
-instance Monad m => Monoid (BreadthT m ()) where
-    mempty  = return ()
-    mappend = (>>)
+execBreadthT :: Monad m => BreadthT m a -> m ()
+execBreadthT m = do rest <- execWriterT (runBreadthT m)
+                    when (not $ null rest) $ execBreadthT (sequence_ $ rest)
 
 instance Monad m => Monad (BreadthT m) where
     return  = BreadthT . return
