@@ -32,6 +32,7 @@ import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
 import Data.Monoid(Monoid(mconcat))
 
 import Control.Monad (when, guard)
+import Control.Monad.Reader
 import Control.Monad.State (State, StateT, get, gets, modify, put,
                             runState, runStateT,
                             withState, execState, evalState, evalStateT)
@@ -120,24 +121,24 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
     -- place rest of the subtrees in (xdir, ydir)
     placeConns' rotation xdir ydir = increaseDepth 1 $
         maybeDo (rotate vs rotation ydir) $ \rotation' -> do
-            changeAngle (fromIntegral ydir * mul xdir pi / 14)
-            placeConn rotation' xdir
-            placeConns' rotation' xdir ydir
+            changeAngle (fromIntegral ydir * mul xdir pi / 14) $ do
+                placeConn rotation' xdir
+                placeConns' rotation' xdir ydir
     -- place one subtree
     placeConn rotation@(Rotation graph n1 _) dir = increaseDepth 1 $
         maybeDo (getConn vs rotation dir) $ \(prop, rotation') -> do
             let Rotation _ n2 _ = rotation'
             scale' <- getScale
-            movePolar dir (280 * (scale'**3))
-            placeNode rotation'
-            getFade >>= \factor -> do
+            movePolar dir (280 * (scale'**3)) $ do
+                placeNode rotation'
+                factor <- getFade
                 let (nl,nr) = if dir==Pos then (n1,n2) else (n2,n1)
                 addVob $ fade factor $ between (center @@ nl) (center @@ nr) $
                     centerVob $ scale scale' scale' $ propView graph prop
                 addVob $ fade factor $ stroke $ 
                     line (center @@ nl) (center @@ nr)
-            placeConns rotation' dir True
-            increaseDepth 3 $ placeConns rotation' (rev dir) False
+                placeConns rotation' dir True
+                increaseDepth 3 $ placeConns rotation' (rev dir) False
     -- place one node view    
     placeNode (Rotation graph node _) = do
         scale' <- getScale; fadeFactor <- getFade
@@ -146,46 +147,46 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
         placeVob $ scale scale' scale' $ fade fadeFactor $
                 keyVob node $ f $ nodeView graph node
         
-    getScale = do d <- gets vvDepth; return (0.97 ** fromIntegral (depth - d))
-    getFade  = do d <- gets vvDepth
+    getScale = do d <- asks vvDepth; return (0.97 ** fromIntegral (depth - d))
+    getFade  = do d <- asks vvDepth
                   return (fromIntegral d / fromIntegral (depth+2))
     
     
 data VVState = VVState { vvDepth :: Int, vvX :: Double, vvY :: Double,
                          vvAngle :: Double }
                          
-type VV a = StateT VVState (BreadthT (Writer (Dual (Vob Node)))) a
+type VV a = ReaderT VVState (BreadthT (Writer (Dual (Vob Node)))) a
 
 runVanishing :: Int -> VV () -> Vob Node
 runVanishing depth vv = comb (0,0) $ \(w,h) -> 
     getDual $ execWriter $ execBreadthT depth $
-        evalStateT vv $ VVState depth (w/2) (h/2) 0
+        runReaderT vv $ VVState depth (w/2) (h/2) 0
     
 -- |Decrease remaining recursion depth by given amount of steps, and
 -- cut execution when no depth is left.
 --
 increaseDepth :: Int -> VV () -> VV ()
 increaseDepth n m = do
-    state <- get; let state' = state { vvDepth = vvDepth state - n }
+    state <- ask; let state' = state { vvDepth = vvDepth state - n }
     if vvDepth state' < 0 then return () else
-        lift $ scheduleBreadthT $ evalStateT m state'
+        lift $ scheduleBreadthT $ runReaderT m state'
 
 addVob :: Vob Node -> VV ()
 addVob vob = tell (Dual vob)
 
 placeVob :: Vob Node -> VV ()
 placeVob vob = do
-    state <- get
+    state <- ask
     addVob $ translate (vvX state) (vvY state) $ centerVob vob
         
-movePolar :: Dir -> Double -> VV ()
-movePolar dir distance = modify result where
+movePolar :: Dir -> Double -> VV () -> VV ()
+movePolar dir distance = local f where
     distance' = mul dir distance
-    result s = s { vvX = vvX s + distance' * cos (vvAngle s),
-                   vvY = vvY s + distance' * sin (vvAngle s) }
+    f s = s { vvX = vvX s + distance' * cos (vvAngle s),
+              vvY = vvY s + distance' * sin (vvAngle s) }
                    
-changeAngle :: Double -> VV ()
-changeAngle delta = modify $ \s -> s { vvAngle = vvAngle s + delta }
+changeAngle :: Double -> VV () -> VV ()
+changeAngle delta = local $ \s -> s { vvAngle = vvAngle s + delta }
 
 
 
