@@ -55,10 +55,16 @@ getRotation vs graph node prop dir node' = do
     return (Rotation graph node (i-length (conns vs graph node dir) `div` 2))
     
 conns :: ViewSettings -> Graph -> Node -> Dir -> [(Node, Node)]
-conns vs g node Pos = reverse [(p,o) | (s,p,o) <- g, s == node,
-                               not $ p `elem` hiddenProps vs]
-conns vs g node Neg = reverse [(p,s) | (s,p,o) <- g, o == node,
-                               not $ p `elem` hiddenProps vs]
+conns vs g node Pos = sortConns g [(p,o) | (s,p,o) <- g, s == node,
+                                   not $ p `elem` hiddenProps vs]
+conns vs g node Neg = sortConns g [(p,s) | (s,p,o) <- g, o == node,
+                                   not $ p `elem` hiddenProps vs]
+                                        
+sortConns :: Graph -> [(Node, Node)] -> [(Node, Node)]
+sortConns g = Data.List.sortBy cmp'
+    where cmp n1 n2 = compare (getText g n1) (getText g n2)
+          cmp' (p1,n1) (p2,n2) = catOrds (cmp p1 p2) (cmp n1 n2)
+          catOrds EQ o = o; catOrds o  _ = o
 
 rotate :: ViewSettings -> Rotation -> Int -> Maybe Rotation
 rotate vs (Rotation g n r) dir = 

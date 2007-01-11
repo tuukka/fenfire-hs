@@ -18,7 +18,7 @@ module Raptor where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Foreign
+import Foreign hiding (withObject)
 import Foreign.C
 
 import System.Posix.IO (stdOutput)
