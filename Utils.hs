@@ -30,7 +30,8 @@ import Data.Maybe (fromMaybe)
 import Data.Monoid
 
 
-type Endo a = a -> a   -- just what it says, a function from a type to itself
+-- just what the rhs says, a function from a type to itself
+type Endo a = a -> a
 
 
 maybeReturn :: MonadPlus m => Maybe a -> m a
@@ -41,6 +42,13 @@ returnEach = msum . map return
 
 maybeDo :: Monad m => Maybe a -> (a -> m ()) -> m ()
 maybeDo m f = maybe (return ()) f m
+
+
+-- XXX newer GHC's have these built in
+for   x f = map   f x
+forM  x f = mapM  f x
+forM_ x f = mapM_ f x
+ffor  x f = fmap  f x
 
 
 (&) :: Monoid m => m -> m -> m
