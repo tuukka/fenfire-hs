@@ -26,16 +26,16 @@ import RDF
 import qualified Raptor (filenameToTriples, triplesToFilename, Identifier(..))
 
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import qualified Data.List
+import Data.Set (Set)
 import Data.IORef
 import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
 import Data.Monoid(Monoid(mconcat))
 
 import Control.Monad (when, guard)
 import Control.Monad.Reader
-import Control.Monad.State (State, StateT, get, gets, modify, put,
-                            runState, runStateT,
-                            withState, execState, evalState, evalStateT)
+import Control.Monad.State (StateT, get, gets, modify, put, execStateT)
 import Control.Monad.Trans (lift, liftIO)
 import Control.Monad.Writer (Writer, execWriter, tell)
 
@@ -111,8 +111,9 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
     where
     -- place the center of the view and all subtrees in both directions
     view = do placeNode startRotation
-              forM_ [Pos, Neg] $ \dir -> do
-                  placeConns startRotation dir True
+              let Rotation _ n _ = startRotation in visitNode n $
+                  forM_ [Pos, Neg] $ \dir -> do
+                      placeConns startRotation dir True
     -- place all subtrees in xdir
     placeConns rotation xdir placeFirst = increaseDepth 1 $ do
         when placeFirst $ placeConn rotation xdir
@@ -126,8 +127,8 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
                 placeConns' rotation' xdir ydir
     -- place one subtree
     placeConn rotation@(Rotation graph n1 _) dir = increaseDepth 1 $
-        maybeDo (getConn vs rotation dir) $ \(prop, rotation') -> do
-            let Rotation _ n2 _ = rotation'
+        maybeDo (getConn vs rotation dir) $ \(prop, rotation') ->
+          let Rotation _ n2 _ = rotation' in visitNode n2 $ do
             scale' <- getScale
             movePolar dir (280 * (scale'**3)) $ do
                 placeNode rotation'
@@ -155,11 +156,12 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
 data VVState = VVState { vvDepth :: Int, vvX :: Double, vvY :: Double,
                          vvAngle :: Double }
                          
-type VV a = ReaderT VVState (BreadthT (Writer (Dual (Vob Node)))) a
+type VV a = ReaderT VVState (BreadthT (StateT (Set Node) 
+                                          (Writer (Dual (Vob Node))))) a
 
 runVanishing :: Int -> VV () -> Vob Node
 runVanishing depth vv = comb (0,0) $ \(w,h) -> 
-    getDual $ execWriter $ execBreadthT depth $
+    getDual $ execWriter $ flip execStateT Set.empty $ execBreadthT depth $
         runReaderT vv $ VVState depth (w/2) (h/2) 0
     
 -- |Decrease remaining recursion depth by given amount of steps, and
@@ -170,6 +172,10 @@ increaseDepth n m = do
     state <- ask; let state' = state { vvDepth = vvDepth state - n }
     if vvDepth state' < 0 then return () else
         lift $ scheduleBreadthT $ runReaderT m state'
+        
+visitNode :: Node -> VV () -> VV ()
+visitNode n m = get >>= \visited -> if n `Set.member` visited then return ()
+                                       else modify (Set.insert n) >> m
 
 addVob :: Vob Node -> VV ()
 addVob vob = tell (Dual vob)

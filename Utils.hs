@@ -23,6 +23,7 @@ module Utils where
 import Control.Monad
 import Control.Monad.List
 import Control.Monad.Reader
+import Control.Monad.State
 import Control.Monad.Trans
 import Control.Monad.Writer (WriterT(..), MonadWriter(..), execWriterT)
 
@@ -82,6 +83,10 @@ instance Monad m => Monad (BreadthT m) where
     
 instance MonadTrans BreadthT where
     lift = BreadthT . lift
+    
+instance MonadState s m => MonadState s (BreadthT m) where
+    get = lift $ get
+    put = lift . put
     
 instance MonadWriter w m => MonadWriter w (BreadthT m) where
     tell = lift . tell
