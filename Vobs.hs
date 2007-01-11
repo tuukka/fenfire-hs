@@ -36,7 +36,7 @@ import Graphics.UI.Gtk.Cairo
 import Data.List (intersect)
 import Data.Map (Map, keys, (!), fromList, toList, insert, empty)
 import qualified Data.Map as Map
-import Data.Monoid
+import Data.Monoid (Monoid(mempty, mappend))
 
 import Control.Monad (when)
 import Control.Monad.State

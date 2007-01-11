@@ -29,7 +29,7 @@ import qualified Data.Map as Map
 import qualified Data.List
 import Data.IORef
 import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
-import Data.Monoid
+import Data.Monoid(Monoid(mconcat))
 
 import Control.Monad (when, guard)
 import Control.Monad.State (State, StateT, get, gets, modify, put,

@@ -24,10 +24,10 @@ import Control.Monad
 import Control.Monad.List
 import Control.Monad.Reader
 import Control.Monad.Trans
-import Control.Monad.Writer
+import Control.Monad.Writer (WriterT(..), MonadWriter(..), execWriterT)
 
 import Data.Maybe (fromMaybe)
-import Data.Monoid
+import Data.Monoid (Monoid(..))
 
 
 -- just what the rhs says, a function from a type to itself
