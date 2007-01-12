@@ -111,9 +111,9 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
     where
     -- place the center of the view and all subtrees in both directions
     view = do placeNode startRotation
-              let Rotation _ n _ = startRotation in visitNode n $
-                  forM_ [Pos, Neg] $ \dir -> do
-                      placeConns startRotation dir True
+              let Rotation _ n _ = startRotation in visitNode n
+              forM_ [Pos, Neg] $ \dir -> do
+                  placeConns startRotation dir True
     -- place all subtrees in xdir
     placeConns rotation xdir placeFirst = withDepthIncreased 1 $ do
         when placeFirst $ placeConn rotation xdir
@@ -127,30 +127,27 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
                 placeConns' rotation' xdir ydir
     -- place one subtree
     placeConn rotation@(Rotation graph n1 _) dir = withDepthIncreased 1 $
-        maybeDo (getConn vs rotation dir) $ \(prop, rotation') ->
-          let Rotation _ n2 _ = rotation' in visitNode n2 $ do
+        maybeDo (getConn vs rotation dir) $ \(prop, rotation') -> do
+            let Rotation _ n2 _ = rotation'
             scale' <- getScale
             withCenterMoved dir (280 * (scale'**3)) $ do
-                placeNode rotation'
-                factor <- getFade
+                ifUnvisited n2 $ placeNode rotation'
                 let (nl,nr) = if dir==Pos then (n1,n2) else (n2,n1)
-                addVob $ fade factor $ between (center @@ nl) (center @@ nr) $
+                addVob $ between (center @@ nl) (center @@ nr) $
                     centerVob $ scale scale' scale' $ propView graph prop
-                addVob $ fade factor $ stroke $ 
-                    line (center @@ nl) (center @@ nr)
-                placeConns rotation' dir True
-                withDepthIncreased 3 $ placeConns rotation' (rev dir) False
+                addVob $ stroke $ line (center @@ nl) (center @@ nr)
+                ifUnvisited n2 $ visitNode n2 >> do
+                    placeConns rotation' dir True
+                    withDepthIncreased 3 $
+                        placeConns rotation' (rev dir) False
     -- place one node view
     placeNode (Rotation graph node _) = do
-        scale' <- getScale; fadeFactor <- getFade
+        scale' <- getScale
         let f vob = if Just node /= mark then vob
                      else setBgColor (Color 1 0 0 1) vob
-        placeVob $ scale scale' scale' $ fade fadeFactor $
-                keyVob node $ f $ nodeView graph node
+        placeVob $ scale scale' scale' $ keyVob node $ f $ nodeView graph node
         
     getScale = do d <- asks vvDepth; return (0.97 ** fromIntegral d)
-    getFade  = do d <- asks vvDepth
-                  return (fromIntegral (depth - d) / fromIntegral (depth+2))
     
     
 data VVState = VVState { vvDepth :: Int, vvMaxDepth :: Int,
@@ -174,12 +171,16 @@ withDepthIncreased n m = do
     if vvDepth state' >= vvMaxDepth state' then return () else
         lift $ scheduleBreadthT $ runReaderT m state'
         
-visitNode :: Node -> VV () -> VV ()
-visitNode n m = get >>= \visited -> if n `Set.member` visited then return ()
-                                       else modify (Set.insert n) >> m
+visitNode :: Node -> VV ()
+visitNode n = modify (Set.insert n)
+                                       
+ifUnvisited :: Node -> VV () -> VV ()
+ifUnvisited n m = get >>= \visited -> when (not $ n `Set.member` visited) m
 
 addVob :: Vob Node -> VV ()
-addVob vob = tell (Dual vob)
+addVob vob = do d <- asks vvDepth; md <- asks vvMaxDepth
+                let x = (fromIntegral (md - d) / fromIntegral (md+2))
+                tell (Dual $ fade x vob)
 
 placeVob :: Vob Node -> VV ()
 placeVob vob = do
