@@ -18,7 +18,8 @@ module Fenfire where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Vobs hiding (rotate)
+import Cairo hiding (rotate)
+import Vobs
 import Utils
 import Utils (Dual, Endo)
 import RDF
@@ -97,12 +98,12 @@ setText g n t = map update g
                          | otherwise = (s,p,o)
 
 nodeView :: Graph -> Node -> Vob Node
-nodeView g n = rectBox $ pad 5 $ multiline False 20 s
+nodeView g n = rectBox $ pad 5 $ useFgColor $ multiline False 20 s
     where s = maybe (show n) id (getText g n)
     
 propView :: Graph -> Node -> Vob Node
-propView g n = mconcat [ useFadeColor $ fill extents,
-                         pad 5 $ label $ maybe (show n) id (getText g n) ]
+propView g n = (useFadeColor $ fill extents)
+             & (pad 5 $ useFgColor $ label $ maybe (show n) id (getText g n))
 
 
 
@@ -134,8 +135,9 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
                 ifUnvisited n2 $ placeNode rotation'
                 let (nl,nr) = if dir==Pos then (n1,n2) else (n2,n1)
                 addVob $ between (center @@ nl) (center @@ nr) $
-                    centerVob $ scale scale' scale' $ propView graph prop
-                addVob $ stroke $ line (center @@ nl) (center @@ nr)
+                    centerVob $ scale (return scale') $ propView graph prop
+                addVob $ useFgColor $ stroke $
+                    line (center @@ nl) (center @@ nr)
                 ifUnvisited n2 $ visitNode n2 >> do
                     placeConns rotation' dir True
                     withDepthIncreased 3 $
@@ -145,8 +147,10 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
         scale' <- getScale
         let f vob = if Just node /= mark then vob
                      else setBgColor (Color 1 0 0 1) vob
-        placeVob $ scale scale' scale' $ keyVob node $ f $ nodeView graph node
+        placeVob $ scale (return scale') $ keyVob node $ 
+            f $ nodeView graph node
         
+    getScale :: VV Double
     getScale = do d <- asks vvDepth; return (0.97 ** fromIntegral d)
     
     
@@ -157,7 +161,7 @@ type VV a = ReaderT VVState (BreadthT (StateT (Set Node)
                                           (Writer (Dual (Vob Node))))) a
 
 runVanishing :: Int -> VV () -> Vob Node
-runVanishing maxdepth vv = comb (0,0) $ \(w,h) -> 
+runVanishing maxdepth vv = comb (0,0) $ \cx -> let (w,h) = rcSize cx in
     getDual $ execWriter $ flip execStateT Set.empty $ execBreadthT $
         runReaderT vv $ VVState 0 maxdepth (w/2) (h/2) 0
     
@@ -185,7 +189,7 @@ addVob vob = do d <- asks vvDepth; md <- asks vvMaxDepth
 placeVob :: Vob Node -> VV ()
 placeVob vob = do
     state <- ask
-    addVob $ translate (vvX state) (vvY state) $ centerVob vob
+    addVob $ translate (return (vvX state, vvY state)) $ centerVob vob
         
 withCenterMoved :: Dir -> Double -> VV () -> VV ()
 withCenterMoved dir distance = local f where

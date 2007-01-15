@@ -30,9 +30,16 @@ import Control.Monad.Writer (WriterT(..), MonadWriter(..), execWriterT)
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Monoid(..))
 
+import qualified System.Time
+
 
 -- just what the rhs says, a function from a type to itself
 type Endo a = a -> a
+
+type EndoM m a = a -> m a
+
+type Time     = Double -- seconds since the epoch
+type TimeDiff = Double -- in seconds
 
 
 maybeReturn :: MonadPlus m => Maybe a -> m a
@@ -52,8 +59,16 @@ forM_ x f = mapM_ f x
 ffor  x f = fmap  f x
 
 
+getTime :: IO Time
+getTime = do (System.Time.TOD secs picosecs) <- System.Time.getClockTime
+             return $ fromInteger secs + fromInteger picosecs / (10**(3*4))
+             
+             
 (&) :: Monoid m => m -> m -> m
 (&) = mappend
+
+(^&^) :: (Monad m, Monoid o) => m o -> m o -> m o    -- XXX
+(^&^) = liftM2 (&)
 
 
 -- XXX newer versions of Data.Monoid have this:

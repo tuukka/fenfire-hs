@@ -21,14 +21,17 @@ module Vobs where
 import Utils
 import Utils (Dual, Endo)
 
+import Cairo
+
 import Data.IORef
 import System.IO.Unsafe (unsafePerformIO)
+import qualified System.Time
 
 import Control.Monad.Reader
 import Control.Monad.Trans (liftIO, MonadIO)
 
 import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get, fill)
-import qualified Graphics.Rendering.Cairo as Cairo
+import qualified Graphics.Rendering.Cairo as C
 import Graphics.Rendering.Cairo.Matrix (Matrix(Matrix))
 import qualified Graphics.Rendering.Cairo.Matrix as Matrix
 import Graphics.UI.Gtk.Cairo
@@ -36,36 +39,29 @@ import Graphics.UI.Gtk.Cairo
 import Data.List (intersect)
 import Data.Map (Map, keys, (!), fromList, toList, insert, empty)
 import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.Monoid (Monoid(mempty, mappend))
 
 import Control.Monad (when)
 import Control.Monad.State
 import Control.Monad.Reader
 
-import qualified System.Time
-
-
-data Color = Color Double Double Double Double
-type Size  = (Double, Double)
-type Point = (Double, Double)
-type Rect  = (Matrix, Size)
-
-type Time     = Double -- seconds since the epoch
-type TimeDiff = Double -- in seconds
 
 type Scene k  = Map k (Matrix, Size)
-data Vob k    = Vob    { defaultSize :: Size, layoutVob :: Size -> Layout k }
-data Layout k = Layout { layoutScene :: Scene k, 
-                         renderLayout :: RenderContext k -> Render () }
+data Vob k    = Vob { defaultSize :: Size,
+                      vobScene :: RenderContext k -> Scene k,
+                      renderVob :: RenderContext k -> Render () }
 
-type Cx k a   = MaybeT (Reader (Size, RenderContext k)) a
-type Render a = Cairo.Render a
+type Cx k     = MaybeT (Reader (RenderContext k))
 
-data RenderContext k = RenderContext { 
-    rcMatrix :: Matrix, rcScene :: Scene k, rcFade :: Double,
-    rcColor :: Color, rcBgColor :: Color, rcFadeColor :: Color }
+runCx :: RenderContext k -> Cx k a -> Maybe a
+runCx cx m = runReader (runMaybeT m) cx
+
+data RenderContext k = RenderContext {
+    rcRect :: Rect, rcScene :: Scene k, rcFade :: Double,
+    rcFgColor :: Color, rcBgColor :: Color, rcFadeColor :: Color }
     
-newtype Path = Path { renderPath :: Render () }
+rcMatrix = fst . rcRect; rcSize = snd . rcRect
     
 type View s k  = s -> Vob k
 type Handler s = Event -> HandlerAction s
@@ -74,25 +70,27 @@ type HandlerAction s = StateT s (StateT (Bool, Bool) IO) ()
 
 
 instance Ord k => Monoid (Vob k) where
-    mempty = Vob (0,0) $ \_ -> Layout (Map.empty) $ \_ -> return ()
-    mappend (Vob (w1,h1) l1) (Vob (w2,h2) l2) = Vob (w,h) l where
+    mempty = Vob (0,0) (const Map.empty) (const $ return ())
+    mappend (Vob (w1,h1) sc1 r1) (Vob (w2,h2) sc2 r2) = Vob (w,h) sc r where
         (w,h) = (max w1 w2, max h1 h2)
-        l size = Layout (Map.union sc1 sc2) (\cx -> r1 cx >> r2 cx) where
-            (Layout sc1 r1, Layout sc2 r2) = (l1 size, l2 size)
+        sc cx = Map.union (sc1 cx) (sc2 cx)
+        r cx = r1 cx >> r2 cx
 
-instance Monoid a => Monoid (Cx k a) where
-    mempty  = return mempty
-    mappend = liftM2 mappend
+instance Ord k => MonadCx (Cx k) (Vob k) where
+    cxAsk = asks rcRect
 
-instance Monoid Path where
-    mempty      = Path $ return ()
-    mappend p q = Path $ renderPath p >> renderPath q
+    cxWrap f (Vob size sc ren) =
+        Vob size sc $ \cx -> maybeDo (runCx cx $ f $ ren cx) id
 
+    cxLocal r (Vob size sc ren) = let upd cx r' = cx { rcRect = r' } in
+        Vob size (\cx -> let e = error "blah"
+                             sc' = sc $ upd cx $ fromMaybe e (runCx cx r)
+                         in flip Map.mapWithKey (sc cx) $ \k _ -> sc' ! k)
+                 (\cx -> maybe (return ()) (ren . upd cx) (runCx cx r))
+    
 
-defaultWidth  (Vob (w,_) _) = w
-defaultHeight (Vob (_,h) _) = h
-
-[black, gray, lightGray, white] = [Color x x x 1 | x <- [0, 0.5, 0.9, 1]]
+defaultWidth  (Vob (w,_) _ _) = w
+defaultHeight (Vob (_,h) _ _) = h
 
 
 setInterp :: Bool -> HandlerAction s
@@ -102,107 +100,41 @@ unhandledEvent :: HandlerAction s
 unhandledEvent = lift $ modify $ \(interp,_) -> (interp, False)
 
 
-getTime :: IO Time
-getTime = do (System.Time.TOD secs picosecs) <- System.Time.getClockTime
-             return $ fromInteger secs + fromInteger picosecs / (10**(3*4))
-             
-             
-fromCx :: Cx k a -> Size -> RenderContext k -> Maybe a
-fromCx x size cx = runReader (runMaybeT x) (size, cx)
-
-(@@) :: Ord k => Cx k a -> k -> Cx k a   -- pronounce 'of'
-(@@) x key = do (_, cx) <- ask; (m,size) <- Map.lookup key (rcScene cx)
-                local (\_ -> (size, cx { rcMatrix=m })) x
-                      
-point :: Ord k => Double -> Double -> Cx k Point
-point x y = do cx <- liftM snd ask; return $ transformPt (rcMatrix cx) (x,y)
-  where transformPt (Matrix xx xy yx yy x0 y0) (dx,dy) =
-          (xx*dx + yx*dy + x0, xy*dx + yy*dy + y0) -- the gtk2hs impl is buggy
-
-anchor :: Ord k => Double -> Double -> Cx k Point
-anchor x y = do (w,h) <- liftM fst ask; point (x*w) (y*h)
-
-center :: Ord k => Cx k Point
-center = anchor 0.5 0.5
-
-moveTo :: Cx k Point -> Cx k Path
-moveTo p = do (x,y) <- p; return $ Path $ do Cairo.moveTo x y
-
-lineTo :: Cx k Point -> Cx k Path
-lineTo p = do (x,y) <- p; return $ Path $ do Cairo.lineTo x y
-
-line :: Ord k => Cx k Point -> Cx k Point -> Cx k Path
-line p1 p2 = moveTo p1 & lineTo p2
-
-extents :: Ord k => Cx k Path
-extents = moveTo (anchor 0 0) & lineTo (anchor 0 1) & lineTo (anchor 1 1)
-        & lineTo (anchor 1 0) & lineTo (anchor 0 0)
+(@@) :: Ord k => Cx k a -> k -> Cx k a   -- pronounce as 'of'
+(@@) x key = do cx <- ask; rect <- Map.lookup key (rcScene cx)
+                local (\_ -> cx { rcRect = rect }) x
 
 
 changeSize :: Ord k => Endo Size -> Endo (Vob k)
 changeSize f vob = vob { defaultSize = f $ defaultSize vob }
 
-changeLayout :: Ord k => (Size -> Endo (Layout k)) -> Endo (Vob k)
-changeLayout f vob = vob { layoutVob = \s -> f s (layoutVob vob s) }
+changeContext :: Ord k => Endo (RenderContext k) -> Endo (Vob k)
+changeContext f (Vob s sc r) = Vob s (sc . f) (r . f)
 
-changeScene :: Ord k => (Size -> Endo (Scene k)) -> Endo (Vob k)
-changeScene f = changeLayout $ \s l -> l { layoutScene = f s (layoutScene l) }
-
-changeRender :: Ord k => (Size -> Endo (RenderContext k -> Render ())) 
-                      -> Endo (Vob k)
-changeRender f = changeLayout $ \s layout -> 
-    layout { renderLayout = \cx -> f s (renderLayout layout) cx }
-    
-changeContext :: Ord k => (Size -> Endo (RenderContext k)) -> Endo (Vob k)
-changeContext f = changeRender $ \s ren cx -> ren (f s cx)
-
-ownSize :: Endo (Vob k)
-ownSize (Vob size layout) = Vob size (const l') where l' = layout size
+ownSize :: Ord k => Endo (Vob k)
+ownSize vob = 
+    changeContext (\cx -> cx { rcRect = (rcMatrix cx, defaultSize vob) }) vob
     
 
-comb :: Size -> (Size -> Vob k) -> Vob k
-comb size f = Vob size $ \size' -> layoutVob (f size') size'
+comb :: Size -> (RenderContext k -> Vob k) -> Vob k
+comb size f = 
+    Vob size (\cx -> vobScene (f cx) cx) (\cx -> renderVob (f cx) cx)
 
-renderVob :: Ord k => Vob k -> RenderContext k -> Render ()
-renderVob vob = renderLayout (layoutVob vob (defaultSize vob))
-
--- | Applies a matrix transformation to a vob.
---
-transform :: Ord k => Endo Matrix -> Endo (Vob k)
-transform t = ownSize . changeScene (\_ sc -> Map.map (\(m,s) -> (t m,s)) sc)
-            . changeContext (\_ cx -> cx { rcMatrix = t' (rcMatrix cx) })
-    where t' = (t Matrix.identity *)
-
-renderable :: Ord k => Size -> (Size -> RenderContext k -> Render ()) -> Vob k
-renderable size ren = resize size $ decoration $ ask >>= \(s',cx) -> return $
-    do Cairo.save; Cairo.transform (rcMatrix cx); ren s' cx; Cairo.restore
-    
-decoration :: (Cx k (Render ())) -> Vob k
-decoration render = Vob (0,0) $ \size -> Layout (Map.empty) $ \cx -> do
-    let Color r g b a = interpolate (rcFade cx) (rcFadeColor cx) (rcColor cx)
-    maybeDo (fromCx render size cx) $ \render' -> do
-        Cairo.save; Cairo.setSourceRGBA r g b a; render'; Cairo.restore
+renderable :: Ord k => Size -> Render () -> Vob k
+renderable size ren = Vob size (const Map.empty) $ \cx -> do
+    do C.save; C.transform (rcMatrix cx); ren; C.restore
 
 
 keyVob :: Ord k => k -> Endo (Vob k)
-keyVob key vob = flip ($) vob $
-    changeScene (\size -> Map.insert key (Matrix.identity, size))
-  . changeRender (\_ _ cx -> maybeDo (Map.lookup key $ rcScene cx) $ \(m,s) ->
-        renderLayout (layoutVob vob s) $ cx { rcMatrix = m })
+keyVob key vob = vob { 
+    vobScene = \cx -> Map.insert key (rcRect cx) (vobScene vob cx),
+    renderVob = \cx -> maybeDo (Map.lookup key $ rcScene cx) $ \rect ->
+        renderVob vob $ cx { rcRect = rect } }
         
 
-fill :: Ord k => Cx k Path -> Vob k
-fill p = decoration $ do p' <- p; return $ do renderPath p'; Cairo.fill
-
-stroke :: Ord k => Cx k Path -> Vob k
-stroke p = decoration $ do p' <- p; return $ do renderPath p'; Cairo.stroke
-
-paint :: Ord k => Vob k
-paint = decoration $ return $ Cairo.paint
-
-
 rectBox :: Ord k => Endo (Vob k)
-rectBox vob = useBgColor (fill extents) & clip extents vob & stroke extents
+rectBox vob = useBgColor (fill extents) & clip extents vob & 
+              useFgColor (stroke extents)
         
 
 pangoContext :: PangoContext
@@ -219,8 +151,7 @@ label :: Ord k => String -> Vob k
 label s = unsafePerformIO $ do 
     layout  <- layoutText pangoContext s
     (PangoRectangle _ _ w h, _) <- layoutGetExtents layout
-    return $ renderable (realToFrac w, realToFrac h) 
-                        (\_ _ -> showLayout layout)
+    return $ renderable (realToFrac w, realToFrac h) $ showLayout layout
     
 multiline :: Ord k => Bool -> Int -> String -> Vob k
 multiline useTextWidth widthInChars s = unsafePerformIO $ do 
@@ -237,60 +168,39 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
         <- layoutGetExtents layout
     let w = if useTextWidth then max w2 w3 else w1
         h = maximum [h1, h2, h3]
-    return $ renderable (realToFrac w, realToFrac h) 
-                        (\_ _ -> showLayout layout)
-
-between :: Ord k => Cx k Point -> Cx k Point -> Endo (Vob k)
-between p1 p2 vob = decoration $ do 
-    (x1,y1) <- p1;  (x2,y2) <- p2;  (_,cx) <- ask
-    let (x,y) = ((x1+x2)/2, (y1+y2)/2)
-        angle = atan2 (y2-y1) (x2-x1)
-    return $ do renderVob (translate x y $ rotate angle $ vob) cx
+    return $ renderable (realToFrac w, realToFrac h) $ showLayout layout
 
                           
-setColor :: Ord k => Color -> Endo (Vob k)
-setColor c = changeContext $ \_ cx -> cx { rcColor = c }
+fadedColor :: Ord k => Endo (Cx k Color)
+fadedColor c = liftM3 interpolate (asks rcFade) (asks rcFadeColor) c
+
+setFgColor :: Ord k => Color -> Endo (Vob k)
+setFgColor c = changeContext $ \cx -> cx { rcFgColor = c }
 
 setBgColor :: Ord k => Color -> Endo (Vob k)
-setBgColor c = changeContext $ \_ cx -> cx { rcBgColor = c }
+setBgColor c = changeContext $ \cx -> cx { rcBgColor = c }
+
+useFgColor :: Ord k => Endo (Vob k)
+useFgColor = withColor (fadedColor $ asks rcFgColor)
 
 useBgColor :: Ord k => Endo (Vob k)
-useBgColor = changeContext $ \_ cx -> cx { rcColor = rcBgColor cx }
+useBgColor = withColor (fadedColor $ asks rcBgColor)
 
 useFadeColor :: Ord k => Endo (Vob k)
-useFadeColor = changeContext $ \_ cx -> cx { rcColor = rcFadeColor cx }
+useFadeColor = withColor (asks rcFadeColor)
 
 fade :: Ord k => Double -> Endo (Vob k)
-fade a = changeContext $ \_ cx -> cx { rcFade = rcFade cx * a }
+fade a = changeContext $ \cx -> cx { rcFade = rcFade cx * a }
 
 
--- | Moves a vob by x and y.
---
-translate :: Ord k => Double -> Double -> Endo (Vob k)
-translate x y = transform $ Matrix.translate x y
-
--- | Rotates a vob by angle.
---
-rotate :: Ord k => Double -> Endo (Vob k)
-rotate angle = transform $ Matrix.rotate angle
-
--- | Scales a vob by sx and sy.
---
-scale :: Ord k => Double -> Double -> Endo (Vob k)
-scale sx sy vob = 
-    resize (defaultSize vob) $ transform (Matrix.scale sx sy) vob
-
-
-anchorVob :: Ord k => Double -> Double -> Endo (Vob k)
-anchorVob x y vob = translate (-x*w) (-y*h) vob where (w,h) = defaultSize vob
-    
 centerVob :: Ord k => Endo (Vob k)
-centerVob = anchorVob 0.5 0.5
+centerVob vob = translate (return (-w/2, -h/2)) $ ownSize vob
+    where (w,h) = defaultSize vob
 
                
 pad4 :: Ord k => Double -> Double -> Double -> Double -> Endo (Vob k)
-pad4 x1 x2 y1 y2 vob = resize (x1+w+x2, y1+h+y2) $ translate x1 x2 vob
-    where (w,h) = defaultSize vob
+pad4 x1 x2 y1 y2 vob = resize (x1+w+x2, y1+h+y2) $ translate vec vob
+    where (w,h) = defaultSize vob; vec = return (x1,y1)
     
 pad2 :: Ord k => Double -> Double -> Endo (Vob k)
 pad2 x y   = pad4 x x y y
@@ -307,11 +217,6 @@ resizeY h = changeSize $ \(w,_) -> (w,h)
 
 resize :: Ord k => Size -> Endo (Vob k)
 resize (w,h) = changeSize $ const (w,h)
-
-
-clip :: Ord k => Cx k Path -> Endo (Vob k)
-clip p = changeRender $ \s render cx -> maybeDo (fromCx p s cx) $ \p' -> do 
-    Cairo.save; renderPath p'; Cairo.clip; render cx; Cairo.restore
     
     
 class Interpolate a where
@@ -388,20 +293,25 @@ vobCanvas stateRef view handleEvent stateChanged bgColor = do
     
     widgetSetCanFocus canvas True
     
-    animRef <- newIORef (layoutVob mempty (0,0), noAnim Map.empty)
+    animRef <- newIORef (mempty, noAnim Map.empty)
     
     let getWH = do (cw, ch) <- drawingAreaGetSize canvas
                    return (fromIntegral cw, fromIntegral ch)
                    
-        getLayout = do (w,h) <- getWH; state <- readIORef stateRef
-                       let vob = useFadeColor paint & view state
-                       return $ layoutVob vob (w,h)
+        getVob = do state <- readIORef stateRef
+                    return $ useFadeColor paint & view state
+                    
+        getRenderContext sc = do 
+            size <- getWH; return $ RenderContext {
+                rcScene=sc, rcRect=(Matrix.identity, size), rcFade=1,
+                rcFgColor=black, rcBgColor=white, rcFadeColor=bgColor }
                    
-        updateAnim interpolate' = do
+        updateAnim interpolate' = mdo
 	    (_,anim) <- readIORef animRef
-	    layout'  <- getLayout
+            vob' <- getVob
 
-	    let scene' = layoutScene layout'
+            rc' <- getRenderContext scene'
+	    let scene' = vobScene vob' rc'
 	        
 	    time <- scene' `seq` getTime
 	    
@@ -410,13 +320,13 @@ vobCanvas stateRef view handleEvent stateChanged bgColor = do
                         then interpAnim time 0.5 scene scene'
 	                else noAnim scene'
 
-	    writeIORef animRef (layout', anim')
+	    writeIORef animRef (vob', anim')
 	
 	    widgetQueueDraw canvas
 
-    onRealize canvas $ do layout <- getLayout
-                          let scene = layoutScene layout
-                          writeIORef animRef (layout, noAnim scene)
+    onRealize canvas $ mdo vob <- getVob; rc <- getRenderContext scene
+                           let scene = vobScene vob rc
+                           writeIORef animRef (vob, noAnim scene)
     
     onConfigure canvas $ \_event -> do updateAnim False; return True
 
@@ -443,14 +353,11 @@ vobCanvas stateRef view handleEvent stateChanged bgColor = do
     onExpose canvas $ \(Expose {}) -> do
         drawable <- drawingAreaGetDrawWindow canvas
         
-        (layout, anim) <- readIORef animRef;  time <- getTime
+        (vob, anim) <- readIORef animRef;  time <- getTime
         let (scene, rerender) = anim time
+        rc <- getRenderContext scene
         
-        renderWithDrawable drawable $ timeDbg "redraw" $
-            renderLayout layout $ RenderContext {
-                rcMatrix=Matrix.identity, rcScene=scene, rcFade=1,
-                rcColor=black, rcBgColor=white, rcFadeColor=bgColor
-            }
+        renderWithDrawable drawable $ timeDbg "redraw" $ renderVob vob rc
 	
 	if rerender then widgetQueueDraw canvas else return ()
 
