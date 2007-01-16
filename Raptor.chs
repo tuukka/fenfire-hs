@@ -162,7 +162,10 @@ filenameToTriples filename = do
   result <- newIORef []
 
   initRaptor
-  rdf_parser <- withCString "guess" new_parser 
+  let suffix = reverse $ takeWhile (/= '.') $ reverse filename
+      parsertype = case suffix of "turtle" -> "turtle"
+                                  _        -> "guess"
+  rdf_parser <- withCString parsertype new_parser 
   when (rdf_parser == nullPtr) $ fail "parser is null"
   handler <- mkHandler $ \_user_data triple -> do
     s <- getSubject triple
