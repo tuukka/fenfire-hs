@@ -69,9 +69,8 @@ sortConns g = Data.List.sortBy cmp'
           catOrds EQ o = o; catOrds o _ = o
 
 rotate :: ViewSettings -> Rotation -> Int -> Maybe Rotation
-rotate vs (Rotation g n r) dir = let rot = Rotation g n (r+dir) in
-    if (any isJust [getConn vs rot d | d <- [Pos, Neg]])
-        then Just rot else Nothing
+rotate vs (Rotation g n r) dir = let rot = Rotation g n (r+dir) in do
+    msum [getConn vs rot d | d <- [Pos, Neg]]; return rot
 
 getConn :: ViewSettings -> Rotation -> Dir -> Maybe (Node, Rotation)
 getConn vs (Rotation graph node r) dir = do
