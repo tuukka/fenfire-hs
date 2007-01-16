@@ -29,6 +29,7 @@ import System.Environment (getArgs)
 
 import Control.Monad (when)
 import Data.IORef (modifyIORef, readIORef, newIORef)
+import Control.Exception (bracket)
 
 #include <raptor.h>
 
@@ -68,6 +69,7 @@ type Triple = (Identifier, Identifier, Identifier)
 data Identifier = Uri String | Blank String | Literal String
                   deriving (Show)
 
+mkIdentifier :: IO (Ptr ()) -> IO CInt -> IO Identifier
 mkIdentifier value format = do
   value' <- value
   format' <- format
@@ -81,26 +83,35 @@ mkIdentifier value format = do
           f v IDENTIFIER_TYPE_ANONYMOUS = peekCString v >>= return . Blank
           f _ i = error $ "Raptor.mkIdentifier: Deprecated type: " ++ show i
 
-getSubject s = mkIdentifier ({#get statement->subject#} s)
-                            ({#get statement->subject_type#} s)
+getSubject :: Statement -> IO Identifier
+getSubject (Statement s) = mkIdentifier ({#get statement->subject#} s)
+                                        ({#get statement->subject_type#} s)
 
-getPredicate s = mkIdentifier ({#get statement->predicate#} s)
-                              ({#get statement->predicate_type#} s)
+getPredicate :: Statement -> IO Identifier
+getPredicate (Statement s) = mkIdentifier ({#get statement->predicate#} s)
+                                          ({#get statement->predicate_type#} s)
 
-getObject s = mkIdentifier ({#get statement->object#} s)
-                           ({#get statement->object_type#} s)
+getObject :: Statement -> IO Identifier
+getObject (Statement s) = mkIdentifier ({#get statement->object#} s)
+                                       ({#get statement->object_type#} s)
 
-withIdentifier setValue setFormat t (Uri s) cnt = do 
-    setFormat (unStatement t) (cFromEnum IDENTIFIER_TYPE_RESOURCE)
-    uri <- withCString s $ {# call new_uri #} . castPtr
-    setValue (unStatement t) (castPtr uri)
-    cnt
-    {# call free_uri #} uri
-withIdentifier setValue setFormat t (Literal s) cnt = do
-    setFormat (unStatement t) (cFromEnum IDENTIFIER_TYPE_LITERAL)
+withURI :: String -> (Ptr URI -> IO a) -> IO a
+withURI string = bracket (withCString string $ {# call new_uri #} . castPtr)
+                         {# call free_uri #}
+
+withIdentifier :: (Ptr Statement -> Ptr () -> IO ()) ->
+                  (Ptr Statement -> CInt -> IO ()) -> 
+                  Statement -> Identifier -> IO a -> IO a
+withIdentifier setValue setFormat (Statement t) (Uri s) io = do 
+    setFormat t (cFromEnum IDENTIFIER_TYPE_RESOURCE)
+    withURI s $ \uri -> do
+        setValue t (castPtr uri)
+        io
+withIdentifier setValue setFormat (Statement t) (Literal s) io = do
+    setFormat t (cFromEnum IDENTIFIER_TYPE_LITERAL)
     withCString s $ \str -> do
-        setValue (unStatement t) (castPtr str)
-        cnt
+        setValue t (castPtr str)
+        io
 withIdentifier _ _ _ i _ =
     error $ "Raptor.setIdentifier: unimplemented: " ++ show i
 
@@ -113,7 +124,7 @@ withPredicate = withIdentifier {# set statement->predicate #}
 withObject = withIdentifier {# set statement->object #}
                             {# set statement->object_type #}
 
-type Handler a = Ptr a -> Ptr Statement -> IO ()
+type Handler a = Ptr a -> Statement -> IO ()
 foreign import ccall "wrapper"
    mkHandler :: (Handler a) -> IO (FunPtr (Handler a))
 
@@ -125,7 +136,7 @@ foreign import ccall "raptor.h raptor_new_uri" new_uri :: Ptr CChar -> IO (Ptr U
 foreign import ccall "raptor.h raptor_uri_copy" uri_copy :: Ptr URI -> IO (Ptr URI)
 foreign import ccall "raptor.h raptor_parse_file" parse_file :: Ptr Parser -> Ptr URI -> Ptr URI -> IO ()
 
-foreign import ccall "raptor.h raptor_print_statement_as_ntriples" print_statement_as_ntriples :: Ptr Statement -> Ptr CFile -> IO ()
+foreign import ccall "raptor.h raptor_print_statement_as_ntriples" print_statement_as_ntriples :: Statement -> Ptr CFile -> IO ()
 
 foreign import ccall "stdio.h fdopen" fdopen :: Fd -> CString -> IO (Ptr CFile)
 foreign import ccall "stdio.h fputc" fputc :: CChar -> Ptr CFile -> IO ()
@@ -195,6 +206,7 @@ print_triple :: Ptr CFile -> Handler a
 print_triple outfile _user_data s = do print_statement_as_ntriples s outfile
                                        fputc (castCharToCChar '\n') outfile
 
+filenameToStdout :: String -> IO ()
 filenameToStdout filename = do
   outfile <- withCString "w" $ fdopen stdOutput
 
