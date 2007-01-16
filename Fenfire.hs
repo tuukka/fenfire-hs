@@ -66,23 +66,19 @@ sortConns :: Graph -> [(Node, Node)] -> [(Node, Node)]
 sortConns g = Data.List.sortBy cmp'
     where cmp n1 n2 = compare (getText g n1) (getText g n2)
           cmp' (p1,n1) (p2,n2) = catOrds (cmp p1 p2) (cmp n1 n2)
-          catOrds EQ o = o; catOrds o  _ = o
+          catOrds EQ o = o; catOrds o _ = o
 
 rotate :: ViewSettings -> Rotation -> Int -> Maybe Rotation
-rotate vs (Rotation g n r) dir = 
-    if idx < 0 || idx >= h then Nothing else Just $ Rotation g n (r+dir)
-  where 
-    h = max (length $ conns vs g n Pos) (length $ conns vs g n Neg)
-    idx = r+dir+(h `div` 2)
+rotate vs (Rotation g n r) dir = let rot = Rotation g n (r+dir) in
+    if (any isJust [getConn vs rot d | d <- [Pos, Neg]])
+        then Just rot else Nothing
 
 getConn :: ViewSettings -> Rotation -> Dir -> Maybe (Node, Rotation)
-getConn vs (Rotation graph node rot) dir = result where
-    c = conns vs graph node dir
-    index = (length c `div` 2) + rot
-    result = if index >= 0 && index < length c 
-             then let (p,n) = c !! index in 
-                  fmap (\r -> (p,r)) (getRotation vs graph n p (rev dir) node)
-             else Nothing
+getConn vs (Rotation graph node r) dir = do
+    let c = conns vs graph node dir; i = (length c `div` 2) + r
+    guard $ i >= 0 && i < length c; let (p,n) = c !! i
+    rot <- getRotation vs graph n p (rev dir) node
+    return (p,rot)
              
 move :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
 move vs rot dir = fmap snd (getConn vs rot dir)
