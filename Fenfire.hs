@@ -351,6 +351,7 @@ main = mdo
     
     textView <- textViewNew
     textViewSetAcceptsTab textView False
+    textViewSetWrapMode textView WrapWordChar
 
     let stateChanged (Rotation g n _r, _mark, _fileName) = do
         buf <- textBufferNew Nothing
