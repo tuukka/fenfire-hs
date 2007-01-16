@@ -1,3 +1,7 @@
+-- For (instance (MonadCx cx r, Monoid m) => Monoid (cx m)):
+{-# OPTIONS_GHC -fallow-undecidable-instances -fallow-incoherent-instances #-}
+-- More, implied by the previous on GHC 6.6 but needed for earlier:
+{-# OPTIONS_GHC -fallow-overlapping-instances #-}
 module Cairo where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
@@ -50,7 +54,12 @@ class (Monad cx, Monoid r) => MonadCx cx r | cx -> r, r -> cx where
 instance Monoid Path where
     mempty      = Path $ return ()
     mappend p q = Path $ renderPath p >> renderPath q
-    
+
+--instance MonadCx cx r => Monoid (cx Path) where
+instance (MonadCx cx r, Monoid m) => Monoid (cx m) where
+    mempty = return mempty
+    mappend = liftM2 mappend
+
 cxMatrix :: MonadCx cx r => cx Matrix
 cxMatrix = liftM fst cxAsk
 
