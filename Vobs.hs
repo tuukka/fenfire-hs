@@ -19,7 +19,6 @@ module Vobs where
 -- MA  02111-1307  USA
 
 import Utils
-import Utils (Dual, Endo)
 
 import Cairo
 

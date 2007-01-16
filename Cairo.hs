@@ -19,11 +19,10 @@ module Cairo where
 -- MA  02111-1307  USA
 
 import Utils
-import Utils (Endo)
 
 import Control.Monad
 
-import Data.Monoid
+import Data.Monoid (Monoid(mappend, mempty))
 
 import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get, fill)
 import qualified Graphics.Rendering.Cairo as C

@@ -21,7 +21,6 @@ module Fenfire where
 import Cairo hiding (rotate)
 import Vobs
 import Utils
-import Utils (Dual, Endo)
 import RDF
 
 import qualified Raptor (filenameToTriples, triplesToFilename, Identifier(..))
@@ -34,8 +33,8 @@ import Data.IORef
 import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
 import Data.Monoid(Monoid(mconcat))
 
-import Control.Monad (when, guard)
-import Control.Monad.Reader
+import Control.Monad (when, guard, msum)
+import Control.Monad.Reader (ReaderT, runReaderT, local, ask, asks)
 import Control.Monad.State (StateT, get, gets, modify, put, execStateT)
 import Control.Monad.Trans (lift, liftIO)
 import Control.Monad.Writer (Writer, execWriter, tell)

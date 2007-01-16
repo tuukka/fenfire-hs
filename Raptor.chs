@@ -18,15 +18,17 @@ module Raptor where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Foreign hiding (withObject)
-import Foreign.C
+import Foreign (Ptr, FunPtr, Storable(pokeByteOff, peekByteOff), allocaBytes,
+                nullPtr, castPtr, freeHaskellFunPtr)
+import Foreign.C (CString, castCharToCChar, withCString, peekCString, CFile,
+                  CSize, CInt, CUChar, CChar)
 
 import System.Posix.IO (stdOutput)
 import System.Posix.Types (Fd)
 import System.Environment (getArgs)
 
 import Control.Monad (when)
-import Data.IORef
+import Data.IORef (modifyIORef, readIORef, newIORef)
 
 #include <raptor.h>
 
