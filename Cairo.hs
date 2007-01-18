@@ -40,7 +40,7 @@ type Point = (Double, Double)
 type Rect  = (Matrix, Size)
 
 type Render a = C.Render a
-newtype Path  = Path { renderPath :: Render () }
+newtype Path  = Path { renderPath :: Render () }      deriving Monoid
 
 class (Monad cx, Monoid r) => MonadCx cx r | cx -> r, r -> cx where
     cxAsk     :: cx Rect
@@ -51,12 +51,7 @@ class (Monad cx, Monoid r) => MonadCx cx r | cx -> r, r -> cx where
     cxRender :: cx (Render ()) -> r
     cxRender r = cxWrap (const r) mempty
 
-instance Monoid Path where
-    mempty      = Path $ return ()
-    mappend p q = Path $ renderPath p >> renderPath q
-
---instance MonadCx cx r => Monoid (cx Path) where
-instance (MonadCx cx r, Monoid m) => Monoid (cx m) where
+instance (Monad m, Monoid o) => Monoid (m o) where
     mempty = return mempty
     mappend = liftM2 mappend
 
@@ -160,9 +155,9 @@ moveTo p = do (x,y) <- p; return $ Path $ do C.moveTo x y
 lineTo :: MonadCx cx r => cx Point -> cx Path
 lineTo p = do (x,y) <- p; return $ Path $ do C.lineTo x y
 
-line :: MonadCx cx r => cx Point -> cx Point -> cx Path
-line p1 p2 = moveTo p1 ^&^ lineTo p2
+line :: (MonadCx cx r, Monoid (cx Path)) => cx Point -> cx Point -> cx Path
+line p1 p2 = moveTo p1 & lineTo p2
 
-extents :: MonadCx cx r => cx Path
-extents = moveTo (anchor 0 0) ^&^ lineTo (anchor 0 1) ^&^ lineTo (anchor 1 1)
-      ^&^ lineTo (anchor 1 0) ^&^ lineTo (anchor 0 0)
+extents :: (MonadCx cx r, Monoid (cx Path)) => cx Path
+extents = moveTo (anchor 0 0) & lineTo (anchor 0 1) & lineTo (anchor 1 1)
+        & lineTo (anchor 1 0) & lineTo (anchor 0 0)

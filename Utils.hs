@@ -67,9 +67,6 @@ getTime = do (System.Time.TOD secs picosecs) <- System.Time.getClockTime
 (&) :: Monoid m => m -> m -> m
 (&) = mappend
 
-(^&^) :: (Monad m, Monoid o) => m o -> m o -> m o    -- XXX
-(^&^) = liftM2 (&)
-
 
 -- XXX newer versions of Data.Monoid have this:
 newtype Dual m = Dual { getDual :: m } 

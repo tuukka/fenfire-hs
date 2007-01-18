@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fallow-overlapping-instances #-}
 module Vobs where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
