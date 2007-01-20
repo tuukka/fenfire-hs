@@ -39,7 +39,7 @@ import Graphics.UI.Gtk.Cairo
 import Data.List (intersect)
 import Data.Map (Map, keys, (!), fromList, toList, insert, empty)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Monoid (Monoid(mempty, mappend))
 
 import Control.Monad (when)
@@ -47,7 +47,7 @@ import Control.Monad.State
 import Control.Monad.Reader
 
 
-type Scene k  = Map k (Matrix, Size)
+type Scene k  = Map k (Maybe (Matrix, Size))
 data Vob k    = Vob { defaultSize :: Size,
                       vobScene :: RenderContext k -> Scene k,
                       renderVob :: RenderContext k -> Render () }
@@ -81,12 +81,17 @@ instance Ord k => MonadCx (Cx k) (Vob k) where
 
     cxWrap f (Vob size sc ren) =
         Vob size sc $ \cx -> maybeDo (runCx cx $ f $ ren cx) id
-
-    cxLocal r (Vob size sc ren) = let upd cx r' = cx { rcRect = r' } in
-        Vob size (\cx -> let e = error "blah"
-                             sc' = sc $ upd cx $ fromMaybe e (runCx cx r)
-                         in flip Map.mapWithKey (sc cx) $ \k _ -> sc' ! k)
-                 (\cx -> maybe (return ()) (ren . upd cx) (runCx cx r))
+        
+instance Ord k => Transform (Cx k) (Vob k) where
+    transform f (Vob size sc ren) = Vob size
+            (\cx -> let msc = liftM sc (upd cx)
+                        sc0 = sc $ cx { rcRect = (rcMatrix cx, size) }
+                    in Map.mapWithKey (\k _ -> msc >>= (! k)) sc0)
+            (\cx -> maybe (return ()) ren (upd cx))
+        where upd cx = flip liftM (runCx cx (f $ return Matrix.identity))
+                           (\m -> cx { rcRect = (m * rcMatrix cx, size) })
+                        
+                
     
 
 defaultWidth  (Vob (w,_) _ _) = w
@@ -101,7 +106,8 @@ unhandledEvent = lift $ modify $ \(interp,_) -> (interp, False)
 
 
 (@@) :: Ord k => Cx k a -> k -> Cx k a   -- pronounce as 'of'
-(@@) x key = do cx <- ask; rect <- Map.lookup key (rcScene cx)
+(@@) x key = do cx <- ask
+                rect <- maybeReturn =<< Map.lookup key (rcScene cx)
                 local (\_ -> cx { rcRect = rect }) x
 
 
@@ -127,9 +133,10 @@ renderable size ren = Vob size (const Map.empty) $ \cx -> do
 
 keyVob :: Ord k => k -> Endo (Vob k)
 keyVob key vob = vob { 
-    vobScene = \cx -> Map.insert key (rcRect cx) (vobScene vob cx),
-    renderVob = \cx -> maybeDo (Map.lookup key $ rcScene cx) $ \rect ->
-        renderVob vob $ cx { rcRect = rect } }
+    vobScene = \cx -> Map.insert key (Just $ rcRect cx) (vobScene vob cx),
+    renderVob = \cx -> 
+        maybeDo (maybeReturn =<< (Map.lookup key $ rcScene cx)) $ \rect ->
+            renderVob vob $ cx { rcRect = rect } }
         
 
 rectBox :: Ord k => Endo (Vob k)
@@ -194,13 +201,12 @@ fade a = changeContext $ \cx -> cx { rcFade = rcFade cx * a }
 
 
 centerVob :: Ord k => Endo (Vob k)
-centerVob vob = translate (return (-w/2, -h/2)) $ ownSize vob
-    where (w,h) = defaultSize vob
+centerVob vob = translate (-w/2) (-h/2) vob  where (w,h) = defaultSize vob
 
                
 pad4 :: Ord k => Double -> Double -> Double -> Double -> Endo (Vob k)
-pad4 x1 x2 y1 y2 vob = resize (x1+w+x2, y1+h+y2) $ translate vec vob
-    where (w,h) = defaultSize vob; vec = return (x1,y1)
+pad4 x1 x2 y1 y2 vob = resize (x1+w+x2, y1+h+y2) $ translate x1 y1 vob
+    where (w,h) = defaultSize vob
     
 pad2 :: Ord k => Double -> Double -> Endo (Vob k)
 pad2 x y   = pad4 x x y y
@@ -220,7 +226,7 @@ resize (w,h) = changeSize $ const (w,h)
     
     
 class Interpolate a where
-    interpolate :: Double -> a -> a -> a
+    interpolate :: Double -> Op a
     
 instance Interpolate Double where
     interpolate fract x y = (1-fract)*x + fract*y
@@ -235,9 +241,9 @@ instance Interpolate Matrix where
         Matrix (i u u') (i v v') (i w w') (i x x') (i y y') (i z z') where
             i = interpolate fract
 
-interpolateScene :: Ord k => Double -> Scene k -> Scene k -> Scene k
+interpolateScene :: Ord k => Double -> Op (Scene k)
 interpolateScene fract sc1 sc2 =
-    fromList [(key, f (sc1 ! key) (sc2 ! key)) | key <- interpKeys] where
+    fromList [(key, liftM2 f (sc1 ! key) (sc2 ! key)) | key <- interpKeys] where
         interpKeys = intersect (keys sc1) (keys sc2)
         f (m1,(w1,h1)) (m2,(w2,h2)) = (i m1 m2, (i w1 w2, i h1 h2))
         i x y = interpolate fract x y
@@ -247,8 +253,10 @@ isInterpUseful :: Ord k => Scene k -> Scene k -> Bool
 isInterpUseful sc1 sc2 = 
     not $ all same [(sc1 ! key, sc2 ! key) | key <- interpKeys]
     where same (a,b) = all (\d -> abs d < 5) $ zipWith (-) (values a) (values b)
-          values (Matrix a b c d e f, (w,h)) = [a,b,c,d,e,f,w,h]
-          interpKeys = intersect (keys sc1) (keys sc2)
+          values (Just (Matrix a b c d e f, (w,h))) = [a,b,c,d,e,f,w,h]
+          values Nothing = error "shouldn't happen"
+          interpKeys = intersect (getKeys sc1) (getKeys sc2)
+          getKeys sc = [k | k <- keys sc, isJust (sc ! k)]
           
 instance Show Modifier where
     show Shift = "Shift"
@@ -257,7 +265,7 @@ instance Show Modifier where
     show Apple = "Apple"
     show Compose = "Compose"
 
-timeDbg :: MonadIO m => String -> m () -> m ()
+timeDbg :: MonadIO m => String -> Endo (m ())
 timeDbg s act | False     = do out s; act; out s
               | otherwise = act
     where out t = liftIO $ do time <- System.Time.getClockTime

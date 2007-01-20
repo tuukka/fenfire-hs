@@ -37,6 +37,7 @@ import qualified System.Time
 type Endo a = a -> a
 
 type EndoM m a = a -> m a
+type Op a      = a -> a -> a
 
 type Time     = Double -- seconds since the epoch
 type TimeDiff = Double -- in seconds

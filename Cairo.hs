@@ -42,11 +42,24 @@ type Rect  = (Matrix, Size)
 type Render a = C.Render a
 newtype Path  = Path { renderPath :: Render () }      deriving Monoid
 
-class (Monad cx, Monoid r) => MonadCx cx r | cx -> r, r -> cx where
-    cxAsk     :: cx Rect
+class Monad cx => Transform cx r | r -> cx where
+    transform :: Endo (cx Matrix) -> Endo r
+    
 
+newtype CxMatrix cx = CxMatrix { fromCxMatrix :: cx Matrix }
+
+instance Monad cx => Transform cx (CxMatrix cx) where
+    transform f = CxMatrix . f . fromCxMatrix
+    
+wrapTransform :: Transform cx r => cx (Endo (CxMatrix cx)) -> Endo r
+wrapTransform f = transform $ \m -> 
+    do f' <- f; fromCxMatrix $ f' $ CxMatrix m
+    
+
+class (Monad cx, Monoid r, Transform cx r) => 
+      MonadCx cx r | cx -> r, r -> cx where
+    cxAsk     :: cx Rect
     cxWrap    :: EndoM cx (Render ()) -> Endo r
-    cxLocal   :: cx Rect -> Endo r
 
     cxRender :: cx (Render ()) -> r
     cxRender r = cxWrap (const r) mempty
@@ -88,41 +101,38 @@ withColor :: MonadCx cx r => cx Color -> Endo r
 withColor c = cxWrap $ \ren -> c >>= \(Color r g b a) -> return $ do
     C.save; C.setSourceRGBA r g b a; ren; C.restore
     
--- | Applies a matrix transformation to a renderable.
---
-transform :: MonadCx cx r => cx (Endo Matrix) -> Endo r
-transform f = cxLocal $ do (m,s) <- cxAsk; f' <- f
-                           return (f' Matrix.identity * m, s)
-
 -- | Moves a renderable by x and y.
 --
-translate :: MonadCx cx r => cx (Double, Double) -> Endo r
-translate = transform . liftM (\(x,y) -> Matrix.translate x y)
+translate :: Transform cx r => Double -> Double -> Endo r
+translate x y = transform $ liftM (Matrix.translate x y)
 
 -- | Moves a renderable to the specific point p.
 --
-translateTo :: MonadCx cx r => cx Point -> Endo r
-translateTo p = translate $ do p' <- p; m <- cxMatrix
-                               return $ transformPoint (Matrix.invert m) p'
+translateTo :: (MonadCx cx r, Transform cx r) => cx Point -> Endo r
+translateTo p = wrapTransform $ do
+    m' <- cxMatrix;  p' <- p;  let (x,y) = transformPoint (Matrix.invert m') p'
+    return $ translate x y
 
 -- | Rotates a renderable by angle.
 --
-rotate :: MonadCx cx r => cx Double -> Endo r
-rotate angle = transform $ liftM Matrix.rotate angle
+rotate :: Transform cx r => Double -> Endo r
+rotate angle = transform $ liftM (Matrix.rotate angle)
 
 -- | Scales a renderable by sx and sy.
 --
-scale2 :: MonadCx cx r => cx (Double, Double) -> Endo r
-scale2 = transform . liftM (\(sx,sy) -> Matrix.scale sx sy)
+scale2 :: Transform cx r => Double -> Double -> Endo r
+scale2 sx sy = transform $ liftM (Matrix.scale sx sy)
     
-scale :: MonadCx cx r => cx Double -> Endo r
-scale = scale2 . liftM (\s -> (s,s))
+-- | Scales a renderable by sc.
+--
+scale :: Transform cx r => Double -> Endo r
+scale sc = scale2 sc sc
 
 
-between :: MonadCx cx r => cx Point -> cx Point -> Endo r
-between p1 p2 = translate p . rotate a where
-    p = do (x1,y1) <- p1; (x2,y2) <- p2; return ((x1+x2)/2, (y1+y2)/2)
-    a = do (x1,y1) <- p1; (x2,y2) <- p2; return $ atan2 (y2-y1) (x2-x1)
+between :: (MonadCx cx r, Transform cx r') => cx Point -> cx Point -> Endo r'
+between p1 p2 = wrapTransform $ do
+    (x1,y1) <- p1;  (x2, y2) <- p2;  let x = (x1+x2)/2;  y = (y1+y2)/2
+    return $ translate x y . rotate (atan2 (y2-y1) (x2-x1))
 
                           
 point :: MonadCx cx r => Double -> Double -> cx Point
