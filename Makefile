@@ -4,7 +4,7 @@ GHCFLAGS=-fglasgow-exts -hide-package haskell98 -Wall -fno-warn-unused-imports -
 
 GHCCMD = $(GHC) $(GHCFLAGS)
 
-SOURCES=*.hs *.chs *.fhs Cairo.hs Raptor.hs Raptor.o
+SOURCES=*.hs *.chs *.fhs Cairo.hs VobTest.hs Fenfire.hs Raptor.hs Raptor.o
 TARGETS=vobtest functortest fenfire
 
 all: $(TARGETS)
@@ -43,4 +43,4 @@ run-functortest: functortest
 	trhsx $< $@
 
 clean:
-	rm -f *.hi *.i Raptor.chi Raptor.h Raptor.hs Raptor_stub.* Cairo.hs *.o $(TARGETS)
+	rm -f *.hi *.i Raptor.chi Raptor.h Raptor.hs Raptor_stub.* Cairo.hs VobTest.hs Fenfire.hs *.o $(TARGETS)
