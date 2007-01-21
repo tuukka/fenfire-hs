@@ -4,8 +4,8 @@ GHCFLAGS=-fglasgow-exts -hide-package haskell98 -Wall -fno-warn-unused-imports -
 
 GHCCMD = $(GHC) $(GHCFLAGS)
 
-SOURCES=*.hs *.chs Raptor.hs Raptor.o
-TARGETS=vobtest fenfire
+SOURCES=*.hs *.chs *.fhs Cairo.hs Raptor.hs Raptor.o
+TARGETS=vobtest functortest fenfire
 
 all: $(TARGETS)
 
@@ -25,11 +25,22 @@ run-fenfire: fenfire
 	./$< $(ARGS)
 
 # __attribute__ needs to be a no-op until c2hs learns to parse them in raptor.h
-Raptor.hs: Raptor.chs
+%.hs: %.chs
 	c2hs --cppopts '-D"__attribute__(A)= "' $<
 
 Raptor.o: Raptor.hs
 	$(GHCCMD) -c -fvia-C -o $@ $<
+
+functortest: FunctorTest.hs $(SOURCES)
+	$(GHCCMD) -o $@ -main-is $(shell basename $< .hs).main --make $<
+	touch $@
+
+run-functortest: functortest
+	./$<
+
+
+%.hs: %.fhs
+	trhsx $< $@
 
 clean:
 	rm -f *.hi *.i Raptor.chi Raptor.h Raptor.hs Raptor_stub.* *.o $(TARGETS)
