@@ -75,23 +75,24 @@ instance Ord k => Monoid (Vob k) where
         (w,h) = (max w1 w2, max h1 h2)
         sc cx = Map.union (sc1 cx) (sc2 cx)
         r cx = r1 cx >> r2 cx
+        
+instance Functor (Cx k) where fmap = liftM
+instance FunctorZip (Cx k) where fzip = liftM2 (\x y -> (x,y))
+instance Monoidal (Cx k) where pure = return
 
-instance Ord k => MonadCx (Cx k) (Vob k) where
+instance Ord k => Cairo (Cx k) (Vob k) where
     cxAsk = asks rcRect
 
     cxWrap f (Vob size sc ren) =
         Vob size sc $ \cx -> maybeDo (runCx cx $ f $ ren cx) id
         
-instance Ord k => Transform (Cx k) (Vob k) where
     transform f (Vob size sc ren) = Vob size
             (\cx -> let msc = liftM sc (upd cx)
                         sc0 = sc $ cx { rcRect = (rcMatrix cx, size) }
                     in Map.mapWithKey (\k _ -> msc >>= (! k)) sc0)
             (\cx -> maybe (return ()) ren (upd cx))
-        where upd cx = flip liftM (runCx cx (f $ return Matrix.identity))
-                           (\m -> cx { rcRect = (m * rcMatrix cx, size) })
-                        
-                
+        where upd cx = do f' <- runCx cx f; let m = f' Matrix.identity
+                          return $ cx { rcRect = (m * rcMatrix cx, size) }
     
 
 defaultWidth  (Vob (w,_) _ _) = w
@@ -201,11 +202,13 @@ fade a = changeContext $ \cx -> cx { rcFade = rcFade cx * a }
 
 
 centerVob :: Ord k => Endo (Vob k)
-centerVob vob = translate (-w/2) (-h/2) vob  where (w,h) = defaultSize vob
+centerVob vob = translate (pure (-w/2)) (pure (-h/2)) vob
+    where (w,h) = defaultSize vob
 
                
 pad4 :: Ord k => Double -> Double -> Double -> Double -> Endo (Vob k)
-pad4 x1 x2 y1 y2 vob = resize (x1+w+x2, y1+h+y2) $ translate x1 y1 vob
+pad4 x1 x2 y1 y2 vob = 
+    resize (x1+w+x2, y1+h+y2) $ translate (pure x1) (pure y1) vob
     where (w,h) = defaultSize vob
     
 pad2 :: Ord k => Double -> Double -> Endo (Vob k)

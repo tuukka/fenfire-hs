@@ -32,6 +32,8 @@ import Data.Monoid (Monoid(..))
 
 import qualified System.Time
 
+infixr 0 $$
+
 
 -- just what the rhs says, a function from a type to itself
 type Endo a = a -> a
@@ -75,6 +77,37 @@ newtype Dual m = Dual { getDual :: m }
 instance Monoid m => Monoid (Dual m) where
     mempty = Dual mempty
     mappend (Dual m) (Dual n) = Dual (n & m)
+    
+    
+class Functor f => FunctorZip f where
+    fzip :: f a -> f b -> f (a,b)
+
+instance FunctorZip [] where
+    fzip = zip
+    
+class FunctorZip f => Monoidal f where
+    pure :: a -> f a
+    
+funzip :: Functor f => f (a,b) -> (f a, f b)
+funzip x = (fmap fst x, fmap snd x)
+
+(<*>) :: FunctorZip f => f (a -> b) -> f a -> f b
+(<*>) = fmap2 (\f x -> f x)
+
+($$) :: Functor f => (a -> b) -> f a -> f b
+($$) = fmap
+
+fmap2 :: FunctorZip f => (a -> b -> c) -> f a -> f b -> f c
+fmap2 f a b = fmap (uncurry f) (fzip a b)
+
+ffor2 :: FunctorZip f => f a -> f b -> (a -> b -> c) -> f c
+ffor2 x y f = fmap2 f x y
+
+fmap3 :: FunctorZip f => (a -> b -> c -> d) -> f a -> f b -> f c -> f d
+fmap3 f a b c = fmap (uncurry $ uncurry f) (fzip (fzip a b) c)
+
+ffor3 :: FunctorZip f => f a -> f b -> f c -> (a -> b -> c -> d) -> f d
+ffor3 a b c f = fmap3 f a b c
 
 
 newtype BreadthT m a = BreadthT { runBreadthT :: WriterT [BreadthT m ()] m a }
@@ -84,7 +117,7 @@ scheduleBreadthT m = BreadthT $ tell [m >> return ()]
 
 execBreadthT :: Monad m => BreadthT m a -> m ()
 execBreadthT m = do rest <- execWriterT (runBreadthT m)
-                    when (not $ null rest) $ execBreadthT (sequence_ $ rest)
+                    when (not $ null rest) $ execBreadthT (sequence_ rest)
 
 instance Monad m => Monad (BreadthT m) where
     return  = BreadthT . return

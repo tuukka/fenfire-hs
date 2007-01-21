@@ -1,4 +1,4 @@
--- For (instance (MonadCx cx r, Monoid m) => Monoid (cx m)):
+-- For (instance (Cairo cx r, Monoid m) => Monoid (cx m)):
 {-# OPTIONS_GHC -fallow-undecidable-instances -fallow-incoherent-instances #-}
 -- More, implied by the previous on GHC 6.6 but needed for earlier:
 {-# OPTIONS_GHC -fallow-overlapping-instances #-}
@@ -40,39 +40,31 @@ type Point = (Double, Double)
 type Rect  = (Matrix, Size)
 
 type Render a = C.Render a
-newtype Path  = Path { renderPath :: Render () }      deriving Monoid
+newtype Path  = Path { renderPath :: Render () }
 
-class Monad cx => Transform cx r | r -> cx where
-    transform :: Endo (cx Matrix) -> Endo r
-    
-
-newtype CxMatrix cx = CxMatrix { fromCxMatrix :: cx Matrix }
-
-instance Monad cx => Transform cx (CxMatrix cx) where
-    transform f = CxMatrix . f . fromCxMatrix
-    
-wrapTransform :: Transform cx r => cx (Endo (CxMatrix cx)) -> Endo r
-wrapTransform f = transform $ \m -> 
-    do f' <- f; fromCxMatrix $ f' $ CxMatrix m
-    
-
-class (Monad cx, Monoid r, Transform cx r) => 
-      MonadCx cx r | cx -> r, r -> cx where
+class (Monoidal cx, Monoid r) => 
+      Cairo cx r | cx -> r, r -> cx where
     cxAsk     :: cx Rect
     cxWrap    :: EndoM cx (Render ()) -> Endo r
+    
+    transform :: cx (Endo Matrix) -> Endo r
 
     cxRender :: cx (Render ()) -> r
     cxRender r = cxWrap (const r) mempty
+    
+instance Monoid Path where
+    mempty = Path $ return ()
+    mappend (Path p) (Path q) = Path (p >> q)
 
-instance (Monad m, Monoid o) => Monoid (m o) where
-    mempty = return mempty
-    mappend = liftM2 mappend
+instance (Monoidal m, Monoid o) => Monoid (m o) where
+    mempty = pure mempty
+    mappend = fmap2 mappend
 
-cxMatrix :: MonadCx cx r => cx Matrix
-cxMatrix = liftM fst cxAsk
+cxMatrix :: Cairo cx r => cx Matrix
+cxMatrix = fmap fst cxAsk
 
-cxSize :: MonadCx cx r => cx Size
-cxSize = liftM snd cxAsk
+cxSize :: Cairo cx r => cx Size
+cxSize = fmap snd cxAsk
 
 
 [black, gray, lightGray, white] = [Color x x x 1 | x <- [0, 0.5, 0.9, 1]]
@@ -83,91 +75,89 @@ transformPoint (Matrix xx xy yx yy x0 y0) (dx,dy) =
     (xx*dx + yx*dy + x0, xy*dx + yy*dy + y0)
     
 
-fill :: MonadCx cx r => cx Path -> r
-fill p = cxRender $ do p' <- p; return $ do renderPath p'; C.fill
+fill :: Cairo cx r => cx Path -> r
+fill p = cxRender $ ffor p $ \p' -> do renderPath p'; C.fill
 
-stroke :: MonadCx cx r => cx Path -> r
-stroke p = cxRender $ do p' <- p; return $ do renderPath p'; C.stroke
+stroke :: Cairo cx r => cx Path -> r
+stroke p = cxRender $ ffor p $ \p' -> do renderPath p'; C.stroke
 
-paint :: MonadCx cx r => r
-paint = cxRender $ return C.paint
+paint :: Cairo cx r => r
+paint = cxRender $ pure C.paint
 
-clip :: MonadCx cx r => cx Path -> Endo r
-clip p = cxWrap $ \ren -> p >>= \p' -> return $ do
+clip :: Cairo cx r => cx Path -> Endo r
+clip p = cxWrap $ \ren -> ffor p $ \p' -> do
     C.save; renderPath p'; C.clip; ren; C.restore
     
     
-withColor :: MonadCx cx r => cx Color -> Endo r
-withColor c = cxWrap $ \ren -> c >>= \(Color r g b a) -> return $ do
+withColor :: Cairo cx r => cx Color -> Endo r
+withColor c = cxWrap $ \ren -> ffor c $ \(Color r g b a) -> do
     C.save; C.setSourceRGBA r g b a; ren; C.restore
     
 -- | Moves a renderable by x and y.
 --
-translate :: Transform cx r => Double -> Double -> Endo r
-translate x y = transform $ liftM (Matrix.translate x y)
+translate :: Cairo cx r => cx Double -> cx Double -> Endo r
+translate x y = transform $ fmap2 Matrix.translate x y
 
 -- | Moves a renderable to the specific point p.
 --
-translateTo :: (MonadCx cx r, Transform cx r) => cx Point -> Endo r
-translateTo p = wrapTransform $ do
-    m' <- cxMatrix;  p' <- p;  let (x,y) = transformPoint (Matrix.invert m') p'
-    return $ translate x y
+translateTo :: Cairo cx r => cx Point -> Endo r
+translateTo p = transform $ ffor p $ \(x0,y0) ->
+    \(Matrix xx xy yx yy _ _) -> Matrix xx xy yx yy x0 y0
 
 -- | Rotates a renderable by angle.
 --
-rotate :: Transform cx r => Double -> Endo r
-rotate angle = transform $ liftM (Matrix.rotate angle)
+rotate :: Cairo cx r => cx Double -> Endo r
+rotate angle = transform $ fmap Matrix.rotate angle
 
 -- | Scales a renderable by sx and sy.
 --
-scale2 :: Transform cx r => Double -> Double -> Endo r
-scale2 sx sy = transform $ liftM (Matrix.scale sx sy)
+scale2 :: Cairo cx r => cx Double -> cx Double -> Endo r
+scale2 sx sy = transform $ fmap2 Matrix.scale sx sy
     
 -- | Scales a renderable by sc.
 --
-scale :: Transform cx r => Double -> Endo r
+scale :: Cairo cx r => cx Double -> Endo r
 scale sc = scale2 sc sc
 
 
-between :: (MonadCx cx r, Transform cx r') => cx Point -> cx Point -> Endo r'
-between p1 p2 = wrapTransform $ do
-    (x1,y1) <- p1;  (x2, y2) <- p2;  let x = (x1+x2)/2;  y = (y1+y2)/2
-    return $ translate x y . rotate (atan2 (y2-y1) (x2-x1))
+between :: Cairo cx r => cx Point -> cx Point -> Endo r
+between p1 p2 = translate x y . rotate angle where
+    (x,y) = funzip $ ffor2 p1 p2 $ \(x1,y1) (x2,y2) -> ((x1+x2)/2, (y1+y2)/2)
+    angle = ffor2 p1 p2 $ \(x1,y1) (x2,y2) -> atan2 (y2-y1) (x2-x1)
 
-                          
-point :: MonadCx cx r => Double -> Double -> cx Point
-point x y = do m <- cxMatrix; return $ transformPoint m (x,y)
 
-anchor :: MonadCx cx r => Double -> Double -> cx Point
-anchor x y = do (w,h) <- cxSize; point (x*w) (y*h)
+point :: Cairo cx r => Double -> Double -> cx Point
+point x y = ffor cxMatrix $ \m -> transformPoint m (x,y)
 
-center :: MonadCx cx r => cx Point
+anchor :: Cairo cx r => Double -> Double -> cx Point
+anchor x y = ffor cxAsk $ \(m, (w,h)) -> transformPoint m (x*w, y*h)
+
+center :: Cairo cx r => cx Point
 center = anchor 0.5 0.5
 
-closePath :: MonadCx cx r => cx Path
-closePath = return $ Path $ C.closePath
+closePath :: Cairo cx r => cx Path
+closePath = pure $ Path $ C.closePath
 
-arc :: MonadCx cx r => cx Point -> Double -> Double -> Double -> cx Path
-arc p a b c = do (x,y) <- p; return $ Path $ C.arc x y a b c
+arc :: Cairo cx r => cx Point -> Double -> Double -> Double -> cx Path
+arc p a b c = ffor p $ \(x,y) -> Path $ C.arc x y a b c
 
-arcNegative :: MonadCx cx r => cx Point -> Double -> Double -> Double -> 
+arcNegative :: Cairo cx r => cx Point -> Double -> Double -> Double -> 
                cx Path
-arcNegative p a b c = 
-    do (x,y) <- p; return $ Path $ C.arcNegative x y a b c
+arcNegative p a b c = ffor p $ \(x,y) -> Path $ C.arcNegative x y a b c
 
-curveTo :: MonadCx cx r => cx Point -> cx Point -> cx Point -> cx Path
-curveTo p1 p2 p3 = do (x1,y1) <- p1; (x2,y2) <- p2; (x3,y3) <- p3
-                      return $ Path $ C.curveTo x1 y1 x2 y2 x3 y3
+curveTo :: Cairo cx r => cx Point -> cx Point -> cx Point -> cx Path
+curveTo p1 p2 p3 = ffor3 p1 p2 p3 $ \(x1,y1) (x2,y2) (x3,y3) ->
+                       Path $ C.curveTo x1 y1 x2 y2 x3 y3
 
-moveTo :: MonadCx cx r => cx Point -> cx Path
-moveTo p = do (x,y) <- p; return $ Path $ do C.moveTo x y
+moveTo :: Cairo cx r => cx Point -> cx Path
+moveTo p = ffor p $ \(x,y) -> Path $ do C.moveTo x y
 
-lineTo :: MonadCx cx r => cx Point -> cx Path
-lineTo p = do (x,y) <- p; return $ Path $ do C.lineTo x y
+lineTo :: Cairo cx r => cx Point -> cx Path
+lineTo p = ffor p $ \(x,y) -> Path $ do C.lineTo x y
 
-line :: (MonadCx cx r, Monoid (cx Path)) => cx Point -> cx Point -> cx Path
+line :: (Cairo cx r, Monoid (cx Path)) => cx Point -> cx Point -> cx Path
 line p1 p2 = moveTo p1 & lineTo p2
 
-extents :: (MonadCx cx r, Monoid (cx Path)) => cx Path
+extents :: (Cairo cx r, Monoid (cx Path)) => cx Path
 extents = moveTo (anchor 0 0) & lineTo (anchor 0 1) & lineTo (anchor 1 1)
         & lineTo (anchor 1 0) & lineTo (anchor 0 0)

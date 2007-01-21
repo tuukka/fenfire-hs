@@ -130,7 +130,7 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
                 ifUnvisited n2 $ placeNode rotation'
                 let (nl,nr) = if dir==Pos then (n1,n2) else (n2,n1)
                 addVob $ between (center @@ nl) (center @@ nr) $
-                    centerVob $ scale scale' $ propView graph prop
+                    centerVob $ scale (pure scale') $ propView graph prop
                 addVob $ useFgColor $ stroke $
                     line (center @@ nl) (center @@ nr)
                 ifUnvisited n2 $ visitNode n2 >> do
@@ -142,7 +142,7 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
         scale' <- getScale
         let f vob = if Just node /= mark then vob
                      else setBgColor (Color 1 0 0 1) vob
-        placeVob $ scale scale' $ keyVob node $ 
+        placeVob $ scale (pure scale') $ keyVob node $ 
             f $ nodeView graph node
         
     getScale :: VV Double
@@ -184,7 +184,7 @@ addVob vob = do d <- asks vvDepth; md <- asks vvMaxDepth
 placeVob :: Vob Node -> VV ()
 placeVob vob = do
     state <- ask
-    addVob $ translate (vvX state) (vvY state) $ centerVob vob
+    addVob $ translate (pure $ vvX state) (pure $ vvY state) $ centerVob vob
         
 withCenterMoved :: Dir -> Double -> VV () -> VV ()
 withCenterMoved dir distance = local f where

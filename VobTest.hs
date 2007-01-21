@@ -18,6 +18,7 @@ module VobTest where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
+import Utils
 import Cairo
 import Vobs
 import Data.Map (fromList)
@@ -35,12 +36,12 @@ myVob2 = keyVob 2 $ rectBox $ label "Foo bar baz"
 
 myScene1 :: Vob Int
 myScene1 = mconcat [ stroke $ line (center @@ 1) (center @@ 2),
-                     translate 50 100 $ myVob2,
-                     translate 50 50 $ myVob1 ]
+                     translate (pure 50) (pure 100) $ myVob2,
+                     translate (pure 50) (pure 50) $ myVob1 ]
 
 myScene2 :: Vob Int
-myScene2 = translate 150 150 $ rotate (-pi/15) $ scale 1.5 $ 
-    changeSize (\(w,h) -> (w-30, h)) $ myVob1
+myScene2 = translate (pure 150) (pure 150) $ rotate (pure (-pi/15)) $ 
+    scale (pure 1.5) $ changeSize (\(w,h) -> (w-30, h)) $ myVob1
 
 
 main = do 
