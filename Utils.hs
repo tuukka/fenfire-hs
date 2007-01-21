@@ -20,6 +20,7 @@ module Utils where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
+import Control.Applicative
 import Control.Monad
 import Control.Monad.List
 import Control.Monad.Reader
@@ -32,8 +33,6 @@ import Data.Monoid (Monoid(..))
 
 import qualified System.Time
 
-infixr 0 $$
-
 
 -- just what the rhs says, a function from a type to itself
 type Endo a = a -> a
@@ -43,6 +42,10 @@ type Op a      = a -> a -> a
 
 type Time     = Double -- seconds since the epoch
 type TimeDiff = Double -- in seconds
+
+
+avg :: Fractional a => Op a
+avg x y = (x+y)/2
 
 
 maybeReturn :: MonadPlus m => Maybe a -> m a
@@ -77,37 +80,16 @@ newtype Dual m = Dual { getDual :: m }
 instance Monoid m => Monoid (Dual m) where
     mempty = Dual mempty
     mappend (Dual m) (Dual n) = Dual (n & m)
-    
-    
-class Functor f => FunctorZip f where
-    fzip :: f a -> f b -> f (a,b)
 
-instance FunctorZip [] where
-    fzip = zip
-    
-class FunctorZip f => Monoidal f where
-    pure :: a -> f a
     
 funzip :: Functor f => f (a,b) -> (f a, f b)
 funzip x = (fmap fst x, fmap snd x)
 
-(<*>) :: FunctorZip f => f (a -> b) -> f a -> f b
-(<*>) = fmap2 (\f x -> f x)
+forA2 :: Applicative f => f a -> f b -> (a -> b -> c) -> f c
+forA2 x y f = liftA2 f x y
 
-($$) :: Functor f => (a -> b) -> f a -> f b
-($$) = fmap
-
-fmap2 :: FunctorZip f => (a -> b -> c) -> f a -> f b -> f c
-fmap2 f a b = fmap (uncurry f) (fzip a b)
-
-ffor2 :: FunctorZip f => f a -> f b -> (a -> b -> c) -> f c
-ffor2 x y f = fmap2 f x y
-
-fmap3 :: FunctorZip f => (a -> b -> c -> d) -> f a -> f b -> f c -> f d
-fmap3 f a b c = fmap (uncurry $ uncurry f) (fzip (fzip a b) c)
-
-ffor3 :: FunctorZip f => f a -> f b -> f c -> (a -> b -> c -> d) -> f d
-ffor3 a b c f = fmap3 f a b c
+forA3 :: Applicative f => f a -> f b -> f c -> (a -> b -> c -> d) -> f d
+forA3 a b c f = liftA3 f a b c
 
 
 newtype BreadthT m a = BreadthT { runBreadthT :: WriterT [BreadthT m ()] m a }

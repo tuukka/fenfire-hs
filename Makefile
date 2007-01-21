@@ -43,4 +43,4 @@ run-functortest: functortest
 	trhsx $< $@
 
 clean:
-	rm -f *.hi *.i Raptor.chi Raptor.h Raptor.hs Raptor_stub.* *.o $(TARGETS)
+	rm -f *.hi *.i Raptor.chi Raptor.h Raptor.hs Raptor_stub.* Cairo.hs *.o $(TARGETS)

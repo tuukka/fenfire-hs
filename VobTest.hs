@@ -24,6 +24,7 @@ import Vobs
 import Data.Map (fromList)
 import Data.IORef
 import Data.Monoid
+import Control.Applicative
 import Control.Monad.State
 import Graphics.UI.Gtk
 

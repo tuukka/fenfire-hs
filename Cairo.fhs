@@ -24,6 +24,7 @@ module Cairo where
 
 import Utils
 
+import Control.Applicative
 import Control.Monad
 
 import Data.Monoid (Monoid(mappend, mempty))
@@ -42,7 +43,7 @@ type Rect  = (Matrix, Size)
 type Render a = C.Render a
 newtype Path  = Path { renderPath :: Render () }
 
-class (Monoidal cx, Monoid r) => 
+class (Applicative cx, Monoid r) => 
       Cairo cx r | cx -> r, r -> cx where
     cxAsk     :: cx Rect
     cxWrap    :: EndoM cx (Render ()) -> Endo r
@@ -56,9 +57,9 @@ instance Monoid Path where
     mempty = Path $ return ()
     mappend (Path p) (Path q) = Path (p >> q)
 
-instance (Monoidal m, Monoid o) => Monoid (m o) where
+instance (Applicative m, Monoid o) => Monoid (m o) where
     mempty = pure mempty
-    mappend = fmap2 mappend
+    mappend = liftA2 mappend
 
 cxMatrix :: Cairo cx r => cx Matrix
 cxMatrix = fmap fst cxAsk
@@ -96,13 +97,14 @@ withColor c = cxWrap $ \ren -> ffor c $ \(Color r g b a) -> do
 -- | Moves a renderable by x and y.
 --
 translate :: Cairo cx r => cx Double -> cx Double -> Endo r
-translate x y = transform $ fmap2 Matrix.translate x y
+translate x y = transform $ liftA2 Matrix.translate x y
 
 -- | Moves a renderable to the specific point p.
 --
 translateTo :: Cairo cx r => cx Point -> Endo r
-translateTo p = transform $ ffor p $ \(x0,y0) ->
-    \(Matrix xx xy yx yy _ _) -> Matrix xx xy yx yy x0 y0
+translateTo p = transform #(\(Matrix xx xy yx yy _ _) -> 
+                            Matrix xx xy yx yy !x0 !y0)
+    where (x0,y0) = funzip p
 
 -- | Rotates a renderable by angle.
 --
@@ -112,7 +114,7 @@ rotate angle = transform $ fmap Matrix.rotate angle
 -- | Scales a renderable by sx and sy.
 --
 scale2 :: Cairo cx r => cx Double -> cx Double -> Endo r
-scale2 sx sy = transform $ fmap2 Matrix.scale sx sy
+scale2 sx sy = transform $ liftA2 Matrix.scale sx sy
     
 -- | Scales a renderable by sc.
 --
@@ -121,9 +123,9 @@ scale sc = scale2 sc sc
 
 
 between :: Cairo cx r => cx Point -> cx Point -> Endo r
-between p1 p2 = translate x y . rotate angle where
-    (x,y) = funzip $ ffor2 p1 p2 $ \(x1,y1) (x2,y2) -> ((x1+x2)/2, (y1+y2)/2)
-    angle = ffor2 p1 p2 $ \(x1,y1) (x2,y2) -> atan2 (y2-y1) (x2-x1)
+between p1 p2 = translate #(avg !x1 !x2) #(avg !y1 !y2)
+              . rotate #(atan2 (!y2 - !y1) (!x2 - !x1)) 
+    where (x1,y1) = funzip p1; (x2,y2) = funzip p2
 
 
 point :: Cairo cx r => Double -> Double -> cx Point
@@ -146,7 +148,7 @@ arcNegative :: Cairo cx r => cx Point -> Double -> Double -> Double ->
 arcNegative p a b c = ffor p $ \(x,y) -> Path $ C.arcNegative x y a b c
 
 curveTo :: Cairo cx r => cx Point -> cx Point -> cx Point -> cx Path
-curveTo p1 p2 p3 = ffor3 p1 p2 p3 $ \(x1,y1) (x2,y2) (x3,y3) ->
+curveTo p1 p2 p3 = forA3 p1 p2 p3 $ \(x1,y1) (x2,y2) (x3,y3) ->
                        Path $ C.curveTo x1 y1 x2 y2 x3 y3
 
 moveTo :: Cairo cx r => cx Point -> cx Path

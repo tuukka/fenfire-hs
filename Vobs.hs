@@ -27,6 +27,7 @@ import Data.IORef
 import System.IO.Unsafe (unsafePerformIO)
 import qualified System.Time
 
+import Control.Applicative
 import Control.Monad.Reader
 import Control.Monad.Trans (liftIO, MonadIO)
 
@@ -77,8 +78,9 @@ instance Ord k => Monoid (Vob k) where
         r cx = r1 cx >> r2 cx
         
 instance Functor (Cx k) where fmap = liftM
-instance FunctorZip (Cx k) where fzip = liftM2 (\x y -> (x,y))
-instance Monoidal (Cx k) where pure = return
+instance Applicative (Cx k) where 
+    pure = return
+    (<*>) = ap
 
 instance Ord k => Cairo (Cx k) (Vob k) where
     cxAsk = asks rcRect

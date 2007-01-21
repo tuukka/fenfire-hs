@@ -34,6 +34,7 @@ import Data.IORef
 import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
 import Data.Monoid(Monoid(mconcat))
 
+import Control.Applicative
 import Control.Monad (when, guard, msum)
 import Control.Monad.Reader (ReaderT, runReaderT, local, ask, asks)
 import Control.Monad.State (StateT, get, gets, modify, put, execStateT)
