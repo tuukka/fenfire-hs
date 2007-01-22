@@ -4,20 +4,22 @@ GHCFLAGS=-fglasgow-exts -hide-package haskell98 -Wall -fno-warn-unused-imports -
 
 GHCCMD = $(GHC) $(GHCFLAGS)
 
-SOURCES=*.hs *.chs *.fhs Cairo.hs VobTest.hs Fenfire.hs Raptor.hs Raptor.o
+PREPROCESSED=$(patsubst %.fhs,%.hs,$(wildcard *.fhs)) \
+             $(patsubst %.chs,%.hs,$(wildcard *.chs))
+SOURCES=*.hs *.chs *.fhs $(PREPROCESSED) Raptor.o
 TARGETS=vobtest functortest fenfire
 
 all: $(TARGETS)
 
 vobtest: VobTest.hs $(SOURCES)
-	$(GHCCMD) -o $@ -main-is $(shell basename $< .hs).main --make $<
+	$(GHCCMD) -o $@ -main-is $(basename $<).main --make $<
 	touch $@
 
 run-vobtest: vobtest
 	./$<
 
 fenfire: Fenfire.hs $(SOURCES)
-	$(GHCCMD) -lraptor -o $@ -main-is $(shell basename $< .hs).main --make $<
+	$(GHCCMD) -lraptor -o $@ -main-is $(basename $<).main --make $<
 	touch $@
 
 run-fenfire: ARGS=test.nt
@@ -32,7 +34,7 @@ Raptor.o: Raptor.hs
 	$(GHCCMD) -c -fvia-C -o $@ $<
 
 functortest: FunctorTest.hs $(SOURCES)
-	$(GHCCMD) -o $@ -main-is $(shell basename $< .hs).main --make $<
+	$(GHCCMD) -o $@ -main-is $(basename $<).main --make $<
 	touch $@
 
 run-functortest: functortest
@@ -43,4 +45,4 @@ run-functortest: functortest
 	trhsx $< $@
 
 clean:
-	rm -f *.hi *.i Raptor.chi Raptor.h Raptor.hs Raptor_stub.* Cairo.hs VobTest.hs Fenfire.hs *.o $(TARGETS)
+	rm -f $(PREPROCESSED) *.hi *.i *.chi Raptor.h Raptor_stub.* *.o $(TARGETS)
