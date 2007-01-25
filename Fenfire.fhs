@@ -302,7 +302,7 @@ saveFile (Rotation graph _ _) fileName0 = do
 
 
 handleKey :: ViewSettings -> Handler (Rotation, Mark, FilePath)
-handleKey vs (Key { eventModifier=_, eventKeyName=key }) = do
+handleKey vs (Key { eventModifier=mods, eventKeyName=key }) = do
   (rot@(Rotation _ node _), mk, fileName) <- get
   let m f x = maybeDo (f vs rot x) putRotation
       n f x = liftIO (f vs rot x) >>= putRotation
@@ -315,6 +315,7 @@ handleKey vs (Key { eventModifier=_, eventKeyName=key }) = do
     "n"     -> n newNode Pos;    "N" -> n newNode Neg
     "c"     -> o connect Pos;    "C" -> o connect Neg
     "b"     -> m disconnect Pos; "B" -> m disconnect Neg
+    "BackSpace" | mods == [Alt] -> put (delLit rot, mk, fileName)
     "m"     -> putMark $ toggleMark node mk
     "O"     -> do (rot',fp') <- liftIO $ openFile vs rot fileName
                   put (rot', Nothing, fp')
@@ -324,6 +325,8 @@ handleKey vs (Key { eventModifier=_, eventKeyName=key }) = do
   where putRotation rot = do modify $ \(_,mk,fp)  -> (rot,mk,fp); setInterp True
         putMark mk      = do modify $ \(rot,_,fp) -> (rot,mk,fp)
         putState rot mk = do putMark mk; putRotation rot
+        delLit (Rotation g n r) = Rotation (filter f g) n r where
+            f (s,p,_) = s /= n || p /= rdfs_label
 
 handleKey _ _ = unhandledEvent
             
