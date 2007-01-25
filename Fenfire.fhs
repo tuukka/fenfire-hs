@@ -382,7 +382,7 @@ main = mdo
     panedAdd1 paned canvas
     panedAdd2 paned textView
     
-    set paned [ panedPosition := 400 ]
+    set paned [ panedPosition := 450, panedChildResize textView := False ]
 
     set window [ containerChild := paned ]
     
