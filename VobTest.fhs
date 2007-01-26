@@ -29,49 +29,50 @@ import Control.Monad.State
 import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get, fill)
 
 
---myVob1 :: Vob Int
---myVob1 = keyVob 1 $ rectBox $ pad 5 $ multiline False 20 "Hello World!"
+--myVob1 :: Vob String
+--myVob1 = keyVob "1" $ rectBox $ pad 5 $ multiline False 20 "Hello World!"
 
-myVob2 :: Vob Int
-myVob2 = keyVob 2 $ rectBox $ label "Foo bar baz"
+myVob2 :: Vob String
+myVob2 = keyVob "2" $ rectBox $ label "Foo bar baz"
 
-myScene1 :: Vob Int
-myScene1 = mconcat [ stroke $ line (center @@ 1) (center @@ 2),
+myScene1 :: Vob String
+myScene1 = mconcat [ stroke $ line (center @@ "1") (center @@ "2"),
                      translate #50 #100 $ myVob2,
                      translate #250 #150  $ myVob1 ]
 
-myScene2 :: Vob Int
+myScene2 :: Vob String
 myScene2 = translate #150 #150 $ rotate #(-pi/15) $ scale #1.5 $ 
     changeSize (\(w,h) -> (w-30, h)) $ myVob1
 
 
-myVob1 :: Vob Int
-myVob1 = keyVob 1 $ resize (100, 100) $ daisy "A" [
+myVob1 :: Vob String
+myVob1 = keyVob "1" $ resize (100, 100) $ daisy "A" [
         ("B", 20, 24), ("C", 12, 30), ("X", 14, 19)
     ]
 
 
-daisy :: Ord k => String -> [(String, Double, Double)] -> Vob k
+daisy :: String -> [(String, Double, Double)] -> Vob String
 daisy target distractors = 
-      stroke (circle (point 0 0) inner)
-    & stroke (circle (point 0 0) (inner + w / 4))
-    & stroke (circle (point 0 0) (inner + 9*w / 16))
-    & stroke (circle (point 0 0) (inner + w))
-    & mconcat [rotate #(((fromIntegral i)::Double) * angle) $ 
-               translate #inner #0 $ daisyLeaf w (distractors !! i) 
+      mconcat [withDash #[4] #0 $
+                   stroke (circle (point 0 0) (inner + w*radius))
+              | radius <- [0, 1/4, 9/16, 1]]
+    & mconcat [rotate #(((fromIntegral i)::Double) * angle)
+                   (translate #inner #0 $ daisyLeaf w (distractors !! i)) 
+               & translateTo (center @@ name i) (centerVob $ label $ name i)
               | i <- [0..n-1]]
     & centerVob (label target)
   where
-    w = 100.0 :: Double; inner = 20.0 :: Double
+    w = 120.0 :: Double; inner = 20.0 :: Double
     n = length distractors
+    name i = case distractors !! i of (r,_,_) -> r
     angle :: Double
     angle = (2.0*pi) / fromIntegral n
 
 
-daisyLeaf :: Ord k => Double -> (String, Double, Double) -> Vob k
+daisyLeaf :: Double -> (String, Double, Double) -> Vob String
 daisyLeaf w (name, correct, total) =
     withColor #color (fill shape) & stroke shape
-    & translate #(w*(correct/total)**2) #0 (centerVob $ label name)
+    & translate #(w*(correct/total)**2) #0 (keyVob name mempty)
   where
     shape = moveTo (head $ points 1) & mconcat (map lineTo $ tail $ points 1) &
             mconcat (map lineTo $ reverse $ points (-1)) & closePath
@@ -80,7 +81,7 @@ daisyLeaf w (name, correct, total) =
         where ps = map (/100.0) [0..100]; ys = map f ps
     f p = (p ** correct) * ((1 - p) ** (total - correct))
     arbitrary = 4
-    color = interpolate (correct/total) (Color 1 0 0 1) (Color 0 1 0 1)
+    color = interpolate (correct/total) (Color 1 0 0 0.5) (Color 0 1 0 0.5)
 
 main = do 
     initGUI

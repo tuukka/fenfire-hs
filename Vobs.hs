@@ -160,7 +160,9 @@ pangoContext = unsafePerformIO $ do
 label :: Ord k => String -> Vob k
 label s = unsafePerformIO $ do 
     layout  <- layoutText pangoContext s
-    (PangoRectangle _ _ w h, _) <- layoutGetExtents layout
+    (PangoRectangle _ _ w1 h1, PangoRectangle _ _ w2 h2) 
+        <- layoutGetExtents layout
+    let w = max w1 w2; h = max h1 h2
     return $ renderable (realToFrac w, realToFrac h) $ showLayout layout
     
 multiline :: Ord k => Bool -> Int -> String -> Vob k

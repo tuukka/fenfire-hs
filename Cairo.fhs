@@ -94,6 +94,9 @@ withColor :: Cairo cx r => cx Color -> Endo r
 withColor c = cxWrap $ \ren -> ffor c $ \(Color r g b a) -> do
     C.save; C.setSourceRGBA r g b a; ren; C.restore
     
+withDash :: Cairo cx r => cx [Double] -> cx Double -> Endo r
+withDash a b = cxWrap $ \ren -> #(C.save >> C.setDash !a !b >> ren >> C.restore)
+    
 -- | Moves a renderable by x and y.
 --
 translate :: Cairo cx r => cx Double -> cx Double -> Endo r
@@ -102,9 +105,8 @@ translate x y = transform $ liftA2 Matrix.translate x y
 -- | Moves a renderable to the specific point p.
 --
 translateTo :: Cairo cx r => cx Point -> Endo r
-translateTo p = transform #(\(Matrix xx xy yx yy _ _) -> 
-                            Matrix xx xy yx yy !x0 !y0)
-    where (x0,y0) = funzip p
+translateTo p = translate x y where
+    (x,y) = funzip #(transformPoint (Matrix.invert !cxMatrix) !p)
 
 -- | Rotates a renderable by angle.
 --
