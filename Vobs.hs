@@ -94,7 +94,7 @@ instance Ord k => Cairo (Cx k) (Vob k) where
                     in Map.mapWithKey (\k _ -> msc >>= (! k)) sc0)
             (\cx -> maybe (return ()) ren (upd cx))
         where upd cx = do f' <- runCx cx f; let m = f' Matrix.identity
-                          return $ cx { rcRect = (m * rcMatrix cx, size) }
+                          return $ cx { rcRect = (m * rcMatrix cx, rcSize cx) }
     
 
 defaultWidth  (Vob (w,_) _ _) = w
@@ -120,9 +120,11 @@ changeSize f vob = vob { defaultSize = f $ defaultSize vob }
 changeContext :: Ord k => Endo (RenderContext k) -> Endo (Vob k)
 changeContext f (Vob s sc r) = Vob s (sc . f) (r . f)
 
+changeRect :: Ord k => Endo Rect -> Endo (Vob k)
+changeRect f = changeContext (\cx -> cx { rcRect = f $ rcRect cx })
+
 ownSize :: Ord k => Endo (Vob k)
-ownSize vob = 
-    changeContext (\cx -> cx { rcRect = (rcMatrix cx, defaultSize vob) }) vob
+ownSize vob = changeRect (\(m,_) -> (m, defaultSize vob)) vob
     
 
 comb :: Size -> (RenderContext k -> Vob k) -> Vob k
@@ -212,8 +214,9 @@ centerVob vob = translate (pure (-w/2)) (pure (-h/2)) vob
                
 pad4 :: Ord k => Double -> Double -> Double -> Double -> Endo (Vob k)
 pad4 x1 x2 y1 y2 vob = 
-    resize (x1+w+x2, y1+h+y2) $ translate (pure x1) (pure y1) vob
-    where (w,h) = defaultSize vob
+    resize (x1+w+x2, y1+h+y2) $
+        changeRect (\(m,(w',h')) -> (f m, (w'-x1-x2, h'-y1-y2))) vob
+    where (w,h) = defaultSize vob; f = Matrix.translate x1 y1
     
 pad2 :: Ord k => Double -> Double -> Endo (Vob k)
 pad2 x y   = pad4 x x y y

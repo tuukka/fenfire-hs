@@ -77,10 +77,12 @@ transformPoint (Matrix xx xy yx yy x0 y0) (dx,dy) =
     
 
 fill :: Cairo cx r => cx Path -> r
-fill p = cxRender $ ffor p $ \p' -> do renderPath p'; C.fill
+fill p = cxRender $ forA2 p cxMatrix $ \p' m -> do
+    renderPath p'; C.save; C.transform m; C.fill; C.restore
 
 stroke :: Cairo cx r => cx Path -> r
-stroke p = cxRender $ ffor p $ \p' -> do renderPath p'; C.stroke
+stroke p = cxRender $ forA2 p cxMatrix $ \p' m -> do
+    renderPath p'; C.save; C.transform m; C.stroke; C.restore
 
 paint :: Cairo cx r => r
 paint = cxRender $ pure C.paint
@@ -130,27 +132,32 @@ between p1 p2 = translate #(avg !x1 !x2) #(avg !y1 !y2)
     where (x1,y1) = funzip p1; (x2,y2) = funzip p2
 
 
-point :: Cairo cx r => Double -> Double -> cx Point
-point x y = ffor cxMatrix $ \m -> transformPoint m (x,y)
+point :: Cairo cx r => cx Double -> cx Double -> cx Point
+point x y = #(transformPoint !cxMatrix (!x,!y))
 
-anchor :: Cairo cx r => Double -> Double -> cx Point
-anchor x y = ffor cxAsk $ \(m, (w,h)) -> transformPoint m (x*w, y*h)
+anchor :: Cairo cx r => cx Double -> cx Double -> cx Point
+anchor x y = #(transformPoint !cxMatrix (!x * !w, !y * !h))
+    where (w,h) = funzip cxSize
 
 center :: Cairo cx r => cx Point
-center = anchor 0.5 0.5
+center = anchor #0.5 #0.5
 
 closePath :: Cairo cx r => cx Path
 closePath = pure $ Path $ C.closePath
 
-arc :: Cairo cx r => cx Point -> Double -> Double -> Double -> cx Path
-arc p a b c = ffor p $ \(x,y) -> Path $ C.arc x y a b c
+arc :: Cairo cx r => cx Point -> cx Double -> cx Double -> cx Double -> cx Path
+arc p a b c = #(Path $
+    let (x,y) = transformPoint (Matrix.invert !cxMatrix) !p
+    in C.save >> C.transform !cxMatrix >> C.arc x y !a !b !c >> C.restore)
 
-arcNegative :: Cairo cx r => cx Point -> Double -> Double -> Double -> 
+arcNegative :: Cairo cx r => cx Point -> cx Double -> cx Double -> cx Double -> 
                cx Path
-arcNegative p a b c = ffor p $ \(x,y) -> Path $ C.arcNegative x y a b c
+arcNegative p a b c = #(Path $
+    let m = !cxMatrix; (x,y) = transformPoint (Matrix.invert m) !p
+    in C.save >> C.transform m >> C.arcNegative x y !a !b !c >> C.restore)
 
-circle :: Cairo cx r => cx Point -> Double -> cx Path
-circle p r = arc p r 0 (2*pi)
+circle :: Cairo cx r => cx Point -> cx Double -> cx Path
+circle p r = arc p r #0 #(2*pi)
 
 curveTo :: Cairo cx r => cx Point -> cx Point -> cx Point -> cx Path
 curveTo p1 p2 p3 = forA3 p1 p2 p3 $ \(x1,y1) (x2,y2) (x3,y3) ->
@@ -166,5 +173,5 @@ line :: (Cairo cx r, Monoid (cx Path)) => cx Point -> cx Point -> cx Path
 line p1 p2 = moveTo p1 & lineTo p2
 
 extents :: (Cairo cx r, Monoid (cx Path)) => cx Path
-extents = moveTo (anchor 0 0) & lineTo (anchor 0 1) & lineTo (anchor 1 1)
-        & lineTo (anchor 1 0) & lineTo (anchor 0 0)
+extents = moveTo (anchor #0 #0) & lineTo (anchor #0 #1) & lineTo (anchor #1 #1)
+        & lineTo (anchor #1 #0) & lineTo (anchor #0 #0)
