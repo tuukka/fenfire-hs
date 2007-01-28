@@ -92,8 +92,7 @@ instance Ord k => Cairo (Cx k) (Vob k) where
         
     cxLocalR rect (Vob size sc ren) = Vob size
             (\cx -> let msc = liftM sc (upd cx)
-                        sc0 = sc $ cx { rcRect = (rcMatrix cx, size) }
-                    in Map.mapWithKey (\k _ -> msc >>= (Map.! k)) sc0)
+                    in Map.mapWithKey (\k _ -> msc >>= (Map.! k)) (sc cx))
             (\cx -> maybe (return ()) ren (upd cx))
         where upd cx = do rect' <- runCx cx rect
                           return $ cx { rcRect = rect' }
