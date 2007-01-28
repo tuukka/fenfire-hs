@@ -167,15 +167,15 @@ closePath :: Cairo cx r => cx Path
 closePath = pure $ Path $ C.closePath
 
 arc :: Cairo cx r => cx Point -> cx Double -> cx Double -> cx Double -> cx Path
-arc p a b c = #(Path $
+arc p a b c = #(Path $ do
     let (x,y) = transformPoint (Matrix.invert !cxMatrix) !p
-    in C.save >> C.transform !cxMatrix >> C.arc x y !a !b !c >> C.restore)
+    C.save; C.transform !cxMatrix; C.arc x y !a !b !c; C.restore)
 
 arcNegative :: Cairo cx r => cx Point -> cx Double -> cx Double -> cx Double -> 
                cx Path
-arcNegative p a b c = #(Path $
-    let m = !cxMatrix; (x,y) = transformPoint (Matrix.invert m) !p
-    in C.save >> C.transform m >> C.arcNegative x y !a !b !c >> C.restore)
+arcNegative p a b c = #(Path $ do
+    let (x,y) = transformPoint (Matrix.invert !cxMatrix) !p
+    C.save; C.transform !cxMatrix; C.arcNegative x y !a !b !c; C.restore)
 
 circle :: Cairo cx r => cx Point -> cx Double -> cx Path
 circle p r = arc p r #0 #(2*pi)

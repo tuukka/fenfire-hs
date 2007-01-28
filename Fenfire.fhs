@@ -32,7 +32,7 @@ import qualified Data.List
 import Data.Set (Set)
 import Data.IORef
 import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
-import Data.Monoid(Monoid(mconcat))
+import Data.Monoid(Monoid(mconcat), Dual(Dual), getDual)
 
 import Control.Applicative
 import Control.Monad (when, guard, msum)

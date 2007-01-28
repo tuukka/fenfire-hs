@@ -58,13 +58,6 @@ maybeDo :: Monad m => Maybe a -> (a -> m ()) -> m ()
 maybeDo m f = maybe (return ()) f m
 
 
--- XXX newer GHC's have these built in
-for   x f = map   f x
-forM  x f = mapM  f x
-forM_ x f = mapM_ f x
-ffor  x f = fmap  f x
-
-
 getTime :: IO Time
 getTime = do (System.Time.TOD secs picosecs) <- System.Time.getClockTime
              return $ fromInteger secs + fromInteger picosecs / (10**(3*4))
@@ -74,16 +67,14 @@ getTime = do (System.Time.TOD secs picosecs) <- System.Time.getClockTime
 (&) = mappend
 
 
--- XXX newer versions of Data.Monoid have this:
-newtype Dual m = Dual { getDual :: m } 
-
-instance Monoid m => Monoid (Dual m) where
-    mempty = Dual mempty
-    mappend (Dual m) (Dual n) = Dual (n & m)
-
-    
 funzip :: Functor f => f (a,b) -> (f a, f b)
 funzip x = (fmap fst x, fmap snd x)
+
+ffor :: Functor f => f a -> (a -> b) -> f b
+ffor = flip fmap
+
+forM_ :: Monad m => [a] -> (a -> m b) -> m ()
+forM_ = flip mapM_
 
 forA2 :: Applicative f => f a -> f b -> (a -> b -> c) -> f c
 forA2 x y f = liftA2 f x y
