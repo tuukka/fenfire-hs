@@ -45,10 +45,11 @@ newtype Path  = Path { renderPath :: Render () }
 
 class (Applicative cx, Monoid r) => 
       Cairo cx r | cx -> r, r -> cx where
-    cxAsk     :: cx Rect
-    cxWrap    :: EndoM cx (Render ()) -> Endo r
+    cxAsk    :: cx Rect
+    cxLocal  :: cx Rect -> Endo (cx a)
     
-    transform :: cx (Endo Matrix) -> Endo r
+    cxWrap   :: EndoM cx (Render ()) -> Endo r
+    cxLocalR :: cx Rect -> Endo r
 
     cxRender :: cx (Render ()) -> r
     cxRender r = cxWrap (const r) mempty
@@ -99,6 +100,9 @@ withColor c = cxWrap $ \ren -> ffor c $ \(Color r g b a) -> do
 withDash :: Cairo cx r => cx [Double] -> cx Double -> Endo r
 withDash a b = cxWrap $ \ren -> #(C.save >> C.setDash !a !b >> ren >> C.restore)
     
+transform :: Cairo cx r => cx (Endo Matrix) -> Endo r
+transform f = cxLocalR #(!f Matrix.identity * !cxMatrix, !cxSize)
+
 -- | Moves a renderable by x and y.
 --
 translate :: Cairo cx r => cx Double -> cx Double -> Endo r

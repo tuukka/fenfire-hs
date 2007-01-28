@@ -84,17 +84,19 @@ instance Applicative (Cx k) where
 
 instance Ord k => Cairo (Cx k) (Vob k) where
     cxAsk = asks rcRect
+    
+    cxLocal rect m = do rect' <- rect; local (\cx -> cx { rcRect = rect' }) m
 
     cxWrap f (Vob size sc ren) =
         Vob size sc $ \cx -> maybeDo (runCx cx $ f $ ren cx) id
         
-    transform f (Vob size sc ren) = Vob size
+    cxLocalR rect (Vob size sc ren) = Vob size
             (\cx -> let msc = liftM sc (upd cx)
                         sc0 = sc $ cx { rcRect = (rcMatrix cx, size) }
                     in Map.mapWithKey (\k _ -> msc >>= (Map.! k)) sc0)
             (\cx -> maybe (return ()) ren (upd cx))
-        where upd cx = do f' <- runCx cx f; let m = f' Matrix.identity
-                          return $ cx { rcRect = (m * rcMatrix cx, rcSize cx) }
+        where upd cx = do rect' <- runCx cx rect
+                          return $ cx { rcRect = rect' }
     
 
 defaultWidth  (Vob (w,_) _ _) = w
