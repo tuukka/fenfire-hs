@@ -69,6 +69,16 @@ instance Cairo ((->) Rect) (Rect -> Render ()) where
     cxWrap f ren r = f (ren r) r
     cxLocalR f ren r = ren (f r)
 
+newtype InContext a b = InContext { appContext :: a -> b } deriving Monoid
+
+instance Cairo cx r => Cairo (Comp ((->) a) cx) (InContext a r) where
+    cxAsk = Comp (const cxAsk)
+    cxLocal (Comp f) (Comp m) = Comp $ \a -> cxLocal (f a) (m a)
+    
+    cxWrap f c = InContext $ \a -> cxWrap (\ren -> (fromComp $ f ren) a)
+                                          (c `appContext` a)
+    cxLocalR f c = InContext $ \a -> cxLocalR (fromComp f a) (c `appContext` a)
+
 cxMatrix :: Cairo cx r => cx Matrix
 cxMatrix = fmap fst cxAsk
 

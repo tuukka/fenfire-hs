@@ -92,6 +92,16 @@ forA3 :: Applicative f => f a -> f b -> f c -> (a -> b -> c -> d) -> f d
 forA3 a b c f = liftA3 f a b c
 
 
+newtype Comp f g a = Comp { fromComp :: f (g a) }
+
+instance (Functor f, Functor g) => Functor (Comp f g) where
+    fmap f (Comp m) = Comp (fmap (fmap f) m)
+    
+instance (Applicative f, Applicative g) => Applicative (Comp f g) where
+    pure = Comp . pure . pure
+    Comp f <*> Comp x = Comp $ forA2 f x (<*>)
+
+
 newtype BreadthT m a = BreadthT { runBreadthT :: WriterT [BreadthT m ()] m a }
     
 scheduleBreadthT :: Monad m => BreadthT m a -> BreadthT m ()
