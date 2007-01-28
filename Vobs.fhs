@@ -38,7 +38,7 @@ import qualified Graphics.Rendering.Cairo.Matrix as Matrix
 import Graphics.UI.Gtk.Cairo
 
 import Data.List (intersect)
-import Data.Map (Map, keys, (!), fromList, toList, insert, empty)
+import Data.Map (Map, keys, fromList, toList, insert, empty)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe, isJust)
 import Data.Monoid (Monoid(mempty, mappend))
@@ -91,7 +91,7 @@ instance Ord k => Cairo (Cx k) (Vob k) where
     transform f (Vob size sc ren) = Vob size
             (\cx -> let msc = liftM sc (upd cx)
                         sc0 = sc $ cx { rcRect = (rcMatrix cx, size) }
-                    in Map.mapWithKey (\k _ -> msc >>= (! k)) sc0)
+                    in Map.mapWithKey (\k _ -> msc >>= (Map.! k)) sc0)
             (\cx -> maybe (return ()) ren (upd cx))
         where upd cx = do f' <- runCx cx f; let m = f' Matrix.identity
                           return $ cx { rcRect = (m * rcMatrix cx, rcSize cx) }
@@ -253,7 +253,8 @@ instance Interpolate Matrix where
 
 interpolateScene :: Ord k => Double -> Op (Scene k)
 interpolateScene fract sc1 sc2 =
-    fromList [(key, liftM2 f (sc1 ! key) (sc2 ! key)) | key <- interpKeys] where
+    fromList [(key, liftM2 f (sc1 Map.! key) (sc2 Map.! key)) 
+             | key <- interpKeys] where
         interpKeys = intersect (keys sc1) (keys sc2)
         f (m1,(w1,h1)) (m2,(w2,h2)) = (i m1 m2, (i w1 w2, i h1 h2))
         i x y = interpolate fract x y
@@ -261,12 +262,12 @@ interpolateScene fract sc1 sc2 =
 
 isInterpUseful :: Ord k => Scene k -> Scene k -> Bool             
 isInterpUseful sc1 sc2 = 
-    not $ all same [(sc1 ! key, sc2 ! key) | key <- interpKeys]
+    not $ all same [(sc1 Map.! key, sc2 Map.! key) | key <- interpKeys]
     where same (a,b) = all (\d -> abs d < 5) $ zipWith (-) (values a) (values b)
           values (Just (Matrix a b c d e f, (w,h))) = [a,b,c,d,e,f,w,h]
           values Nothing = error "shouldn't happen"
           interpKeys = intersect (getKeys sc1) (getKeys sc2)
-          getKeys sc = [k | k <- keys sc, isJust (sc ! k)]
+          getKeys sc = [k | k <- keys sc, isJust (sc Map.! k)]
           
 instance Show Modifier where
     show Shift = "Shift"
