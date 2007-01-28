@@ -41,7 +41,7 @@ type Point = (Double, Double)
 type Rect  = (Matrix, Size)
 
 type Render a = C.Render a
-newtype Path  = Path { renderPath :: Render () }
+newtype Path  = Path { renderPath :: Render () }    deriving Monoid
 
 class (Applicative cx, Monoid r) => 
       Cairo cx r | cx -> r, r -> cx where
@@ -54,13 +54,20 @@ class (Applicative cx, Monoid r) =>
     cxRender :: cx (Render ()) -> r
     cxRender r = cxWrap (const r) mempty
     
-instance Monoid Path where
-    mempty = Path $ return ()
-    mappend (Path p) (Path q) = Path (p >> q)
+instance Monoid (Render ()) where
+    mempty = return ()
+    mappend = (>>)
 
 instance (Applicative m, Monoid o) => Monoid (m o) where
     mempty = pure mempty
     mappend = liftA2 mappend
+        
+instance Cairo ((->) Rect) (Rect -> Render ()) where
+    cxAsk = id
+    cxLocal f m r = m (f r)
+    
+    cxWrap f ren r = f (ren r) r
+    cxLocalR f ren r = ren (f r)
 
 cxMatrix :: Cairo cx r => cx Matrix
 cxMatrix = fmap fst cxAsk
