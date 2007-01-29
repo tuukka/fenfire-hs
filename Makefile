@@ -2,6 +2,9 @@
 GHC?=ghc
 GHCFLAGS=-fglasgow-exts -hide-package haskell98 -Wall -fno-warn-unused-imports -fno-warn-missing-signatures -fno-warn-orphans -fno-warn-deprecations
 
+#GHCFLAGS+=-O -fexcess-precision -optc-ffast-math -optc-O3 
+#crash: -optc-march=pentium4 -optc-mfpmath=sse
+
 GHCCMD = $(GHC) $(GHCFLAGS)
 
 PREPROCESSED=$(patsubst %.fhs,%.hs,$(wildcard *.fhs)) \
@@ -10,6 +13,12 @@ SOURCES=*.hs *.chs *.fhs $(PREPROCESSED) Raptor.o
 TARGETS=vobtest functortest fenfire
 
 all: $(TARGETS)
+
+profilable:
+	rm -f $(TARGETS)
+	make all
+	rm -f $(TARGETS)
+	make all "GHCFLAGS=-prof -auto-all -hisuf p_hi -osuf p_o $(GHCFLAGS)"
 
 vobtest: VobTest.hs $(SOURCES)
 	$(GHCCMD) -o $@ -main-is $(basename $<).main --make $<
@@ -45,4 +54,4 @@ run-functortest: functortest
 	trhsx $< $@
 
 clean:
-	rm -f $(PREPROCESSED) *.hi *.i *.chi Raptor.h Raptor_stub.* *.o $(TARGETS)
+	rm -f $(PREPROCESSED) *.p_hi *.hi *.i *.chi Raptor.h Raptor_stub.* *.p_o *.o $(TARGETS)
