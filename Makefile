@@ -17,8 +17,12 @@ all: $(TARGETS)
 profilable:
 	rm -f $(TARGETS)
 	make all
-	rm -f $(TARGETS)
+	rm -f $(TARGETS) Raptor.p_o
 	make all "GHCFLAGS=-prof -auto-all -hisuf p_hi -osuf p_o $(GHCFLAGS)"
+
+non-profilable:
+	rm -f $(TARGETS)
+	make all
 
 vobtest: VobTest.hs $(SOURCES)
 	$(GHCCMD) -o $@ -main-is $(basename $<).main --make $<
