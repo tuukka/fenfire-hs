@@ -9,7 +9,7 @@ GHCCMD = $(GHC) $(GHCFLAGS)
 
 PREPROCESSED=$(patsubst %.fhs,%.hs,$(wildcard *.fhs)) \
              $(patsubst %.chs,%.hs,$(wildcard *.chs))
-SOURCES=*.hs *.chs *.fhs $(PREPROCESSED) Raptor.o
+SOURCES=*.hs *.chs *.fhs $(PREPROCESSED)
 TARGETS=vobtest functortest fenfire
 
 all: $(TARGETS)
@@ -17,7 +17,7 @@ all: $(TARGETS)
 profilable:
 	rm -f $(TARGETS)
 	make all
-	rm -f $(TARGETS) Raptor.p_o
+	rm -f $(TARGETS)
 	make all "GHCFLAGS=-prof -auto-all -hisuf p_hi -osuf p_o $(GHCFLAGS)"
 
 non-profilable:
@@ -42,9 +42,6 @@ run-fenfire: fenfire
 # __attribute__ needs to be a no-op until c2hs learns to parse them in raptor.h
 %.hs: %.chs
 	c2hs --cppopts '-D"__attribute__(A)= "' $<
-
-Raptor.o: Raptor.hs
-	$(GHCCMD) -c -fvia-C -o $@ $<
 
 functortest: FunctorTest.hs $(SOURCES)
 	$(GHCCMD) -o $@ -main-is $(basename $<).main --make $<
