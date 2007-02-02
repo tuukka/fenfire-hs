@@ -89,11 +89,6 @@ cxSize = fmap snd cxAsk
 [black, gray, lightGray, white] = [Color x x x 1 | x <- [0, 0.5, 0.9, 1]]
 
 
-transformPoint :: Matrix -> Endo Point     -- the gtk2hs impl is buggy
-transformPoint (Matrix xx xy yx yy x0 y0) (dx,dy) =
-    (xx*dx + yx*dy + x0, xy*dx + yy*dy + y0)
-    
-
 fill :: Cairo cx r => cx Path -> r
 fill p = cxRender $ forA2 p cxMatrix $ \p' m -> do
     renderPath p'; C.save; C.transform m; C.fill; C.restore
@@ -129,7 +124,7 @@ translate x y = transform $ liftA2 Matrix.translate x y
 --
 translateTo :: Cairo cx r => cx Point -> Endo r
 translateTo p = translate x y where
-    (x,y) = funzip #(transformPoint (Matrix.invert !cxMatrix) !p)
+    (x,y) = funzip #(Matrix.transformPoint (Matrix.invert !cxMatrix) !p)
 
 -- | Rotates a renderable by angle.
 --
@@ -154,10 +149,10 @@ between p1 p2 = translate #(avg !x1 !x2) #(avg !y1 !y2)
 
 
 point :: Cairo cx r => cx Double -> cx Double -> cx Point
-point x y = #(transformPoint !cxMatrix (!x,!y))
+point x y = #(Matrix.transformPoint !cxMatrix (!x,!y))
 
 anchor :: Cairo cx r => cx Double -> cx Double -> cx Point
-anchor x y = #(transformPoint !cxMatrix (!x * !w, !y * !h))
+anchor x y = #(Matrix.transformPoint !cxMatrix (!x * !w, !y * !h))
     where (w,h) = funzip cxSize
 
 center :: Cairo cx r => cx Point
@@ -168,13 +163,13 @@ closePath = pure $ Path $ C.closePath
 
 arc :: Cairo cx r => cx Point -> cx Double -> cx Double -> cx Double -> cx Path
 arc p a b c = #(Path $ do
-    let (x,y) = transformPoint (Matrix.invert !cxMatrix) !p
+    let (x,y) = Matrix.transformPoint (Matrix.invert !cxMatrix) !p
     C.save; C.transform !cxMatrix; C.arc x y !a !b !c; C.restore)
 
 arcNegative :: Cairo cx r => cx Point -> cx Double -> cx Double -> cx Double -> 
                cx Path
 arcNegative p a b c = #(Path $ do
-    let (x,y) = transformPoint (Matrix.invert !cxMatrix) !p
+    let (x,y) = Matrix.transformPoint (Matrix.invert !cxMatrix) !p
     C.save; C.transform !cxMatrix; C.arcNegative x y !a !b !c; C.restore)
 
 circle :: Cairo cx r => cx Point -> cx Double -> cx Path
