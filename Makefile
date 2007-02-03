@@ -16,13 +16,13 @@ all: $(TARGETS)
 
 profilable:
 	rm -f $(TARGETS)
-	make all
+	$(MAKE) all
 	rm -f $(TARGETS)
-	make all "GHCFLAGS=-prof -auto-all -hisuf p_hi -osuf p_o $(GHCFLAGS)"
+	$(MAKE) all "GHCFLAGS=-prof -auto-all -hisuf p_hi -osuf p_o $(GHCFLAGS)"
 
 non-profilable:
 	rm -f $(TARGETS)
-	make all
+	$(MAKE) all
 
 vobtest: VobTest.hs $(SOURCES)
 	$(GHCCMD) -o $@ -main-is $(basename $<).main --make $<
