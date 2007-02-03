@@ -334,15 +334,15 @@ main :: IO ()
 main = mdo
     args <- getArgs
 
-    home <- newURI
+    home0 <- newURI
 
     let vs = ViewSettings { hiddenProps=[rdfs_label] }
         view = vanishingView vs 20
-        graph = [(home, rdfs_label, PlainLiteral "")]
-        rot = (Rotation graph home 0)
-        emptyState = (rot, Nothing, "")
+        graph0 = [(home0, rdfs_label, PlainLiteral "")]
+        rot0 = (Rotation graph0 home0 0)
+        state0 = (rot0, Nothing, "")
 
-    stateRef <- newIORef emptyState
+    stateRef <- newIORef state0
 
     case args of [fileName] -> do fn <- canonicalizePath fileName
                                   rot' <- loadGraph vs fn
@@ -377,14 +377,52 @@ main = mdo
     
     (canvas, updateCanvas) <- 
         vobCanvas stateRef view (handleKey vs) stateChanged lightGray
+
+    fileItems@[open, saveAs, quit] <- 
+        mapM imageMenuItemNewFromStock [stockOpen, stockSaveAs, stockQuit]
+
+    onActivateLeaf open $ do 
+        (rot, _mark, filepath) <- readIORef stateRef
+        (rot',fp') <- openFile vs rot filepath
+        writeIORef stateRef (rot', Nothing, fp')
+        stateChanged (rot', Nothing, fp')
+        updateCanvas False
+    onActivateLeaf saveAs $ do
+        (rot, mark, filepath) <- readIORef stateRef
+        fp' <- saveFile rot filepath
+        writeIORef stateRef (rot, mark, fp')
+        stateChanged (rot, mark, fp')
+        updateCanvas False
+    onActivateLeaf quit mainQuit
+
+    file <- menuItemNewWithMnemonic "_File"
+    filemenu <- menuNew
+    mapM_ (menuShellAppend filemenu) fileItems
+    menuItemSetSubmenu file filemenu
+    menubar <- menuBarNew
+    menuShellAppend menubar file
+
+    savebutton <- toolButtonNewFromStock stockSave
+    onToolButtonClicked savebutton $ do 
+        (Rotation g _n _r, _mark, filepath) <- readIORef stateRef
+        saveGraph g filepath
+
+    toolbar <- toolbarNew
+    toolbarInsert toolbar savebutton (-1)
     
     paned <- vPanedNew
     panedAdd1 paned canvas
     panedAdd2 paned textView
-    
-    set paned [ panedPosition := 450, panedChildResize textView := False ]
 
-    set window [ containerChild := paned ]
+    vbox <- vBoxNew False 0
+    boxPackStart vbox menubar PackNatural 0
+    boxPackStart vbox toolbar PackNatural 0
+    boxPackStart vbox paned PackGrow 0
+    containerSetFocusChain vbox [toWidget paned]
+    
+    set paned [ panedPosition := 380, panedChildResize textView := False ]
+
+    set window [ containerChild := vbox ]
     
     onDestroy window mainQuit
     widgetShowAll window
