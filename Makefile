@@ -46,4 +46,5 @@ clean:
 	c2hs --cppopts '-D"__attribute__(A)= "' $<
 
 %.hs: %.fhs
-	trhsx $< $@
+	echo "-- GENERATED file. Edit the ORIGINAL $< instead." >$@
+	trhsx $< >>$@
