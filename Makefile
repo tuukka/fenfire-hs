@@ -10,7 +10,7 @@ GHCCMD = $(GHC) $(GHCFLAGS)
 PREPROCESSED=$(patsubst %.fhs,%.hs,$(wildcard *.fhs)) \
              $(patsubst %.chs,%.hs,$(wildcard *.chs))
 SOURCES=*.hs *.chs *.fhs $(PREPROCESSED)
-TARGETS=vobtest functortest fenfire
+TARGETS=functortest vobtest fenfire
 
 all: $(TARGETS)
 
@@ -19,40 +19,31 @@ profilable:
 	$(MAKE) all
 	rm -f $(TARGETS)
 	$(MAKE) all "GHCFLAGS=-prof -auto-all -hisuf p_hi -osuf p_o $(GHCFLAGS)"
-
 non-profilable:
 	rm -f $(TARGETS)
 	$(MAKE) all
 
+functortest: FunctorTest.hs $(SOURCES)
 vobtest: VobTest.hs $(SOURCES)
-	$(GHCCMD) -o $@ -main-is $(basename $<).main --make $<
-	touch $@
-
-run-vobtest: vobtest
-	./$<
-
+fenfire: opts=-lraptor
 fenfire: Fenfire.hs $(SOURCES)
-	$(GHCCMD) -lraptor -o $@ -main-is $(basename $<).main --make $<
+functortest vobtest fenfire:
+	$(GHCCMD) $(opts) -o $@ -main-is $(basename $<).main --make $<
 	touch $@
 
+run-functortest: functortest
+run-vobtest: vobtest
 run-fenfire: ARGS=test.nt
 run-fenfire: fenfire
+run-%: %
 	./$< $(ARGS)
+
+clean:
+	rm -f $(PREPROCESSED) *.p_hi *.hi *.i *.chi Raptor.h Raptor_stub.* *.p_o *.o $(TARGETS)
 
 # __attribute__ needs to be a no-op until c2hs learns to parse them in raptor.h
 %.hs: %.chs
 	c2hs --cppopts '-D"__attribute__(A)= "' $<
 
-functortest: FunctorTest.hs $(SOURCES)
-	$(GHCCMD) -o $@ -main-is $(basename $<).main --make $<
-	touch $@
-
-run-functortest: functortest
-	./$<
-
-
 %.hs: %.fhs
 	trhsx $< $@
-
-clean:
-	rm -f $(PREPROCESSED) *.p_hi *.hi *.i *.chi Raptor.h Raptor_stub.* *.p_o *.o $(TARGETS)
