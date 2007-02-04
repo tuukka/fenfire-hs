@@ -300,8 +300,8 @@ openFile vs rot0 fileName0 = do
                              return (rot, fileName)
         _              -> return (rot0, fileName0)
         
-saveFile :: Rotation -> FilePath -> IO FilePath
-saveFile (Rotation graph _ _) fileName0 = do
+saveFile :: Rotation -> FilePath -> Bool -> IO FilePath
+saveFile (Rotation graph _ _) fileName0 confirmSame = do
     dialog <- fileChooserDialogNew Nothing Nothing FileChooserActionSave
                                    [("gtk-cancel", ResponseCancel),
                                     ("gtk-save", ResponseAccept)]
@@ -311,7 +311,7 @@ saveFile (Rotation graph _ _) fileName0 = do
                                 return ()
     onConfirmOverwrite dialog $ do 
         Just fileName <- fileChooserGetFilename dialog
-        if fileName == fileName0
+        if fileName == fileName0 && not confirmSame
             then return FileChooserConfirmationAcceptFilename
             else return FileChooserConfirmationConfirm
     response <- dialogRun dialog
@@ -332,7 +332,8 @@ handleEvent vs (Key { eventModifier=_mods, eventKeyName=key }) = do
         x | x == "Left"  || x == "j"     -> handleAction vs "left"
         x | x == "Right" || x == "l"     -> handleAction vs "right"
         "O" -> handleAction vs "open"
-        "S" -> liftIO ( saveFile rot fileName ) >>= \fp' -> put (rot, mk, fp')
+        "S" -> do fp' <- liftIO $ saveFile rot fileName False
+                  put (rot, mk, fp')
         _   -> unhandledEvent
 handleEvent _ _ = unhandledEvent
 
@@ -359,7 +360,7 @@ handleAction vs action = do
         "save" | filepath /= "" -> do liftIO $ saveGraph graph filepath
                | otherwise      -> handleAction vs "saveas"
         "saveas"-> do
-            fp' <- liftIO $ saveFile rot filepath
+            fp' <- liftIO $ saveFile rot filepath True
             put (rot, mark, fp')
         "quit"  -> liftIO $ mainQuit
         _       -> unhandledEvent
