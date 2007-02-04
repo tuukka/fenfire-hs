@@ -271,7 +271,8 @@ openFile vs rot0 fileName0 = do
     dialog <- fileChooserDialogNew Nothing Nothing FileChooserActionOpen
                                    [("gtk-cancel", ResponseCancel),
                                     ("gtk-open", ResponseAccept)]
-    when (fileName0 /= "") $ fileChooserSetFilename dialog fileName0 >> return ()
+    when (fileName0 /= "") $ do fileChooserSetFilename dialog fileName0
+                                return ()
     widgetShow dialog
     response <- dialogRun dialog
     widgetHide dialog
@@ -288,11 +289,13 @@ saveFile (Rotation graph _ _) fileName0 = do
                                     ("gtk-save", ResponseAccept)]
     fileChooserSetDoOverwriteConfirmation dialog True
     dialogSetDefaultResponse dialog ResponseAccept
-    when (fileName0 /= "") $ fileChooserSetFilename dialog fileName0 >> return ()
-    onConfirmOverwrite dialog $ do Just fileName <- fileChooserGetFilename dialog
-                                   if fileName == fileName0
-                                       then return FileChooserConfirmationAcceptFilename
-                                       else return FileChooserConfirmationConfirm
+    when (fileName0 /= "") $ do fileChooserSetFilename dialog fileName0
+                                return ()
+    onConfirmOverwrite dialog $ do 
+        Just fileName <- fileChooserGetFilename dialog
+        if fileName == fileName0
+            then return FileChooserConfirmationAcceptFilename
+            else return FileChooserConfirmationConfirm
     response <- dialogRun dialog
     widgetHide dialog
     case response of
