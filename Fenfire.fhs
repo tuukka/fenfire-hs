@@ -253,6 +253,15 @@ toggleMark n Nothing = Just n
 toggleMark n (Just n') | n == n'   = Nothing
                        | otherwise = Just n
 
+newGraph :: IO Rotation
+newGraph = do
+    home0 <- newURI
+
+    let graph0 = [(home0, rdfs_label, PlainLiteral "")]
+        rot0 = (Rotation graph0 home0 0)
+
+    return rot0
+
 loadGraph :: ViewSettings -> FilePath -> IO Rotation
 loadGraph vs fileName = do
     --file <- readFile fileName
@@ -347,24 +356,18 @@ main = mdo
 
     -- initial state:
 
-    args <- getArgs
-
-    home0 <- newURI
+    args <- initGUI
 
     let vs = ViewSettings { hiddenProps=[rdfs_label] }
         view = vanishingView vs 20 20
-        graph0 = [(home0, rdfs_label, PlainLiteral "")]
-        rot0 = (Rotation graph0 home0 0)
-        state0 = (rot0, Nothing, "")
 
-    stateRef <- newIORef state0
+    stateRef <- do rot <- newGraph
+                   newIORef (rot, Nothing, "")
 
     case args of [fileName] -> do fn <- canonicalizePath fileName
                                   rot' <- loadGraph vs fn
                                   writeIORef stateRef (rot', Nothing, fn)
                  _          -> return ()
-
-    initGUI
 
     -- main window:
 
@@ -380,24 +383,25 @@ main = mdo
     textViewSetAcceptsTab textView False
     textViewSetWrapMode textView WrapWordChar
 
+    -- this needs to be called whenever the node or its text changes:
     let stateChanged (Rotation g n _r, _mark, _fileName) = do
-        buf <- textBufferNew Nothing
-        textBufferSetText buf (maybe "" id $ getText g n)
-        afterBufferChanged buf $ do 
-                                start <- textBufferGetStartIter buf
-                                end   <- textBufferGetEndIter buf
-                                text  <- textBufferGetText buf start end True
-                                (Rotation g' n' r', mk', fp') <- readIORef stateRef
-                                -- buf corresponds to n, not to n'
-                                let g'' = setText g' n text
-                                writeIORef stateRef $ (Rotation g'' n' r', mk', fp')
-                                updateCanvas True
-        textViewSetBuffer textView buf
-        return ()
+            buf <- textBufferNew Nothing
+            textBufferSetText buf (maybe "" id $ getText g n)
+            afterBufferChanged buf $ do 
+                start <- textBufferGetStartIter buf
+                end   <- textBufferGetEndIter buf
+                text  <- textBufferGetText buf start end True
+                (Rotation g' n' r', mk', fp') <- readIORef stateRef
+                let g'' = setText g' n text -- buf corresponds to n, not to n'
+
+                writeIORef stateRef $ (Rotation g'' n' r', mk', fp')
+                updateCanvas True
+
+            textViewSetBuffer textView buf
+
+    readIORef stateRef >>= stateChanged
 
     -- canvas for view:
-    
-    readIORef stateRef >>= stateChanged
     
     (canvas, updateCanvas) <- 
         vobCanvas stateRef view (handleKey vs) stateChanged lightGray
@@ -428,8 +432,9 @@ main = mdo
         onActionActivate action callback
 
     setAction "new" $ do
-        writeIORef stateRef state0
-        stateChanged state0
+        rot <- newGraph
+        writeIORef stateRef (rot, Nothing, "")
+        stateChanged (rot, Nothing, "")
         updateCanvas False
     setAction "open" $ do 
         (rot, _mark, filepath) <- readIORef stateRef
