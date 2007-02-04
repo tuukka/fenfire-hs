@@ -126,6 +126,9 @@ changeRect f = changeContext (\cx -> cx { rcRect = f $ rcRect cx })
 
 ownSize :: Ord k => Endo (Vob k)
 ownSize vob = changeRect (\(m,_) -> (m, defaultSize vob)) vob
+
+invisibleVob :: Ord k => Endo (Vob k)
+invisibleVob = cxWrap (const mempty)
     
 
 comb :: Size -> (RenderContext k -> Vob k) -> Vob k

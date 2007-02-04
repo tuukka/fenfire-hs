@@ -174,7 +174,7 @@ withDepthIncreased n m = do
     if vvDepth state' >= vvMaxDepth state' then return () else
         lift $ scheduleBreadthT $ flip runReaderT state' $ do
             visited <- get
-            when (Set.size visited <= vvMaxNodes state') m
+            when (Set.size visited <= (4 * vvMaxNodes state') `div` 3) m
         
 visitNode :: Node -> VV ()
 visitNode n = modify (Set.insert n)
@@ -185,8 +185,11 @@ ifUnvisited n m = do visited <- get
 
 addVob :: Vob Node -> VV ()
 addVob vob = do d <- asks vvDepth; md <- asks vvMaxDepth
+                mn <- asks vvMaxNodes; visited <- get
                 let x = (fromIntegral (md - d) / fromIntegral (md+2))
-                tell (Dual $ fade x vob)
+                    vob' = if Set.size visited >= mn then invisibleVob vob
+                                                     else fade x vob
+                tell (Dual vob')
 
 placeVob :: Vob Node -> VV ()
 placeVob vob = do
