@@ -107,9 +107,10 @@ main = do
                            put (ts !! i')
                            setInterp True
 
-    (canvas, _updateCanvas, _canvasEvent) <- vobCanvas stateRef view handle 
-                                                       (const $ return ()) 
-                                                       lightGray
+    (canvas, _updateCanvas, _canvasAction) <- vobCanvas stateRef view handle 
+                                                        (const $ return ()) 
+                                                        (const $ return ()) 
+                                                        lightGray
 
     set window [ containerChild := canvas ]
     

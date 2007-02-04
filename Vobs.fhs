@@ -65,7 +65,7 @@ data RenderContext k = RenderContext {
 rcMatrix = fst . rcRect; rcSize = snd . rcRect
     
 type View s k  = s -> Vob k
-type Handler s = ([Modifier], String) -> HandlerAction s
+type Handler e s = e -> HandlerAction s
 
 type HandlerAction s = StateT s (StateT (Bool, Bool) IO) ()
 
@@ -314,11 +314,10 @@ interpAnim startTime interpDuration sc1 sc2 time =
 noAnim scene = const (scene, False)
     
 
-vobCanvas :: Ord b => IORef a -> View a b -> Handler a -> (a -> IO ()) ->
-                      Color -> IO (DrawingArea, 
-                                   Bool -> IO (),
-                                   ([Modifier], String) -> IO Bool)
-vobCanvas stateRef view eventHandler stateChanged bgColor = do
+vobCanvas :: Ord b => IORef a -> View a b -> Handler Event a -> 
+                      Handler c a -> (a -> IO ()) -> Color -> 
+                      IO (DrawingArea, Bool -> IO (), c -> IO Bool)
+vobCanvas stateRef view eventHandler actionHandler stateChanged bgColor = do
     canvas <- drawingAreaNew
     
     widgetSetCanFocus canvas True
@@ -354,17 +353,21 @@ vobCanvas stateRef view eventHandler stateChanged bgColor = do
 	
 	    widgetQueueDraw canvas
 
-        handleEvent event = do
+        handle handler event = do
             state <- readIORef stateRef
 
             (state', interpolate', handled) <- 
-                runHandler eventHandler state event
+                runHandler handler state event
 
             when handled $ do writeIORef stateRef state'
                               stateChanged state'
                               updateAnim interpolate'
 
             return handled
+
+        handleEvent = handle eventHandler
+
+        handleAction = handle actionHandler
 
     onRealize canvas $ mdo vob <- getVob; rc <- getRenderContext scene
                            let scene = vobScene vob rc
@@ -378,7 +381,7 @@ vobCanvas stateRef view eventHandler stateChanged bgColor = do
 
         when (Alt `elem` mods && key == "q") mainQuit
 
-        handleEvent (mods,key)
+        handleEvent event
 
     onButtonPress canvas $ \(Button {}) -> do
         widgetGrabFocus canvas
@@ -397,4 +400,4 @@ vobCanvas stateRef view eventHandler stateChanged bgColor = do
 
         return True
         
-    return (canvas, updateAnim, handleEvent)
+    return (canvas, updateAnim, handleAction)
