@@ -105,9 +105,10 @@ propView g n = (useFadeColor $ fill extents)
 
 
 
-vanishingView :: ViewSettings -> Int -> (Rotation, Mark, FilePath) -> Vob Node
-vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
-    where
+vanishingView :: ViewSettings -> Int -> Int ->
+                 (Rotation, Mark, FilePath) -> Vob Node
+vanishingView vs depth maxnodes (startRotation, mark, _fp) = 
+    runVanishing depth maxnodes view where
     -- place the center of the view and all subtrees in both directions
     view = do placeNode startRotation
               let Rotation _ n _ = startRotation in visitNode n
@@ -151,16 +152,17 @@ vanishingView vs depth (startRotation, mark, _fp) = runVanishing depth view
     getScale = do d <- asks vvDepth; return (0.97 ** fromIntegral d)
     
     
-data VVState = VVState { vvDepth :: Int, vvMaxDepth :: Int,
+data VVState = VVState { vvDepth :: Int, vvMaxDepth :: Int, vvMaxNodes :: Int,
                          vvX :: Double, vvY :: Double, vvAngle :: Double }
                          
 type VV a = ReaderT VVState (BreadthT (StateT (Set Node) 
                                           (Writer (Dual (Vob Node))))) a
 
-runVanishing :: Int -> VV () -> Vob Node
-runVanishing maxdepth vv = comb (0,0) $ \cx -> let (w,h) = rcSize cx in
-    getDual $ execWriter $ flip execStateT Set.empty $ execBreadthT $
-        runReaderT vv $ VVState 0 maxdepth (w/2) (h/2) 0
+runVanishing :: Int -> Int -> VV () -> Vob Node
+runVanishing maxdepth maxnodes vv = comb (0,0) $ \cx -> 
+    let (w,h) = rcSize cx 
+    in getDual $ execWriter $ flip execStateT Set.empty $ execBreadthT $
+           runReaderT vv $ VVState 0 maxdepth maxnodes (w/2) (h/2) 0
     
 -- |Execute the passed action with the recursion depth increased by
 -- the given amount of steps, if it is still smaller than the maximum
@@ -170,13 +172,16 @@ withDepthIncreased :: Int -> VV () -> VV ()
 withDepthIncreased n m = do
     state <- ask; let state' = state { vvDepth = vvDepth state + n }
     if vvDepth state' >= vvMaxDepth state' then return () else
-        lift $ scheduleBreadthT $ runReaderT m state'
+        lift $ scheduleBreadthT $ flip runReaderT state' $ do
+            visited <- get
+            when (Set.size visited <= vvMaxNodes state') m
         
 visitNode :: Node -> VV ()
 visitNode n = modify (Set.insert n)
-                                       
+
 ifUnvisited :: Node -> VV () -> VV ()
-ifUnvisited n m = get >>= \visited -> when (not $ n `Set.member` visited) m
+ifUnvisited n m = do visited <- get
+                     when (not $ n `Set.member` visited) m
 
 addVob :: Vob Node -> VV ()
 addVob vob = do d <- asks vvDepth; md <- asks vvMaxDepth
@@ -341,7 +346,7 @@ main = mdo
     home0 <- newURI
 
     let vs = ViewSettings { hiddenProps=[rdfs_label] }
-        view = vanishingView vs 20
+        view = vanishingView vs 20 20
         graph0 = [(home0, rdfs_label, PlainLiteral "")]
         rot0 = (Rotation graph0 home0 0)
         state0 = (rot0, Nothing, "")
