@@ -28,6 +28,7 @@ import qualified Raptor (filenameToTriples, triplesToFilename, Identifier(..))
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import qualified Data.Tree as Tree
 import qualified Data.List
 import Data.Set (Set)
 import Data.IORef
@@ -323,7 +324,7 @@ saveFile (Rotation graph _ _) fileName0 = do
 
 
 handleKey :: ViewSettings -> Handler (Rotation, Mark, FilePath)
-handleKey vs (Key { eventModifier=mods, eventKeyName=key }) = do
+handleKey vs (mods,key) = do
   (rot@(Rotation _ node _), mk, fileName) <- get
   let m f x = maybeDo (f vs rot x) putRotation
       n f x = liftIO (f vs rot x) >>= putRotation
@@ -403,27 +404,60 @@ main = mdo
 
     -- canvas for view:
     
-    (canvas, updateCanvas) <- 
+    (canvas, updateCanvas, canvasEvent) <- 
         vobCanvas stateRef view (handleKey vs) stateChanged lightGray
+
+    onFocusIn canvas $ \_event -> do windowAddAccelGroup window bindings
+                                     return True
+    onFocusOut canvas $ \_event -> do windowRemoveAccelGroup window bindings
+                                      return True
 
     -- action widgets:
 
     accelGroup <- uiManagerNew >>= uiManagerGetAccelGroup -- XXX Gtk2Hs
     windowAddAccelGroup window accelGroup
+    -- bindings are active only when the canvas has the focus:
+    bindings <- uiManagerNew >>= uiManagerGetAccelGroup -- XXX Gtk2Hs
 
     actionGroup <- actionGroupNew "main"
 
-    let actionentries = [ ("new",stockNew)
-                        , ("open",stockOpen)
-                        , ("save",stockSave)
-                        , ("saveas",stockSaveAs)
-                        , ("quit",stockQuit)
-                        ]
+    let actionentries = 
+            [ ( "new"    , stockNew    )
+            , ( "open"   , stockOpen   )
+            , ( "save"   , stockSave   )
+            , ( "saveas" , stockSaveAs )
+            , ( "quit"   , stockQuit   )
+            ]
     flip mapM actionentries $ \(name,stock) -> do 
         item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
         action <- actionNew name (siLabel $ fromJust item) Nothing (Just stock)
         actionGroupAddActionWithAccel actionGroup action Nothing
         actionSetAccelGroup action accelGroup
+
+    let bindingentries =
+            [ ("noder"  , Just "_New node to right"         , 
+               stockMediaForward  , Just "n"              )
+            , ("nodel"  , Just "N_ew node to left"          , 
+               stockMediaRewind   , Just "<Shift>N"       )
+            , ("breakr" , Just "_Break connection to right" , 
+               stockGotoLast      , Just "b"              )
+            , ("breakl" , Just "B_reak connection to left"  , 
+               stockGotoFirst     , Just "<Shift>B"       )
+            , ("mark"   , Just "Toggle _mark"               ,
+               stockOk            , Just "m"              )
+            , ("connr"  , Just "_Connect marked to right"   ,
+               stockGoForward     , Just "c"              )
+            , ("connl"  , Just "C_onnect marked to left"    ,
+               stockGoBack        , Just "<Shift>C"       )
+            , ("rmlit"  , Just "Remove _literal text"       ,
+               stockStrikethrough , Just "<Alt>BackSpace" )
+            ]
+    flip mapM bindingentries $ \(name,label',stock,accel) -> do 
+        item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
+        let label'' = maybe (siLabel $ fromJust item) id label'
+        action <- actionNew name label'' Nothing (Just stock)
+        actionGroupAddActionWithAccel actionGroup action accel
+        actionSetAccelGroup action bindings
 
     -- action implementations:
     
@@ -452,21 +486,43 @@ main = mdo
         stateChanged (rot, mark, fp')
         updateCanvas False
     setAction "quit" mainQuit
+    setAction "noder" $ canvasEvent ([], "n") >> return ()
+    setAction "nodel" $ canvasEvent ([], "N") >> return ()
+    setAction "breakr" $ canvasEvent ([], "b") >> return ()
+    setAction "breakl" $ canvasEvent ([], "B") >> return ()
+    setAction "mark" $ canvasEvent ([], "m") >> return ()
+    setAction "connr" $ canvasEvent ([], "c") >> return ()
+    setAction "connl" $ canvasEvent ([], "C") >> return ()
+    setAction "rmlit" $ canvasEvent ([Alt], "BackSpace") >> return ()
 
     -- menus:
 
-    file <- menuItemNewWithMnemonic "_File"
-    filemenu <- menuNew
-    forM_ ["new","open","","save","saveas","","quit"] $ \name -> 
-        if name == "" then separatorMenuItemNew >>= menuShellAppend filemenu
-        else do 
-            Just action <- actionGroupGetAction actionGroup name
-            item <- actionCreateMenuItem action
-            menuShellAppend filemenu (castToMenuItem item)
+    let leaf x = Tree.Node x []
+        menuentries = [ Tree.Node "_File" (map leaf ["new","open","",
+                                                     "save","saveas","",
+                                                     "quit"])
+                      , Tree.Node "_Edit" (map leaf ["noder","nodel","",
+                                                     "breakr","breakl","",
+                                                     "mark","connr","connl","",
+                                                     "rmlit"])
+                      ]
+        createMenu :: MenuShellClass menu => menu -> Tree.Tree String -> IO ()
+        createMenu parent (Tree.Node name children) = 
+            if children /= [] then do
+                item <- menuItemNewWithMnemonic name
+                menu <- menuNew
+                mapM_ (createMenu menu) children
+                menuItemSetSubmenu item menu
+                menuShellAppend parent item
+            else
+                if name == "" then separatorMenuItemNew >>= menuShellAppend parent
+                else do 
+                    Just action <- actionGroupGetAction actionGroup name
+                    item <- actionCreateMenuItem action
+                    menuShellAppend parent (castToMenuItem item)
 
-    menuItemSetSubmenu file filemenu
     menubar <- menuBarNew
-    menuShellAppend menubar file
+    mapM_ (createMenu menubar) menuentries
 
     -- toolbar:
 
