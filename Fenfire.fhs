@@ -43,6 +43,7 @@ import Control.Monad.Writer (Writer, execWriter, tell)
 
 import Graphics.UI.Gtk hiding (Color, get, disconnect, fill)
 
+import qualified Control.Exception
 import System.Environment (getArgs)
 import System.Random (randomIO)
 import System.Directory (canonicalizePath)
@@ -351,6 +352,8 @@ main = mdo
 
     initGUI
     window <- windowNew
+    Control.Exception.catch (windowSetIconFromFile window "data/logo48.png")
+          (\e -> putStr "Opening data/logo48.png failed: " >> print e)
     windowSetTitle window "Fenfire"
     windowSetDefaultSize window 800 550
     
