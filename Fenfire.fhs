@@ -344,6 +344,9 @@ handleKey _ _ = unhandledEvent
             
 main :: IO ()
 main = mdo
+
+    -- initial state:
+
     args <- getArgs
 
     home0 <- newURI
@@ -362,11 +365,16 @@ main = mdo
                  _          -> return ()
 
     initGUI
+
+    -- main window:
+
     window <- windowNew
     Control.Exception.catch (windowSetIconFromFile window "data/logo48.png")
           (\e -> putStr "Opening data/logo48.png failed: " >> print e)
     windowSetTitle window "Fenfire"
     windowSetDefaultSize window 800 550
+
+    -- textview for editing:
     
     textView <- textViewNew
     textViewSetAcceptsTab textView False
@@ -386,44 +394,89 @@ main = mdo
                                 updateCanvas True
         textViewSetBuffer textView buf
         return ()
+
+    -- canvas for view:
     
     readIORef stateRef >>= stateChanged
     
     (canvas, updateCanvas) <- 
         vobCanvas stateRef view (handleKey vs) stateChanged lightGray
 
-    fileItems@[open, saveAs, quit] <- 
-        mapM imageMenuItemNewFromStock [stockOpen, stockSaveAs, stockQuit]
+    -- action widgets:
 
-    onActivateLeaf open $ do 
+    accelGroup <- uiManagerNew >>= uiManagerGetAccelGroup -- XXX Gtk2Hs
+    windowAddAccelGroup window accelGroup
+
+    actionGroup <- actionGroupNew "main"
+
+    let actionentries = [ ("new",stockNew)
+                        , ("open",stockOpen)
+                        , ("save",stockSave)
+                        , ("saveas",stockSaveAs)
+                        , ("quit",stockQuit)
+                        ]
+    flip mapM actionentries $ \(name,stock) -> do 
+        item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
+        action <- actionNew name (siLabel $ fromJust item) Nothing (Just stock)
+        actionGroupAddActionWithAccel actionGroup action Nothing
+        actionSetAccelGroup action accelGroup
+
+    -- action implementations:
+    
+    let setAction name callback = do
+        Just action <- actionGroupGetAction actionGroup name
+        onActionActivate action callback
+
+    setAction "new" $ do
+        writeIORef stateRef state0
+        stateChanged state0
+        updateCanvas False
+    setAction "open" $ do 
         (rot, _mark, filepath) <- readIORef stateRef
         (rot',fp') <- openFile vs rot filepath
         writeIORef stateRef (rot', Nothing, fp')
         stateChanged (rot', Nothing, fp')
         updateCanvas False
-    onActivateLeaf saveAs $ do
+    setAction "save" $ do
+        (Rotation g _n _r, _mark, filepath) <- readIORef stateRef
+        saveGraph g filepath
+    setAction "saveas" $ do
         (rot, mark, filepath) <- readIORef stateRef
         fp' <- saveFile rot filepath
         writeIORef stateRef (rot, mark, fp')
         stateChanged (rot, mark, fp')
         updateCanvas False
-    onActivateLeaf quit mainQuit
+    setAction "quit" mainQuit
+
+    -- menus:
 
     file <- menuItemNewWithMnemonic "_File"
     filemenu <- menuNew
-    mapM_ (menuShellAppend filemenu) fileItems
+    forM_ ["new","open","","save","saveas","","quit"] $ \name -> 
+        if name == "" then separatorMenuItemNew >>= menuShellAppend filemenu
+        else do 
+            Just action <- actionGroupGetAction actionGroup name
+            item <- actionCreateMenuItem action
+            menuShellAppend filemenu (castToMenuItem item)
+
     menuItemSetSubmenu file filemenu
     menubar <- menuBarNew
     menuShellAppend menubar file
 
-    savebutton <- toolButtonNewFromStock stockSave
-    onToolButtonClicked savebutton $ do 
-        (Rotation g _n _r, _mark, filepath) <- readIORef stateRef
-        saveGraph g filepath
+    -- toolbar:
 
     toolbar <- toolbarNew
-    toolbarInsert toolbar savebutton (-1)
-    
+    forM_ ["new", "open", "", "save"] $ \name -> 
+        if name == "" then do 
+            item <- separatorToolItemNew
+            toolbarInsert toolbar item (-1)
+        else do
+            Just action <- actionGroupGetAction actionGroup name
+            item <- actionCreateToolItem action
+            toolbarInsert toolbar (castToToolItem item) (-1)
+
+    -- layout:
+
     paned <- vPanedNew
     panedAdd1 paned canvas
     panedAdd2 paned textView
@@ -437,6 +490,8 @@ main = mdo
     set paned [ panedPosition := 380, panedChildResize textView := False ]
 
     set window [ containerChild := vbox ]
+
+    -- start:
     
     onDestroy window mainQuit
     widgetShowAll window
