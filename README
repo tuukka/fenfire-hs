@@ -6,8 +6,9 @@ in which you can express these relationships and benefit from them.
 ( http://fenfire.org/ )
 
 
-Fenfire-hs is designed for notetaking and RDF graph browsing. It is developed 
-on the channel #fenfire on the Freenode IRC network.
+Fenfire-hs is an application designed for notetaking and RDF graph
+browsing. It is developed on the channel #fenfire on the Freenode IRC
+network.
 
 
 The source code is available using Darcs.
@@ -16,13 +17,15 @@ The source code is available using Darcs.
 
 Requirements for compilation:
 fenfire-hs source code
+  ghc 6.4
+  gtk2hs 0.9.10
+  raptor 1.4.8
+  c2hs 0.14.5
 trhsx from our modified haskell-src-exts
-ghc 6.4
-gtk2hs 0.9.10
-raptor 1.4.8
-c2hs 0.14.5
+  happy
+  alex
 
-(Packages in Debian: ghc6 libghc6-gtk-dev libraptor1-dev c2hs)
+(Packages in Debian: ghc6 libghc6-gtk-dev libraptor1-dev c2hs happy alex)
 
 
 Running a precompiled binary only requires:
@@ -32,3 +35,14 @@ raptor
 
 (Packages in Debian: libgmp3c2 libgtk2.0-0 libraptor1)
 
+
+Compiling
+=========
+
+In the directory haskell-src-exts, run the following command:
+
+    make STAGES='clean "configure -p --prefix=$$HOME --user" build install'
+
+In the directory fenfire-hs, run the following command:
+
+    make TRHSX=$HOME/bin/trhsx

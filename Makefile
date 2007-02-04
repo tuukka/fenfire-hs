@@ -7,6 +7,9 @@ GHCFLAGS=-fglasgow-exts -hide-package haskell98 -Wall -fno-warn-unused-imports -
 
 GHCCMD = $(GHC) $(GHCFLAGS)
 
+C2HS?=c2hs
+TRHSX?=trhsx
+
 PREPROCESSED=$(patsubst %.fhs,%.hs,$(wildcard *.fhs)) \
              $(patsubst %.chs,%.hs,$(wildcard *.chs))
 SOURCES=*.hs *.chs *.fhs $(PREPROCESSED)
@@ -43,8 +46,8 @@ clean:
 
 # __attribute__ needs to be a no-op until c2hs learns to parse them in raptor.h
 %.hs: %.chs
-	c2hs --cppopts '-D"__attribute__(A)= "' $<
+	$(C2HS) --cppopts '-D"__attribute__(A)= "' $<
 
 %.hs: %.fhs
 	echo "-- GENERATED file. Edit the ORIGINAL $< instead." >$@
-	trhsx $< >>$@
+	$(TRHSX) $< >>$@ || (rm $@ && exit 1)
