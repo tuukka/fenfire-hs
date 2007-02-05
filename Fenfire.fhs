@@ -213,7 +213,8 @@ newURI = do rand <- randomIO
 newNode :: ViewSettings -> Rotation -> Dir -> IO Rotation
 newNode vs (Rotation graph node _) dir = do
     node' <- newURI
-    let graph' = insert (triple dir (node, rdfs_seeAlso, node')) graph
+    let graph' = insert (triple dir (node, rdfs_seeAlso, node'))
+               $ insert (node', rdfs_label, PlainLiteral "") graph
     return $ fromJust $ getRotation vs graph' node' rdfs_seeAlso (rev dir) node
     
 connect :: ViewSettings -> Rotation -> Dir -> Mark -> Rotation

@@ -76,9 +76,9 @@ listToGraph []     = emptyGraph
 listToGraph (t:ts) = insert t (listToGraph ts)
 
 graphToList :: Graph -> [Triple]
-graphToList (Graph _ a) = [(s,p,o) | (s,b) <- Map.toList a, 
-                                     (p,c) <- Map.toList b, 
-                                     o <- Set.toList c]  
+graphToList (Graph _ a) = [(s,p,o) | (s,b) <- Map.toAscList a, 
+                                     (p,c) <- Map.toAscList b, 
+                                     o <- Set.toAscList c]  
 
 insert :: Triple -> Graph -> Graph
 insert (s,p,o) (Graph neg pos) = Graph (ins o p s neg) (ins s p o pos) where
