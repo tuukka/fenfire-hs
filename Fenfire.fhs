@@ -278,7 +278,7 @@ saveGraph graph fileName = do
         f (URI s) = Raptor.Uri s
         f (PlainLiteral s) = Raptor.Literal s
         triples = graphToList graph
-    Raptor.triplesToFilename (map convert $ reverse triples) fileName
+    Raptor.triplesToFilename (map convert triples) fileName
 
 openFile :: ViewSettings -> Rotation -> FilePath -> IO (Rotation,FilePath)
 openFile vs rot0 fileName0 = do
