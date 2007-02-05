@@ -146,7 +146,7 @@ vanishingView vs depth maxnodes (startRotation, mark, _fp) =
     -- place one node view
     placeNode (Rotation graph node _) = do
         scale' <- getScale
-        let f vob = if Just node /= mark then vob
+        let f vob = if not (node `Set.member` mark) then vob
                      else setBgColor (Color 1 0 0 1) vob
         placeVob $ ownSize $ scale #scale' $ keyVob node $ f $ nodeView graph node
         
@@ -221,13 +221,16 @@ newNode vs (Rotation graph node _) dir = do
                      : (node', rdfs_label, PlainLiteral "") : graph
     return $ fromJust $ getRotation vs graph' node' rdfs_seeAlso (rev dir) node
     
-connect :: ViewSettings -> Rotation -> Dir -> Node -> Rotation
-connect vs (Rotation graph node _) dir node' =
-    let triple = (if dir == Pos then (node, rdfs_seeAlso, node')
-                                else (node', rdfs_seeAlso, node))
-        graph' = if triple `elem` graph then graph
-                                        else triple:graph
-    in fromJust $ getRotation vs graph' node rdfs_seeAlso dir node'
+connect :: ViewSettings -> Rotation -> Dir -> Mark -> Rotation
+connect _ r _ mark | Set.null mark = r
+connect vs (Rotation graph node _) dir mark =
+    let nodes = Set.toList mark
+        triples = [if dir == Pos then (node, rdfs_seeAlso, node')
+                                 else (node', rdfs_seeAlso, node)
+                  | node' <- nodes]
+        triples' = [t | t <- triples, not (t `elem` graph)]
+        graph' = graph ++ triples'
+    in fromJust $ getRotation vs graph' node rdfs_seeAlso dir (head nodes)
 
 disconnect :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
 disconnect vs (Rotation graph node rot) dir = 
@@ -248,12 +251,11 @@ disconnect vs (Rotation graph node rot) dir =
         else Nothing
 
 
-type Mark = Maybe Node
+type Mark = Set Node
 
 toggleMark :: Node -> Mark -> Mark
-toggleMark n Nothing = Just n
-toggleMark n (Just n') | n == n'   = Nothing
-                       | otherwise = Just n
+toggleMark n mark | n `Set.member` mark = Set.delete n mark
+                  | otherwise           = Set.insert n mark
 
 newGraph :: IO Rotation
 newGraph = do
@@ -343,7 +345,7 @@ handleAction vs action = do
     (rot@(Rotation graph node _), mark, filepath) <- get
     let m f x = maybeDo (f vs rot x) putRotation
         n f x = liftIO (f vs rot x) >>= putRotation
-        o f x = maybeDo mark $ \node' -> putState (f vs rot x node') Nothing
+        o f x = putState (f vs rot x mark) Set.empty
     case action of
         "up"    -> m rotate (-1)    ; "down"  -> m rotate 1
         "left"  -> m move Neg       ; "right" -> m move Pos
@@ -354,10 +356,10 @@ handleAction vs action = do
         "mark"  -> putMark $ toggleMark node mark
         "new"   -> do
             rot' <- liftIO newGraph
-            put (rot', Nothing, "")
+            put (rot', Set.empty, "")
         "open"  -> do 
             (rot',fp') <- liftIO $ openFile vs rot filepath
-            put (rot', Nothing, fp')
+            put (rot', Set.empty, fp')
         "save" | filepath /= "" -> do liftIO $ saveGraph graph filepath
                | otherwise      -> handleAction vs "saveas"
         "saveas"-> do
@@ -462,11 +464,11 @@ main = do
         view = vanishingView vs 20 20
 
     stateRef <- do rot <- newGraph
-                   newIORef (rot, Nothing, "")
+                   newIORef (rot, Set.empty, "")
 
     case args of [fileName] -> do fn <- canonicalizePath fileName
                                   rot' <- loadGraph vs fn
-                                  writeIORef stateRef (rot', Nothing, fn)
+                                  writeIORef stateRef (rot', Set.empty, fn)
                  []         -> return ()
                  _          -> error $ "Usage: " ++ progName ++ " [filename]"
 
