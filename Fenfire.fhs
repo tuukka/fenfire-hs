@@ -61,16 +61,17 @@ getRotation vs graph node prop dir node' = do
                      (i - (length (conns vs graph node dir) `div` 2)))
     
 conns :: ViewSettings -> Graph -> Node -> Dir -> [(Node, Node)]
-conns vs g node Pos = sortConns g [(p,o) | (s,p,o) <- g, s == node,
-                                   not $ p `elem` hiddenProps vs]
-conns vs g node Neg = sortConns g [(p,s) | (s,p,o) <- g, o == node,
-                                   not $ p `elem` hiddenProps vs]
-                                        
+conns vs g node dir = [(p,n) | (p,s) <- Map.toList $ getConns g node dir,
+                               not (p `elem` hiddenProps vs),
+                               n <- Set.toList s]
+
+{-
 sortConns :: Graph -> [(Node, Node)] -> [(Node, Node)]
 sortConns g = Data.List.sortBy cmp'
     where cmp n1 n2 = compare (getText g n1) (getText g n2)
           cmp' (p1,n1) (p2,n2) = catOrds (cmp p1 p2) (cmp n1 n2)
           catOrds EQ o = o; catOrds o _ = o
+-}
 
 getConn :: ViewSettings -> Rotation -> Dir -> Maybe (Node, Rotation)
 getConn vs (Rotation graph node r) dir = do
@@ -87,15 +88,11 @@ move :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
 move vs rot dir = fmap snd (getConn vs rot dir)
 
 getText :: Graph -> Node -> Maybe String
-getText g n = fmap (\(_s,_p,o) -> fromNode o)
-                   (Data.List.find (\(s,p,_o) -> s==n && p==rdfs_label) g)
+getText g n = fmap f $ getOne g n rdfs_label Pos where 
+    f (PlainLiteral s) = s; f _ = error "getText argh"
                     
 setText :: Graph -> Node -> String -> Graph
-setText g n t | getText g n /= Nothing = map update g
-              | otherwise              = labelling:g
-    where update (s,p,o) | s == n && p == rdfs_label = labelling
-                         | otherwise                 = (s,p,o)
-          labelling = (n, rdfs_label, PlainLiteral t)
+setText g n t = update (n, rdfs_label, PlainLiteral t) g
 
 nodeView :: Graph -> Node -> Vob Node
 nodeView g n = rectBox $ pad 5 $ useFgColor $ multiline False 20 s
@@ -216,20 +213,15 @@ newURI = do rand <- randomIO
 newNode :: ViewSettings -> Rotation -> Dir -> IO Rotation
 newNode vs (Rotation graph node _) dir = do
     node' <- newURI
-    let graph' = (if dir == Pos then (node, rdfs_seeAlso, node')
-                                else (node', rdfs_seeAlso, node))
-                     : (node', rdfs_label, PlainLiteral "") : graph
+    let graph' = insert (triple dir (node, rdfs_seeAlso, node')) graph
     return $ fromJust $ getRotation vs graph' node' rdfs_seeAlso (rev dir) node
     
 connect :: ViewSettings -> Rotation -> Dir -> Mark -> Rotation
 connect _ r _ mark | Set.null mark = r
 connect vs (Rotation graph node _) dir mark =
     let nodes = Set.toList mark
-        triples = [if dir == Pos then (node, rdfs_seeAlso, node')
-                                 else (node', rdfs_seeAlso, node)
-                  | node' <- nodes]
-        triples' = [t | t <- triples, not (t `elem` graph)]
-        graph' = graph ++ triples'
+        graph' = foldr (\n -> insert $ triple dir (node, rdfs_seeAlso, n))
+                       graph nodes
     in fromJust $ getRotation vs graph' node rdfs_seeAlso dir (head nodes)
 
 disconnect :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
@@ -238,9 +230,7 @@ disconnect vs (Rotation graph node rot) dir =
         c = conns vs graph node dir
         index = (length c `div` 2) + rot
         (p,n) = c !! index
-        triple = case dir of Pos -> (node,p,n)
-                             Neg -> (n,p,node)
-        graph' = filter (/= triple) graph
+        graph' = delete (triple dir (node, p, n)) graph
         index' = ((length c - 1) `div` 2) + rot
         rot' = case index' of x | x == -1                     -> rot+1
                                 | x == length c - 1 && x /= 0 -> rot-1
@@ -261,7 +251,7 @@ newGraph :: IO Rotation
 newGraph = do
     home0 <- newURI
 
-    let graph0 = [(home0, rdfs_label, PlainLiteral "")]
+    let graph0 = listToGraph [(home0, rdfs_label, PlainLiteral "")]
         rot0 = (Rotation graph0 home0 0)
 
     return rot0
@@ -274,8 +264,9 @@ loadGraph vs fileName = do
         f (Raptor.Uri s) = URI s
         f (Raptor.Literal s) = PlainLiteral s
         f (Raptor.Blank s) = URI $ "blank:" ++ s
-    graph <- Raptor.filenameToTriples fileName >>= return . map convert
-    let rots = catMaybes $ flip map graph $
+    triples <- Raptor.filenameToTriples fileName >>= return . map convert
+    let graph = listToGraph triples
+    let rots = catMaybes $ flip map triples $
                         \(s,p,o) -> getRotation vs graph s p Pos o
     return $ last rots
 
@@ -285,7 +276,8 @@ saveGraph graph fileName = do
     let convert (s,p,o) = (f s, f p, f o)
         f (URI s) = Raptor.Uri s
         f (PlainLiteral s) = Raptor.Literal s
-    Raptor.triplesToFilename (map convert $ reverse graph) fileName
+        triples = graphToList graph
+    Raptor.triplesToFilename (map convert $ reverse triples) fileName
 
 openFile :: ViewSettings -> Rotation -> FilePath -> IO (Rotation,FilePath)
 openFile vs rot0 fileName0 = do
@@ -370,8 +362,7 @@ handleAction vs action = do
   where putRotation rot = do modify $ \(_,mk,fp)  -> (rot,mk,fp); setInterp True
         putMark mk      = do modify $ \(rot,_,fp) -> (rot,mk,fp)
         putState rot mk = do putMark mk; putRotation rot
-        delLit (Rotation g n r) = Rotation (filter f g) n r where
-            f (s,p,_) = s /= n || p /= rdfs_label
+        delLit (Rotation g n r) = Rotation (deleteAll n rdfs_label g) n r
 
 makeActions actionGroup accelGroup = do
     let actionentries = 
