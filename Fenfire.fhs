@@ -45,7 +45,7 @@ import Control.Monad.Writer (Writer, execWriter, tell)
 import Graphics.UI.Gtk hiding (Color, get, disconnect, fill)
 
 import qualified Control.Exception
-import System.Environment (getArgs)
+import System.Environment (getArgs, getProgName)
 import System.Random (randomIO)
 import System.Directory (canonicalizePath)
 
@@ -371,12 +371,92 @@ handleAction vs action = do
         delLit (Rotation g n r) = Rotation (filter f g) n r where
             f (s,p,_) = s /= n || p /= rdfs_label
 
+makeActions actionGroup accelGroup = do
+    let actionentries = 
+            [ ( "new"    , stockNew    )
+            , ( "open"   , stockOpen   )
+            , ( "save"   , stockSave   )
+            , ( "saveas" , stockSaveAs )
+            , ( "quit"   , stockQuit   )
+            ]
+    flip mapM actionentries $ \(name,stock) -> do 
+        item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
+        action <- actionNew name (siLabel $ fromJust item) Nothing (Just stock)
+        actionGroupAddActionWithAccel actionGroup action Nothing
+        actionSetAccelGroup action accelGroup
+
+makeBindings actionGroup bindings = do
+    let bindingentries =
+            [ ("noder"  , Just "_New node to right"         , 
+               stockMediaForward  , Just "n"              )
+            , ("nodel"  , Just "N_ew node to left"          , 
+               stockMediaRewind   , Just "<Shift>N"       )
+            , ("breakr" , Just "_Break connection to right" , 
+               stockGotoLast      , Just "b"              )
+            , ("breakl" , Just "B_reak connection to left"  , 
+               stockGotoFirst     , Just "<Shift>B"       )
+            , ("mark"   , Just "Toggle _mark"               ,
+               stockOk            , Just "m"              )
+            , ("connr"  , Just "_Connect marked to right"   ,
+               stockGoForward     , Just "c"              )
+            , ("connl"  , Just "C_onnect marked to left"    ,
+               stockGoBack        , Just "<Shift>C"       )
+            , ("rmlit"  , Just "Remove _literal text"       ,
+               stockStrikethrough , Just "<Alt>BackSpace" )
+            ]
+    flip mapM bindingentries $ \(name,label',stock,accel) -> do 
+        item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
+        let label'' = maybe (siLabel $ fromJust item) id label'
+        action <- actionNew name label'' Nothing (Just stock)
+        actionGroupAddActionWithAccel actionGroup action accel
+        actionSetAccelGroup action bindings
+
+makeMenus actionGroup root = mapM_ (createMenu root) menuentries
+    where
+        leaf x = Tree.Node x []
+        menuentries = [ Tree.Node "_File" (map leaf ["new","open","",
+                                                     "save","saveas","",
+                                                     "quit"])
+                      , Tree.Node "_Edit" (map leaf ["noder","nodel","",
+                                                     "breakr","breakl","",
+                                                     "mark","connr","connl","",
+                                                     "rmlit"])
+                      ]
+        createMenu :: MenuShellClass menu => menu -> Tree.Tree String -> IO ()
+        createMenu parent (Tree.Node name children) = 
+            if children /= [] then do
+                item <- menuItemNewWithMnemonic name
+                menu <- menuNew
+                mapM_ (createMenu menu) children
+                menuItemSetSubmenu item menu
+                menuShellAppend parent item
+            else
+                if name == "" then do
+                    item <- separatorMenuItemNew
+                    menuShellAppend parent item
+                else do 
+                    Just action <- actionGroupGetAction actionGroup name
+                    item <- actionCreateMenuItem action
+                    menuShellAppend parent (castToMenuItem item)
+
+makeToolbarItems actionGroup toolbar = do
+    forM_ ["new", "open", "", "save"] $ \name -> 
+        if name == "" then do 
+            item <- separatorToolItemNew
+            toolbarInsert toolbar item (-1)
+        else do
+            Just action <- actionGroupGetAction actionGroup name
+            item <- actionCreateToolItem action
+            toolbarInsert toolbar (castToToolItem item) (-1)
+
+
 main :: IO ()
-main = mdo
+main = do
 
     -- initial state:
 
     args <- initGUI
+    progName <- getProgName
 
     let vs = ViewSettings { hiddenProps=[rdfs_label] }
         view = vanishingView vs 20 20
@@ -387,7 +467,18 @@ main = mdo
     case args of [fileName] -> do fn <- canonicalizePath fileName
                                   rot' <- loadGraph vs fn
                                   writeIORef stateRef (rot', Nothing, fn)
-                 _          -> return ()
+                 []         -> return ()
+                 _          -> error $ "Usage: " ++ progName ++ " [filename]"
+
+    -- start:
+
+    window <- makeWindow vs view stateRef
+    onDestroy window mainQuit
+    widgetShowAll window
+
+    mainGUI
+
+makeWindow vs view stateRef = mdo
 
     -- main window:
 
@@ -441,86 +532,21 @@ main = mdo
 
     actionGroup <- actionGroupNew "main"
 
-    let actionentries = 
-            [ ( "new"    , stockNew    )
-            , ( "open"   , stockOpen   )
-            , ( "save"   , stockSave   )
-            , ( "saveas" , stockSaveAs )
-            , ( "quit"   , stockQuit   )
-            ]
-    flip mapM actionentries $ \(name,stock) -> do 
-        item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
-        action <- actionNew name (siLabel $ fromJust item) Nothing (Just stock)
-        actionGroupAddActionWithAccel actionGroup action Nothing
-        actionSetAccelGroup action accelGroup
+    makeActions actionGroup accelGroup 
+    makeBindings actionGroup bindings
+
+    actions <- actionGroupListActions actionGroup
+    forM_ actions $ \action -> do
+        name <- actionGetName action
         onActionActivate action $ canvasAction name >> return ()
 
-    let bindingentries =
-            [ ("noder"  , Just "_New node to right"         , 
-               stockMediaForward  , Just "n"              )
-            , ("nodel"  , Just "N_ew node to left"          , 
-               stockMediaRewind   , Just "<Shift>N"       )
-            , ("breakr" , Just "_Break connection to right" , 
-               stockGotoLast      , Just "b"              )
-            , ("breakl" , Just "B_reak connection to left"  , 
-               stockGotoFirst     , Just "<Shift>B"       )
-            , ("mark"   , Just "Toggle _mark"               ,
-               stockOk            , Just "m"              )
-            , ("connr"  , Just "_Connect marked to right"   ,
-               stockGoForward     , Just "c"              )
-            , ("connl"  , Just "C_onnect marked to left"    ,
-               stockGoBack        , Just "<Shift>C"       )
-            , ("rmlit"  , Just "Remove _literal text"       ,
-               stockStrikethrough , Just "<Alt>BackSpace" )
-            ]
-    flip mapM bindingentries $ \(name,label',stock,accel) -> do 
-        item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
-        let label'' = maybe (siLabel $ fromJust item) id label'
-        action <- actionNew name label'' Nothing (Just stock)
-        actionGroupAddActionWithAccel actionGroup action accel
-        actionSetAccelGroup action bindings
-        onActionActivate action $ canvasAction name >> return ()
-    
-    -- menus:
-
-    let leaf x = Tree.Node x []
-        menuentries = [ Tree.Node "_File" (map leaf ["new","open","",
-                                                     "save","saveas","",
-                                                     "quit"])
-                      , Tree.Node "_Edit" (map leaf ["noder","nodel","",
-                                                     "breakr","breakl","",
-                                                     "mark","connr","connl","",
-                                                     "rmlit"])
-                      ]
-        createMenu :: MenuShellClass menu => menu -> Tree.Tree String -> IO ()
-        createMenu parent (Tree.Node name children) = 
-            if children /= [] then do
-                item <- menuItemNewWithMnemonic name
-                menu <- menuNew
-                mapM_ (createMenu menu) children
-                menuItemSetSubmenu item menu
-                menuShellAppend parent item
-            else
-                if name == "" then separatorMenuItemNew >>= menuShellAppend parent
-                else do 
-                    Just action <- actionGroupGetAction actionGroup name
-                    item <- actionCreateMenuItem action
-                    menuShellAppend parent (castToMenuItem item)
+    -- user interface widgets:
 
     menubar <- menuBarNew
-    mapM_ (createMenu menubar) menuentries
-
-    -- toolbar:
+    makeMenus actionGroup menubar
 
     toolbar <- toolbarNew
-    forM_ ["new", "open", "", "save"] $ \name -> 
-        if name == "" then do 
-            item <- separatorToolItemNew
-            toolbarInsert toolbar item (-1)
-        else do
-            Just action <- actionGroupGetAction actionGroup name
-            item <- actionCreateToolItem action
-            toolbarInsert toolbar (castToToolItem item) (-1)
+    makeToolbarItems actionGroup toolbar
 
     -- layout:
 
@@ -540,7 +566,6 @@ main = mdo
 
     -- start:
     
-    onDestroy window mainQuit
-    widgetShowAll window
     widgetGrabFocus canvas
-    mainGUI
+
+    return window
