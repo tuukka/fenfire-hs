@@ -46,9 +46,10 @@ import Control.Monad.Writer (Writer, execWriter, tell)
 import Graphics.UI.Gtk hiding (Color, get, disconnect, fill)
 
 import qualified Control.Exception
-import System.Environment (getArgs, getProgName)
-import System.Random (randomIO)
 import System.Directory (canonicalizePath)
+import System.Environment (getArgs, getProgName)
+import System.Mem.StableName
+import System.Random (randomIO)
 
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 
@@ -61,8 +62,13 @@ getRotation vs graph node prop dir node' = do
     return (Rotation graph node 
                      (i - (length (conns vs graph node dir) `div` 2)))
     
+connsCache :: Cache.Cache (StableName Graph, (Node, Dir)) [(Node, Node)]
+connsCache = Cache.newCache
+
 conns :: ViewSettings -> Graph -> Node -> Dir -> [(Node, Node)]
-conns vs g node dir = Data.List.sortBy cmp' list where
+conns vs g node dir = cached where
+    cached = Cache.cached (Cache.byAddress g, (node,dir)) connsCache result
+    result = Data.List.sortBy cmp' list
     list = [(p,n) | (p,s) <- Map.toList $ getConns g node dir,
                     not (p `elem` hiddenProps vs), n <- Set.toList s]
     cmp n1 n2 = compare (getText g n1) (getText g n2)

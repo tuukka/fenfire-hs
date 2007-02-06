@@ -18,6 +18,8 @@ module RDF where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
+import Cache
+
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
@@ -34,6 +36,14 @@ instance Show Node where
 type Triple = (Node, Node, Node)
 type Side   = Map Node (Map Node (Set Node))
 data Graph  = Graph Side Side deriving (Show, Eq)
+
+instance Hashable Node where
+    hash (URI s) = hash s
+    hash (PlainLiteral s) = hash s
+    
+instance Hashable Dir where
+    hash Pos = 0
+    hash Neg = 1
 
 rdfs         =     "http://www.w3.org/2000/01/rdf-schema#"
 rdfs_label   = URI "http://www.w3.org/2000/01/rdf-schema#label"
