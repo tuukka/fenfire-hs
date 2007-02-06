@@ -13,7 +13,7 @@ TRHSX?=trhsx
 PREPROCESSED=$(patsubst %.fhs,%.hs,$(wildcard *.fhs)) \
              $(patsubst %.chs,%.hs,$(wildcard *.chs))
 SOURCES=*.hs *.chs *.fhs $(PREPROCESSED)
-TARGETS=functortest vobtest fenfire
+TARGETS=functortest vobtest fenfire darcs2rdf
 
 all: $(TARGETS)
 
@@ -30,7 +30,8 @@ functortest: FunctorTest.hs $(SOURCES)
 vobtest: VobTest.hs $(SOURCES)
 fenfire: opts=-lraptor
 fenfire: Fenfire.hs $(SOURCES)
-functortest vobtest fenfire:
+darcs2rdf: Darcs2RDF.hs $(SOURCES)
+functortest vobtest fenfire darcs2rdf:
 	$(GHCCMD) $(opts) -o $@ -main-is $(basename $<).main --make $<
 	touch $@
 
@@ -38,6 +39,7 @@ run-functortest: functortest
 run-vobtest: vobtest
 run-fenfire: ARGS=test.nt
 run-fenfire: fenfire
+run-darcs2rdf: darcs2rdf
 run-%: %
 	./$< $(ARGS)
 
@@ -51,3 +53,6 @@ clean:
 %.hs: %.fhs
 	echo "-- GENERATED file. Edit the ORIGINAL $< instead." >$@
 	$(TRHSX) $< >>$@ || (rm $@ && exit 1)
+
+dump-patches: darcs2rdf
+	darcs changes --xml | ./darcs2rdf "http://antti-juhani.kaijanaho.fi/darcs/fenfire-hs/" >> $(ARGS)
