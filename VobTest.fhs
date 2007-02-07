@@ -29,34 +29,37 @@ import Data.Monoid hiding (Endo)
 import Control.Applicative
 import Control.Monad.State
 import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get, fill)
+import System.Environment (getArgs)
 
 
 type Info = (String, Double, Double)
 type Data = [(String,[Info])]
 
---myVob1 :: Vob String
+--myVob1 :: Vob (String, Int)
 --myVob1 = keyVob "1" $ rectBox $ pad 5 $ multiline False 20 "Hello World!"
 
-myVob2 :: Vob String
+myVob2 :: Vob (String, Int)
 myVob2 = mempty --keyVob "2" $ rectBox $ label "Foo bar baz"
 
-myScene1 :: String -> Data -> Vob String
+{-
+myScene1 :: String -> Data -> Vob (String, Int)
 myScene1 t d = mconcat [ stroke $ line (center @@ "1") (center @@ "2"),
                          translate #50 #100 $ myVob2,
                          translate #250 #150  $ myVob1 t d ]
+-}
 
-myScene2 :: String -> Data -> Vob String
+myScene2 :: String -> Data -> Vob (String, Int)
 myScene2 t d = translate #350 #400 $ rotate #(-pi/15) $ scale #1.5 $ 
     changeSize (\(w,h) -> (w-30, h)) $ myVob1 t d
     
     
-myVob1 :: String -> Data -> Vob String
-myVob1 t d = keyVob "1" $ {-ownSize $ resize (250, 250) $-} 
+myVob1 :: String -> Data -> Vob (String, Int)
+myVob1 t d = keyVob ("vob",1) $ {-ownSize $ resize (250, 250) $-} 
         pad 20 $ daisy t info where
     info = fromJust (Data.List.lookup t d)
 
 
-daisy :: String -> [(String, Double, Double)] -> Vob String
+daisy :: String -> [(String, Double, Double)] -> Vob (String, Int)
 daisy target distractors = 
       mconcat [withDash #[4] #0 $
                    stroke (circle center #(inner + !w * radius))
@@ -64,7 +67,8 @@ daisy target distractors =
     & mconcat [(translateTo center $
                    rotate #(((fromIntegral i)::Double) * angle) $
                        translate #inner #0 $ daisyLeaf w (distractors !! i))
-               & translateTo (center @@ name i) (centerVob $ label $ name i)
+               & translateTo (center @@ (name i,-1)) 
+                             (centerVob $ label $ name i)
               | i <- [0..n-1]]
     & translateTo center (centerVob $ label target)
   where
@@ -76,22 +80,28 @@ daisy target distractors =
     angle = (2.0*pi) / fromIntegral n
 
 
-daisyLeaf :: Cx String Double -> (String, Double, Double) -> Vob String
+daisyLeaf :: Cx (String, Int) Double -> (String, Double, Double) -> Vob (String, Int)
 daisyLeaf w (name, correct, total) =
-    withColor #color (fill shape) & stroke shape
-    & translate #(!w*(correct/total)**2) #0 (ownSize $ keyVob name mempty)
+    withColor #color (fill shape) & stroke shape & mconcat pointVobs
+    & translate #(!w*(correct/total)) #0 (ownSize $ keyVob (name,-1) mempty)
   where
-    shape = moveTo (head $ points 1) & mconcat (map lineTo $ tail $ points 1) &
-            mconcat (map lineTo $ reverse $ points (-1)) & closePath
-    points dir = [point #(!w*(p**2)) #(!w*dir*arbitrary*y) 
+    points dir = [point #(!w*(p)) #(!w*dir*arbitrary*y) 
                  | (p,y) <- zip ps (map (/ sum ys) ys)]
-        where ps = map (/100.0) [0..100]; ys = map f ps
+        where ps = map (/10.0) [0..10]; ys = map f ps
+    points' = points 1 ++ reverse (points (-1))
+    pointKeys = [(name, i) | i <- [0..21]]
+    pointVobs = flip map (zip points' pointKeys) $ \(p,k) -> 
+        translateTo p (keyVob k mempty)
+    path = [anchor #0 #0 @@ k | k <- pointKeys]
+    shape = moveTo (head path) & mconcat (map lineTo $ tail path) & closePath
     f p = (p ** correct) * ((1 - p) ** (total - correct))
-    arbitrary = 4
+    arbitrary = 0.4
     color = interpolate (correct/total) (Color 1 0 0 0.5) (Color 0 1 0 0.5)
 
 main = do 
-    testdata <- readFile "DaisyData.txt" >>= return . (read :: String -> Data)
+    args <- getArgs
+    let fname = if length args == 0 then "DaisyData.txt" else head args
+    testdata <- readFile fname >>= return . (read :: String -> Data)
 
     initGUI
     window <- windowNew
