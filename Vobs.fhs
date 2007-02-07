@@ -223,7 +223,7 @@ centerVob vob = translate (pure (-w/2)) (pure (-h/2)) vob
                
 pad4 :: Ord k => Double -> Double -> Double -> Double -> Endo (Vob k)
 pad4 x1 x2 y1 y2 vob = 
-    resize (x1+w+x2, y1+h+y2) $
+    changeSize (const (x1+w+x2, y1+h+y2)) $
         changeRect (\(m,(w',h')) -> (f m, (w'-x1-x2, h'-y1-y2))) vob
     where (w,h) = defaultSize vob; f = Matrix.translate x1 y1
     
@@ -232,16 +232,6 @@ pad2 x y   = pad4 x x y y
 
 pad :: Ord k => Double -> Endo (Vob k)
 pad pixels = pad2 pixels pixels
-
-
-resizeX :: Ord k => Double -> Endo (Vob k)
-resizeX w = changeSize $ \(_,h) -> (w,h)
-
-resizeY :: Ord k => Double -> Endo (Vob k)
-resizeY h = changeSize $ \(w,_) -> (w,h)
-
-resize :: Ord k => Size -> Endo (Vob k)
-resize (w,h) = changeSize $ const (w,h)
     
     
 class Interpolate a where

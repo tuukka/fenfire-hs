@@ -59,6 +59,10 @@ myVob1 t d = keyVob ("vob",1) $ {-ownSize $ resize (250, 250) $-}
     info = fromJust (Data.List.lookup t d)
 
 
+setSize :: Cx (String, Int) Double -> Cx (String, Int) Double -> 
+           Endo (Vob (String, Int))
+setSize w h = cxLocalR #(!cxMatrix, (!w, !h))
+
 daisy :: String -> [(String, Double, Double)] -> Vob (String, Int)
 daisy target distractors = 
       mconcat [withDash #[4] #0 $
@@ -66,36 +70,52 @@ daisy target distractors =
               | radius <- [0, 1/4, 9/16, 1]]
     & mconcat [(translateTo center $
                    rotate #(((fromIntegral i)::Double) * angle) $
-                       translate #inner #0 $ daisyLeaf w (distractors !! i))
+                       translate #inner #0 $ setSize w h $
+                           daisyLeaf (distractors !! i))
                & translateTo (center @@ (name i,-1)) 
                              (centerVob $ label $ name i)
               | i <- [0..n-1]]
     & translateTo center (centerVob $ label target)
   where
     inner = 20.0 :: Double
-    size = #(uncurry min !cxSize); w = #((!size - inner)/2)
+    size = #(uncurry min !cxSize)
+    w = #((!size - inner)/2); h = #(!w / 20)
     n = length distractors
     name i = case distractors !! i of (r,_,_) -> r
     angle :: Double
     angle = (2.0*pi) / fromIntegral n
 
 
-daisyLeaf :: Cx (String, Int) Double -> (String, Double, Double) -> Vob (String, Int)
-daisyLeaf w (name, correct, total) =
+likelihood correct total p = (p ** correct) * ((1 - p) ** (total - correct))
+
+fractions :: Int -> [Double]
+fractions n = [fromIntegral i / fromIntegral n | i <- [0..n]]
+
+normalize :: [Double] -> [Double]
+normalize xs = map (/s) xs where s = sum xs
+
+accumulate :: [Double] -> [Double]
+accumulate = scanl (+) 0
+
+denormalize :: [Double] -> [Double]
+denormalize xs = map (* len) xs where len = fromIntegral $ length xs
+
+daisyLeaf :: (String, Double, Double) -> Vob (String, Int)
+daisyLeaf (name, correct, total) =
     withColor #color (fill shape) & stroke shape & mconcat pointVobs
-    & translate #(!w*(correct/total)) #0 (ownSize $ keyVob (name,-1) mempty)
+    & translateTo (anchor #(correct/total) #0)
+                  (ownSize $ keyVob (name,-1) mempty)
   where
-    points dir = [point #(!w*(p)) #(!w*dir*arbitrary*y) 
-                 | (p,y) <- zip ps (map (/ sum ys) ys)]
-        where ps = map (/10.0) [0..10]; ys = map f ps
-    points' = points 1 ++ reverse (points (-1))
-    pointKeys = [(name, i) | i <- [0..21]]
-    pointVobs = flip map (zip points' pointKeys) $ \(p,k) -> 
-        translateTo p (keyVob k mempty)
+    n = 20
+    fracts = fractions n
+    points' = zip fracts ys where
+        ys = denormalize $ normalize [likelihood correct total p | p <- fracts]
+    points = points' ++ reverse (map (\(x,y) -> (x,-y)) points')
+    pointKeys = [(name, i) | i <- [0..2*n+1]]
+    pointVobs = flip map (zip points pointKeys) $ \((x,y),k) -> 
+        translateTo (anchor #x #y) (keyVob k mempty)
     path = [anchor #0 #0 @@ k | k <- pointKeys]
     shape = moveTo (head path) & mconcat (map lineTo $ tail path) & closePath
-    f p = (p ** correct) * ((1 - p) ** (total - correct))
-    arbitrary = 0.4
     color = interpolate (correct/total) (Color 1 0 0 0.5) (Color 0 1 0 0.5)
 
 main = do 
