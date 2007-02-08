@@ -305,9 +305,10 @@ noAnim scene = const (scene, False)
     
 
 vobCanvas :: Ord b => IORef a -> View a b -> Handler Event a -> 
-                      Handler c a -> (a -> IO ()) -> Color -> 
+                      Handler c a -> (a -> IO ()) -> Color -> TimeDiff ->
                       IO (DrawingArea, Bool -> IO (), c -> IO Bool)
-vobCanvas stateRef view eventHandler actionHandler stateChanged bgColor = do
+vobCanvas stateRef view eventHandler actionHandler stateChanged 
+          bgColor animTime = do
     canvas <- drawingAreaNew
     
     widgetSetCanFocus canvas True
@@ -336,7 +337,7 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged bgColor = do
 	    
 	    let (scene, _rerender) = anim time
 	        anim' = if interpolate' && isInterpUseful scene scene'
-                        then interpAnim time 0.5 scene scene'
+                        then interpAnim time animTime scene scene'
 	                else noAnim scene'
 
 	    writeIORef animRef (vob', anim')

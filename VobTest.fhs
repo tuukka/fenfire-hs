@@ -97,6 +97,25 @@ normalize xs = map (/s) xs where s = sum xs
 accumulate :: [Double] -> [Double]
 accumulate = scanl (+) 0
 
+table :: Int -> (Double -> Double) -> [Double]
+table steps f = [f (fromIntegral i / len) | i <- [0..steps-1]] where
+    len = fromIntegral (steps - 1)
+
+{-
+untable :: [Double] -> (Double -> Double)
+untable vals = f where
+    nvals = fromIntegral (length vals) :: Double; offs = 1 / nvals
+    f x = interpolate fract (vals !! idx) (vals !! idx+1) where
+        idx = floor (x / offs); fract = x/offs - fromIntegral idx
+-}
+        
+invert :: [Double] -> (Double -> Double)
+invert ys = \y -> idx y 0 ys / len where
+    idx x i (x':xs) | x <= x'   = i
+                    | otherwise = idx x (i+1) xs
+    idx _ i []                  = i
+    len = fromIntegral (length ys) :: Double
+
 denormalize :: [Double] -> [Double]
 denormalize xs = map (* len) xs where len = fromIntegral $ length xs
 
@@ -106,10 +125,15 @@ daisyLeaf (name, correct, total) =
     & translateTo (anchor #(correct/total) #0)
                   (ownSize $ keyVob (name,-1) mempty)
   where
-    n = 20
+    n = 30
     fracts = fractions n
-    points' = zip fracts ys where
+    pointsA = zip fracts ys where
         ys = denormalize $ normalize [likelihood correct total p | p <- fracts]
+    pointsB = zip xs ys where
+        xs = map f fracts
+        f = invert $ accumulate $ normalize [likelihood correct total p | p <- fracts]
+        ys = denormalize $ normalize [likelihood correct total p | p <- xs]
+    points' = pointsB
     points = points' ++ reverse (map (\(x,y) -> (x,-y)) points')
     pointKeys = [(name, i) | i <- [0..2*n+1]]
     pointVobs = flip map (zip points pointKeys) $ \((x,y),k) -> 
@@ -140,7 +164,7 @@ main = do
     (canvas, _updateCanvas, _canvasAction) <- vobCanvas stateRef view handle 
                                                         (const $ return ()) 
                                                         (const $ return ()) 
-                                                        lightGray
+                                                        lightGray 3
 
     set window [ containerChild := canvas ]
     

@@ -512,7 +512,7 @@ makeWindow vs view stateRef = mdo
     
     (canvas, updateCanvas, canvasAction) <- 
         vobCanvas stateRef view (handleEvent vs) (handleAction vs) 
-                  stateChanged lightGray
+                  stateChanged lightGray 0.5
 
     onFocusIn canvas $ \_event -> do windowAddAccelGroup window bindings
                                      return True
