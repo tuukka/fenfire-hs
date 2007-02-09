@@ -286,6 +286,7 @@ saveGraph graph fileName = do
         f (PlainLiteral s) = Raptor.Literal s
         triples = graphToList graph
     Raptor.triplesToFilename (map convert triples) fileName
+    putStrLn $ "Saved: " ++ fileName
 
 openFile :: (?vs :: ViewSettings) => Rotation -> FilePath -> 
             IO (Rotation,FilePath)
