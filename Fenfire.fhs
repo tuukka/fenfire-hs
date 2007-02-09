@@ -475,7 +475,7 @@ main = let ?vs = ViewSettings { hiddenProps=[rdfs_label] } in do
                      Rotation g' n' r' <- load fileName
                      rots <- mapM load fileNames
                      let graphs = map (\(Rotation g _ _) -> g) rots
-                         rot' = Rotation (foldr mergeGraphs g' graphs) n' r'
+                         rot' = Rotation (foldl mergeGraphs g' graphs) n' r'
                      writeIORef stateRef $ newState rot' fileName
 
     -- start:
