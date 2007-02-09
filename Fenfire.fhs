@@ -52,6 +52,8 @@ import System.Mem.StableName
 import System.Random (randomIO)
 
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
+data FenState = FenState { fsRotation :: Rotation, fsMark :: Mark,
+                           fsFilePath :: FilePath }
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 
@@ -106,9 +108,8 @@ propView g n = (useFadeColor $ fill extents)
 
 
 
-vanishingView :: (?vs :: ViewSettings) => Int -> Int ->
-                 (Rotation, Mark, FilePath) -> Vob Node
-vanishingView depth maxnodes (startRotation, mark, _fp) = 
+vanishingView :: (?vs :: ViewSettings) => Int -> Int -> FenState -> Vob Node
+vanishingView depth maxnodes (FenState startRotation mark _fp) = 
     runVanishing depth maxnodes view where
     -- place the center of the view and all subtrees in both directions
     view = do placeNode startRotation
@@ -322,9 +323,12 @@ saveFile (Rotation graph _ _) fileName0 confirmSame = do
         _              -> return fileName0
 
 
-handleEvent :: (?vs :: ViewSettings) => Handler Event (Rotation, Mark, FilePath)
+newState :: Rotation -> FilePath -> FenState
+newState rot fp = FenState rot Set.empty fp
+
+handleEvent :: (?vs :: ViewSettings) => Handler Event FenState
 handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
-    (rot, mk, fileName) <- get
+    state <- get; let rot = fsRotation state; fileName = fsFilePath state
     case key of 
         x | x == "Up"    || x == "i"     -> handleAction "up"
         x | x == "Down"  || x == "comma" -> handleAction "down"
@@ -332,14 +336,14 @@ handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
         x | x == "Right" || x == "l"     -> handleAction "right"
         "O" -> handleAction "open"
         "S" -> do fp' <- liftIO $ saveFile rot fileName False
-                  put (rot, mk, fp')
+                  put $ state { fsFilePath = fp' }
         _   -> unhandledEvent
 handleEvent _ = unhandledEvent
 
-handleAction :: (?vs :: ViewSettings) => 
-                Handler String (Rotation, Mark, FilePath)
+handleAction :: (?vs :: ViewSettings) => Handler String FenState
 handleAction action = do
-    (rot@(Rotation graph node _), mark, filepath) <- get
+    FenState { fsRotation = rot@(Rotation graph node _),
+               fsMark = mark, fsFilePath = filepath } <- get
     let m f x = maybeDo (f rot x) putRotation
         n f x = liftIO (f rot x) >>= putRotation
         o f x = putState (f rot x mark) Set.empty
@@ -353,19 +357,20 @@ handleAction action = do
         "mark"  -> putMark $ toggleMark node mark
         "new"   -> do
             rot' <- liftIO newGraph
-            put (rot', Set.empty, "")
+            put $ newState rot' ""
         "open"  -> do 
             (rot',fp') <- liftIO $ openFile rot filepath
-            put (rot', Set.empty, fp')
+            put $ newState rot' fp'
         "save" | filepath /= "" -> do liftIO $ saveGraph graph filepath
                | otherwise      -> handleAction "saveas"
         "saveas"-> do
             fp' <- liftIO $ saveFile rot filepath True
-            put (rot, mark, fp')
+            modify $ \s -> s { fsFilePath = fp' }
         "quit"  -> liftIO $ mainQuit
         _       -> unhandledEvent
-  where putRotation rot = do modify $ \(_,mk,fp)  -> (rot,mk,fp); setInterp True
-        putMark mk      = do modify $ \(rot,_,fp) -> (rot,mk,fp)
+  where putRotation rot = do modify $ \state -> state { fsRotation=rot }
+                             setInterp True
+        putMark mk      = do modify $ \state -> state { fsMark=mk }
         putState rot mk = do putMark mk; putRotation rot
         delLit (Rotation g n r) = Rotation (deleteAll n rdfs_label g) n r
 
@@ -459,11 +464,11 @@ main = let ?vs = ViewSettings { hiddenProps=[rdfs_label] } in do
     let view = vanishingView 20 30
 
     stateRef <- do rot <- newGraph
-                   newIORef (rot, Set.empty, "")
+                   newIORef $ newState rot ""
 
     case args of [fileName] -> do fn <- canonicalizePath fileName
                                   rot' <- loadGraph fn
-                                  writeIORef stateRef (rot', Set.empty, fn)
+                                  writeIORef stateRef $ newState rot' fn
                  []         -> return ()
                  _          -> error $ "Usage: " ++ progName ++ " [filename]"
 
@@ -492,17 +497,19 @@ makeWindow view stateRef = mdo
     textViewSetWrapMode textView WrapWordChar
 
     -- this needs to be called whenever the node or its text changes:
-    let stateChanged (Rotation g n _r, _mark, _fileName) = do
+    let stateChanged (FenState { fsRotation = Rotation g n _r })	 = do
             buf <- textBufferNew Nothing
             textBufferSetText buf (maybe "" id $ getText g n)
             afterBufferChanged buf $ do 
                 start <- textBufferGetStartIter buf
                 end   <- textBufferGetEndIter buf
                 text  <- textBufferGetText buf start end True
-                (Rotation g' n' r', mk', fp') <- readIORef stateRef
+                FenState { fsRotation = (Rotation g' n' r') } 
+                    <- readIORef stateRef
                 let g'' = setText g' n text -- buf corresponds to n, not to n'
 
-                writeIORef stateRef $ (Rotation g'' n' r', mk', fp')
+                modifyIORef stateRef $ \s -> 
+                    s { fsRotation = Rotation g'' n' r' }
                 updateCanvas True
 
             textViewSetBuffer textView buf
