@@ -67,12 +67,16 @@ getRotation graph node prop dir node' = do
 connsCache :: Cache.Cache (StableName Graph, (Node, Dir)) [(Node, Node)]
 connsCache = Cache.newCache
 
+dc_date = URI "dc:date"
+
 conns :: (?vs :: ViewSettings) => Graph -> Node -> Dir -> [(Node, Node)]
 conns g node dir = cached where
     cached = Cache.cached (Cache.byAddress g, (node,dir)) connsCache result
     result = Data.List.sortBy cmp' list
     list = [(p,n) | (p,s) <- Map.toList $ getConns g node dir,
                     not (p `elem` hiddenProps ?vs), n <- Set.toList s]
+    cmp n1 n2 | p n1 && p n2 = compare (f n1) (f n2) where
+        p n = hasConn g n dc_date Pos; f n = getOne g n dc_date Pos
     cmp n1 n2 = compare (getText g n1) (getText g n2)
     cmp' (p1,n1) (p2,n2) = catOrds (cmp p1 p2) (cmp n1 n2)
     catOrds EQ o = o; catOrds o _ = o
@@ -459,18 +463,20 @@ main = let ?vs = ViewSettings { hiddenProps=[rdfs_label] } in do
     -- initial state:
 
     args <- initGUI
-    progName <- getProgName
 
     let view = vanishingView 20 30
 
     stateRef <- do rot <- newGraph
                    newIORef $ newState rot ""
 
-    case args of [fileName] -> do fn <- canonicalizePath fileName
-                                  rot' <- loadGraph fn
-                                  writeIORef stateRef $ newState rot' fn
-                 []         -> return ()
-                 _          -> error $ "Usage: " ++ progName ++ " [filename]"
+    case args of []                   -> return ()
+                 (fileName:fileNames) -> do
+                     let load fn = loadGraph =<< canonicalizePath fn
+                     Rotation g' n' r' <- load fileName
+                     rots <- mapM load fileNames
+                     let graphs = map (\(Rotation g _ _) -> g) rots
+                         rot' = Rotation (foldr mergeGraphs g' graphs) n' r'
+                     writeIORef stateRef $ newState rot' fileName
 
     -- start:
 

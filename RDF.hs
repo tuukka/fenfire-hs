@@ -19,10 +19,11 @@ module RDF where
 -- MA  02111-1307  USA
 
 import Cache
+import Utils
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 
@@ -35,7 +36,7 @@ instance Show Node where
 
 type Triple = (Node, Node, Node)
 type Side   = Map Node (Map Node (Set Node))
-data Graph  = Graph Side Side deriving (Show, Eq)
+data Graph  = Graph Side Side (Set Triple) deriving (Show, Eq)
 
 instance Hashable Node where
     hash (URI s) = hash s
@@ -64,8 +65,12 @@ object :: Triple -> Node
 object (_,_,o) = o
 
 graphSide :: Dir -> Graph -> Side
-graphSide Neg (Graph s _) = s
-graphSide Pos (Graph _ s) = s
+graphSide Neg (Graph s _ _) = s
+graphSide Pos (Graph _ s _) = s
+
+hasConn :: Graph -> Node -> Node -> Dir -> Bool
+hasConn g node prop dir = isJust $ do m <- Map.lookup node (graphSide dir g)
+                                      Map.lookup prop m
 
 getOne :: Graph -> Node -> Node -> Dir -> Maybe Node
 getOne g node prop dir = if null nodes then Nothing else Just $ head nodes
@@ -79,23 +84,29 @@ getConns :: Graph -> Node -> Dir -> Map Node (Set Node)
 getConns g node dir = Map.findWithDefault Map.empty node $ graphSide dir g
 
 emptyGraph :: Graph
-emptyGraph = Graph (Map.empty) (Map.empty)
+emptyGraph = Graph (Map.empty) (Map.empty) Set.empty
 
 listToGraph :: [Triple] -> Graph
-listToGraph []     = emptyGraph
-listToGraph (t:ts) = insert t (listToGraph ts)
+listToGraph = foldr insert emptyGraph
 
 graphToList :: Graph -> [Triple]
-graphToList (Graph _ a) = [(s,p,o) | (s,b) <- Map.toAscList a, 
-                                     (p,c) <- Map.toAscList b, 
-                                     o <- Set.toAscList c]  
+graphToList (Graph _ _ triples) = Set.toAscList triples
+
+mergeGraphs :: Op Graph
+mergeGraphs g1 g2 = foldr insertVirtual g1 (graphToList g2)
 
 insert :: Triple -> Graph -> Graph
-insert (s,p,o) (Graph neg pos) = Graph (ins o p s neg) (ins s p o pos) where
+insert t (Graph neg pos triples) =
+    insertVirtual t (Graph neg pos $ Set.insert t triples)
+
+insertVirtual :: Triple -> Graph -> Graph
+insertVirtual (s,p,o) (Graph neg pos triples) =
+    Graph (ins o p s neg) (ins s p o pos) triples where
     ins a b c = Map.alter (Just . Map.alter (Just . Set.insert c . fromMaybe Set.empty) b . fromMaybe Map.empty) a   -- Gack!!! Need to make more readable
     
 delete :: Triple -> Graph -> Graph
-delete (s,p,o) (Graph neg pos) = Graph (del o p s neg) (del s p o pos) where
+delete (s,p,o) (Graph neg pos triples) = 
+    Graph (del o p s neg) (del s p o pos) $ Set.delete (s,p,o) triples where
     del a b c = Map.adjust (Map.adjust (Set.delete c) b) a
     
 deleteAll :: Node -> Node -> Graph -> Graph
