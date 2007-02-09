@@ -38,10 +38,13 @@ functortest vobtest fenfire darcs2rdf:
 run-functortest: functortest
 run-vobtest: vobtest
 run-fenfire: ARGS=test.nt
-run-fenfire: fenfire
+run-fenfire: fenfire darcs.nt
 run-darcs2rdf: darcs2rdf
 run-%: %
 	./$< $(ARGS)
+
+darcs.nt: darcs2rdf _darcs/inventory
+	darcs changes --xml | ./darcs2rdf "http://antti-juhani.kaijanaho.fi/darcs/fenfire-hs/" > darcs.nt
 
 clean:
 	rm -f $(PREPROCESSED) *.p_hi *.hi *.i *.chi Raptor.h Raptor_stub.* *.p_o *.o $(TARGETS)
