@@ -65,7 +65,7 @@ getRotation graph node prop dir node' = do
                      (i - (length (conns graph node dir) `div` 2)))
     
 connsCache :: Cache.Cache (StableName Graph, (Node, Dir)) [(Node, Node)]
-connsCache = Cache.newCache
+connsCache = Cache.newCache 10000
 
 dc_date = URI "dc:date"
 
