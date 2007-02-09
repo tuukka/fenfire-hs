@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fallow-overlapping-instances #-}
+{-# OPTIONS_GHC -fallow-overlapping-instances -fimplicit-params #-}
 module Fenfire where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
@@ -55,39 +55,39 @@ data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 
-getRotation :: ViewSettings -> Graph -> Node -> Node -> Dir -> Node ->
+getRotation :: (?vs :: ViewSettings) => Graph -> Node -> Node -> Dir -> Node ->
                Maybe Rotation
-getRotation vs graph node prop dir node' = do
-    i <- Data.List.elemIndex (prop, node') (conns vs graph node dir)
+getRotation graph node prop dir node' = do
+    i <- Data.List.elemIndex (prop, node') (conns graph node dir)
     return (Rotation graph node 
-                     (i - (length (conns vs graph node dir) `div` 2)))
+                     (i - (length (conns graph node dir) `div` 2)))
     
 connsCache :: Cache.Cache (StableName Graph, (Node, Dir)) [(Node, Node)]
 connsCache = Cache.newCache
 
-conns :: ViewSettings -> Graph -> Node -> Dir -> [(Node, Node)]
-conns vs g node dir = cached where
+conns :: (?vs :: ViewSettings) => Graph -> Node -> Dir -> [(Node, Node)]
+conns g node dir = cached where
     cached = Cache.cached (Cache.byAddress g, (node,dir)) connsCache result
     result = Data.List.sortBy cmp' list
     list = [(p,n) | (p,s) <- Map.toList $ getConns g node dir,
-                    not (p `elem` hiddenProps vs), n <- Set.toList s]
+                    not (p `elem` hiddenProps ?vs), n <- Set.toList s]
     cmp n1 n2 = compare (getText g n1) (getText g n2)
     cmp' (p1,n1) (p2,n2) = catOrds (cmp p1 p2) (cmp n1 n2)
     catOrds EQ o = o; catOrds o _ = o
 
-getConn :: ViewSettings -> Rotation -> Dir -> Maybe (Node, Rotation)
-getConn vs (Rotation graph node r) dir = do
-    let c = conns vs graph node dir; i = (length c `div` 2) + r
+getConn :: (?vs :: ViewSettings) => Rotation -> Dir -> Maybe (Node, Rotation)
+getConn (Rotation graph node r) dir = do
+    let c = conns graph node dir; i = (length c `div` 2) + r
     guard $ i >= 0 && i < length c; let (p,n) = c !! i
-    rot <- getRotation vs graph n p (rev dir) node
+    rot <- getRotation graph n p (rev dir) node
     return (p,rot)
              
-rotate :: ViewSettings -> Rotation -> Int -> Maybe Rotation
-rotate vs (Rotation g n r) dir = let rot = Rotation g n (r+dir) in do
-    guard $ any isJust [getConn vs rot d | d <- [Pos, Neg]]; return rot
+rotate :: (?vs :: ViewSettings) => Rotation -> Int -> Maybe Rotation
+rotate (Rotation g n r) dir = let rot = Rotation g n (r+dir) in do
+    guard $ any isJust [getConn rot d | d <- [Pos, Neg]]; return rot
 
-move :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
-move vs rot dir = fmap snd (getConn vs rot dir)
+move :: (?vs :: ViewSettings) => Rotation -> Dir -> Maybe Rotation
+move rot dir = fmap snd (getConn rot dir)
 
 getText :: Graph -> Node -> Maybe String
 getText g n = fmap f $ getOne g n rdfs_label Pos where 
@@ -106,9 +106,9 @@ propView g n = (useFadeColor $ fill extents)
 
 
 
-vanishingView :: ViewSettings -> Int -> Int ->
+vanishingView :: (?vs :: ViewSettings) => Int -> Int ->
                  (Rotation, Mark, FilePath) -> Vob Node
-vanishingView vs depth maxnodes (startRotation, mark, _fp) = 
+vanishingView depth maxnodes (startRotation, mark, _fp) = 
     runVanishing depth maxnodes view where
     -- place the center of the view and all subtrees in both directions
     view = do placeNode startRotation
@@ -122,13 +122,13 @@ vanishingView vs depth maxnodes (startRotation, mark, _fp) =
             placeConns' rotation xdir ydir
     -- place rest of the subtrees in (xdir, ydir)
     placeConns' rotation xdir ydir = withDepthIncreased 1 $
-        maybeDo (rotate vs rotation ydir) $ \rotation' -> do
+        maybeDo (rotate rotation ydir) $ \rotation' -> do
             withAngleChanged (fromIntegral ydir * mul xdir pi / 14) $ do
                 placeConn rotation' xdir
                 placeConns' rotation' xdir ydir
     -- place one subtree
     placeConn rotation@(Rotation graph n1 _) dir = withDepthIncreased 1 $
-        maybeDo (getConn vs rotation dir) $ \(prop, rotation') -> do
+        maybeDo (getConn rotation dir) $ \(prop, rotation') -> do
             let Rotation _ n2 _ = rotation'
             scale' <- getScale
             withCenterMoved dir (280 * (scale'**3)) $ do
@@ -212,25 +212,25 @@ newURI :: IO Node
 newURI = do rand <- randomIO
             return $ URI $ "ex:" ++ show (rand :: Int)
 
-newNode :: ViewSettings -> Rotation -> Dir -> IO Rotation
-newNode vs (Rotation graph node _) dir = do
+newNode :: (?vs :: ViewSettings) => Rotation -> Dir -> IO Rotation
+newNode (Rotation graph node _) dir = do
     node' <- newURI
     let graph' = insert (triple dir (node, rdfs_seeAlso, node'))
                $ insert (node', rdfs_label, PlainLiteral "") graph
-    return $ fromJust $ getRotation vs graph' node' rdfs_seeAlso (rev dir) node
+    return $ fromJust $ getRotation graph' node' rdfs_seeAlso (rev dir) node
     
-connect :: ViewSettings -> Rotation -> Dir -> Mark -> Rotation
-connect _ r _ mark | Set.null mark = r
-connect vs (Rotation graph node _) dir mark =
+connect :: (?vs :: ViewSettings) => Rotation -> Dir -> Mark -> Rotation
+connect r _ mark | Set.null mark = r
+connect (Rotation graph node _) dir mark =
     let nodes = Set.toList mark
         graph' = foldr (\n -> insert $ triple dir (node, rdfs_seeAlso, n))
                        graph nodes
-    in fromJust $ getRotation vs graph' node rdfs_seeAlso dir (head nodes)
+    in fromJust $ getRotation graph' node rdfs_seeAlso dir (head nodes)
 
-disconnect :: ViewSettings -> Rotation -> Dir -> Maybe Rotation
-disconnect vs (Rotation graph node rot) dir = 
+disconnect :: (?vs :: ViewSettings) => Rotation -> Dir -> Maybe Rotation
+disconnect (Rotation graph node rot) dir = 
     let
-        c = conns vs graph node dir
+        c = conns graph node dir
         index = (length c `div` 2) + rot
         (p,n) = c !! index
         graph' = delete (triple dir (node, p, n)) graph
@@ -259,8 +259,8 @@ newGraph = do
 
     return rot0
 
-loadGraph :: ViewSettings -> FilePath -> IO Rotation
-loadGraph vs fileName = do
+loadGraph :: (?vs :: ViewSettings) => FilePath -> IO Rotation
+loadGraph fileName = do
     --file <- readFile fileName
     --graph <- fromNTriples file >>= return . reverse-}
     let convert (s,p,o) = (f s, f p, f o)
@@ -270,7 +270,7 @@ loadGraph vs fileName = do
     triples <- Raptor.filenameToTriples fileName >>= return . map convert
     let graph = listToGraph triples
     let rots = catMaybes $ flip map triples $
-                        \(s,p,o) -> getRotation vs graph s p Pos o
+                        \(s,p,o) -> getRotation graph s p Pos o
     return $ last rots
 
 saveGraph :: Graph -> FilePath -> IO ()
@@ -282,8 +282,9 @@ saveGraph graph fileName = do
         triples = graphToList graph
     Raptor.triplesToFilename (map convert triples) fileName
 
-openFile :: ViewSettings -> Rotation -> FilePath -> IO (Rotation,FilePath)
-openFile vs rot0 fileName0 = do
+openFile :: (?vs :: ViewSettings) => Rotation -> FilePath -> 
+            IO (Rotation,FilePath)
+openFile rot0 fileName0 = do
     dialog <- fileChooserDialogNew Nothing Nothing FileChooserActionOpen
                                    [("gtk-cancel", ResponseCancel),
                                     ("gtk-open", ResponseAccept)]
@@ -294,7 +295,7 @@ openFile vs rot0 fileName0 = do
     widgetHide dialog
     case response of
         ResponseAccept -> do Just fileName <- fileChooserGetFilename dialog
-                             rot <- loadGraph vs fileName
+                             rot <- loadGraph fileName
                              return (rot, fileName)
         _              -> return (rot0, fileName0)
         
@@ -321,26 +322,27 @@ saveFile (Rotation graph _ _) fileName0 confirmSame = do
         _              -> return fileName0
 
 
-handleEvent :: ViewSettings -> Handler Event (Rotation, Mark, FilePath)
-handleEvent vs (Key { eventModifier=_mods, eventKeyName=key }) = do
+handleEvent :: (?vs :: ViewSettings) => Handler Event (Rotation, Mark, FilePath)
+handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
     (rot, mk, fileName) <- get
     case key of 
-        x | x == "Up"    || x == "i"     -> handleAction vs "up"
-        x | x == "Down"  || x == "comma" -> handleAction vs "down"
-        x | x == "Left"  || x == "j"     -> handleAction vs "left"
-        x | x == "Right" || x == "l"     -> handleAction vs "right"
-        "O" -> handleAction vs "open"
+        x | x == "Up"    || x == "i"     -> handleAction "up"
+        x | x == "Down"  || x == "comma" -> handleAction "down"
+        x | x == "Left"  || x == "j"     -> handleAction "left"
+        x | x == "Right" || x == "l"     -> handleAction "right"
+        "O" -> handleAction "open"
         "S" -> do fp' <- liftIO $ saveFile rot fileName False
                   put (rot, mk, fp')
         _   -> unhandledEvent
-handleEvent _ _ = unhandledEvent
+handleEvent _ = unhandledEvent
 
-handleAction :: ViewSettings -> Handler String (Rotation, Mark, FilePath)
-handleAction vs action = do
+handleAction :: (?vs :: ViewSettings) => 
+                Handler String (Rotation, Mark, FilePath)
+handleAction action = do
     (rot@(Rotation graph node _), mark, filepath) <- get
-    let m f x = maybeDo (f vs rot x) putRotation
-        n f x = liftIO (f vs rot x) >>= putRotation
-        o f x = putState (f vs rot x mark) Set.empty
+    let m f x = maybeDo (f rot x) putRotation
+        n f x = liftIO (f rot x) >>= putRotation
+        o f x = putState (f rot x mark) Set.empty
     case action of
         "up"    -> m rotate (-1)    ; "down"  -> m rotate 1
         "left"  -> m move Neg       ; "right" -> m move Pos
@@ -353,10 +355,10 @@ handleAction vs action = do
             rot' <- liftIO newGraph
             put (rot', Set.empty, "")
         "open"  -> do 
-            (rot',fp') <- liftIO $ openFile vs rot filepath
+            (rot',fp') <- liftIO $ openFile rot filepath
             put (rot', Set.empty, fp')
         "save" | filepath /= "" -> do liftIO $ saveGraph graph filepath
-               | otherwise      -> handleAction vs "saveas"
+               | otherwise      -> handleAction "saveas"
         "saveas"-> do
             fp' <- liftIO $ saveFile rot filepath True
             put (rot, mark, fp')
@@ -447,34 +449,33 @@ makeToolbarItems actionGroup toolbar = do
 
 
 main :: IO ()
-main = do
+main = let ?vs = ViewSettings { hiddenProps=[rdfs_label] } in do
 
     -- initial state:
 
     args <- initGUI
     progName <- getProgName
 
-    let vs = ViewSettings { hiddenProps=[rdfs_label] }
-        view = vanishingView vs 20 20
+    let view = vanishingView 20 30
 
     stateRef <- do rot <- newGraph
                    newIORef (rot, Set.empty, "")
 
     case args of [fileName] -> do fn <- canonicalizePath fileName
-                                  rot' <- loadGraph vs fn
+                                  rot' <- loadGraph fn
                                   writeIORef stateRef (rot', Set.empty, fn)
                  []         -> return ()
                  _          -> error $ "Usage: " ++ progName ++ " [filename]"
 
     -- start:
 
-    window <- makeWindow vs view stateRef
+    window <- makeWindow view stateRef
     onDestroy window mainQuit
     widgetShowAll window
 
     mainGUI
 
-makeWindow vs view stateRef = mdo
+makeWindow view stateRef = mdo
 
     -- main window:
 
@@ -511,7 +512,7 @@ makeWindow vs view stateRef = mdo
     -- canvas for view:
     
     (canvas, updateCanvas, canvasAction) <- 
-        vobCanvas stateRef view (handleEvent vs) (handleAction vs) 
+        vobCanvas stateRef view handleEvent handleAction
                   stateChanged lightGray 0.5
 
     onFocusIn canvas $ \_event -> do windowAddAccelGroup window bindings
