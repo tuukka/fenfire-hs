@@ -110,11 +110,11 @@ untable vals = f where
 -}
         
 invert :: [Double] -> (Double -> Double)
-invert ys = \y -> idx y 0 ys / len where
-    idx x i (x':xs) | x <= x'   = i
-                    | otherwise = idx x (i+1) xs
-    idx _ i []                  = i
-    len = fromIntegral (length ys) :: Double
+invert ys = \y -> if y < head ys then 0 else val y 0 ys where
+    val v i (x:x':xs) | x <= v && v < x' = i + offs * (v-x) / (x'-x)
+                      | otherwise        = val v (i+offs) (x':xs)
+    val _ _ _                            = 1
+    offs = 1 / fromIntegral (length ys - 1) :: Double
 
 denormalize :: [Double] -> [Double]
 denormalize xs = map (* len) xs where len = fromIntegral $ length xs
@@ -125,7 +125,7 @@ daisyLeaf (name, correct, total) =
     & translateTo (anchor #(correct/total) #0)
                   (ownSize $ keyVob (name,-1) mempty)
   where
-    n = 30
+    n = 40
     fracts = fractions n
     pointsA = zip fracts ys where
         ys = denormalize $ normalize [likelihood correct total p | p <- fracts]
