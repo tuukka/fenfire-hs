@@ -1,5 +1,7 @@
 module Cache where
 
+import Utils
+
 import Data.Bits
 import Data.HashTable (HashTable)
 import qualified Data.HashTable as HashTable
@@ -35,50 +37,76 @@ instance (Hashable a, Hashable b) => Hashable (a,b) where
     hash (x,y) = hash x `xor` HashTable.hashInt (fromIntegral $ hash y)
     
 
-type LRU a = (Int, Map Integer a)
+type LinkedList a = IORef (LinkedNode a)
 
-newLRU :: Int -> LRU a
-newLRU size = (size, Map.empty)
-
-access :: a -> Integer -> LRU a -> (Integer, LRU a)
-access x i (size, m) = (i', (size, m')) where
-    i' = if Map.null m then 0 else fst (Map.findMax m) + 1
-    m' = Map.insert i' x (Map.delete i m)
+data LinkedNode a = 
+    LinkedNode { lnPrev :: LinkedList a, lnValue :: IORef a, 
+                 lnNext :: LinkedList a }
+  | End { lnPrev :: LinkedList a, lnNext :: LinkedList a }
+  
+isEnd (LinkedNode _ _ _) = False
+isEnd (End        _   _) = True
     
-add :: a -> LRU a -> (Integer, Maybe a, LRU a)
-add x (size, m) = (i, dropped, (size, m'')) where
-    i = if Map.null m then 0 else fst (Map.findMax m) + 1
-    doDrop = Map.size m >= size
-    (dropK, dropV) = Map.findMin m
-    dropped = if doDrop then Just dropV else Nothing
-    m' = if doDrop then Map.delete dropK m else m
-    m'' = Map.insert i x m'
+newList :: IO (LinkedList a)
+newList = mdo let end = End p n
+              p <- newIORef end; n <- newIORef end; list <- newIORef end
+              return list
+
+newNode :: a -> IO (LinkedNode a)
+newNode x = do let err = error "Cache: access to not-yet-linked node"
+               p <- newIORef err; val <- newIORef x; n <- newIORef err
+               return (LinkedNode p val n)
+               
+appendNode :: LinkedNode a -> LinkedList a -> IO ()
+appendNode node list = do n <- readIORef list; p <- readIORef (lnPrev n)
+                          writeIORef (lnNext p) node; writeIORef (lnPrev n) node
+                          writeIORef (lnPrev node) p; writeIORef (lnNext node) n
+                    
+removeFirst :: LinkedList a -> IO a
+removeFirst list = do l <- readIORef list; node <- readIORef (lnNext l)
+                      removeNode node
+                      readIORef (lnValue node)
+
+removeNode :: LinkedNode a -> IO ()
+removeNode node = do when (isEnd node) $ error "Cache: remove from empty list"
+                     p <- readIORef (lnPrev node); n <- readIORef (lnNext node)
+                     let err = error "Cache: access to unlinked node"
+                     writeIORef (lnPrev node) err; writeIORef (lnNext node) err
+                     writeIORef (lnNext p) n; writeIORef (lnPrev n) p
+    
+access :: LinkedList a -> LinkedNode a -> IO ()
+access list node = do removeNode node; appendNode node list
+
+add :: a -> LinkedList a -> IO (LinkedNode a)
+add x list = do node <- newNode x; appendNode node list; return node
 
 
 byAddress :: a -> StableName a
 byAddress = unsafePerformIO . makeStableName
 
 
-type Cache key value = (HashTable key (value, Integer), IORef (LRU key))
+type Cache key value =
+    (IORef Int, Int, HashTable key (value, LinkedNode key), LinkedList key)
 
 newCache :: (Eq key, Hashable key) => Int -> Cache key value
-newCache size = unsafePerformIO $ do ht <- HashTable.new (==) hash
-                                     ref <- newIORef (newLRU size)
-                                     return (ht, ref)
+newCache maxsize = unsafePerformIO $ do ht <- HashTable.new (==) hash
+                                        lru <- newList; size <- newIORef 0
+                                        return (size, maxsize, ht, lru)
 
 cached :: (Eq k, Hashable k) => k -> Cache k v -> v -> v
-cached key (cache, lruRef) val = unsafePerformIO $ do
-    lru <- readIORef lruRef
+cached key (sizeRef, maxsize, cache, lru) val = unsafePerformIO $ do
     mval' <- HashTable.lookup cache key
     if isJust mval' then do
-        let (val', i) = fromJust mval'
-            (i', lru') = access key i lru
-        writeIORef lruRef lru'
-        HashTable.insert cache key (val', i')
+        let (val', node) = fromJust mval'
+        access lru node
+        --putStrLn "Cache access"
         return val'
       else do
-        let (i, dropped, lru') = add key lru
-        when (isJust dropped) $ HashTable.delete cache (fromJust dropped)
-        HashTable.insert cache key (val, i)
-        writeIORef lruRef lru'
+        size <- readIORef sizeRef
+        --putStrLn ("Cache add, former size " ++ show size)
+        if size < maxsize then writeIORef sizeRef (size+1)
+                          else do dropped <- removeFirst lru
+                                  HashTable.delete cache dropped
+        node <- add key lru
+        HashTable.insert cache key (val, node)
         return val
