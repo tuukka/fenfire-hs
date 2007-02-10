@@ -271,8 +271,22 @@ newGraph = do
         rot0 = (Rotation graph0 home0 0)
 
     return rot0
+    
+findStartRotation :: (?vs :: ViewSettings) => Graph -> Rotation
+findStartRotation g = head $ catMaybes $ startNode:topic:triples where
+    self = URI "ex:graph" -- ought to be what the empty URI <> is expanded to
 
-loadGraph :: (?vs :: ViewSettings) => FilePath -> IO Rotation
+    startNode = getRot =<< getTriple self ffv_startNode
+    topic = getRot =<< getTriple self foaf_primaryTopic
+    triples = map getRot $ graphToList g
+    
+    getTriple s p = fmap (\o -> (s,p,o)) $ getOne g s p Pos
+    getRot (s,p,o) = getRotation g o p Neg s
+    
+    ffv_startNode = URI "http://fenfire.org/rdf-v/2003/05/ff#startNode"
+    foaf_primaryTopic = URI "http://xmlns.com/foaf/0.1/primaryTopic"
+
+loadGraph :: FilePath -> IO Graph
 loadGraph fileName = do
     --file <- readFile fileName
     --graph <- fromNTriples file >>= return . reverse-}
@@ -281,10 +295,7 @@ loadGraph fileName = do
         f (Raptor.Literal s) = PlainLiteral s
         f (Raptor.Blank s) = URI $ "blank:" ++ s
     triples <- Raptor.filenameToTriples fileName >>= return . map convert
-    let graph = listToGraph triples
-    let rots = catMaybes $ flip map triples $
-                        \(s,p,o) -> getRotation graph s p Pos o
-    return $ last rots
+    return $ listToGraph triples
 
 saveGraph :: Graph -> FilePath -> IO ()
 saveGraph graph fileName = do
@@ -309,8 +320,8 @@ openFile rot0 fileName0 = do
     widgetHide dialog
     case response of
         ResponseAccept -> do Just fileName <- fileChooserGetFilename dialog
-                             rot <- loadGraph fileName
-                             return (rot, fileName)
+                             graph <- loadGraph fileName
+                             return (findStartRotation graph, fileName)
         _              -> return (rot0, fileName0)
         
 saveFile :: Rotation -> FilePath -> Bool -> IO (FilePath,Bool)
@@ -497,10 +508,9 @@ main = let ?vs = ViewSettings { hiddenProps=[rdfs_label] } in do
     case args of []                   -> return ()
                  (fileName:fileNames) -> do
                      let load fn = loadGraph =<< canonicalizePath fn
-                     Rotation g' n' r' <- load fileName
-                     rots <- mapM load fileNames
-                     let graphs = map (\(Rotation g _ _) -> g) rots
-                         rot' = Rotation (foldl mergeGraphs g' graphs) n' r'
+                     g' <- load fileName
+                     gs <- mapM load fileNames
+                     let rot' = findStartRotation (foldl mergeGraphs g' gs)
                      writeIORef stateRef $ newState rot' fileName
 
     -- start:
