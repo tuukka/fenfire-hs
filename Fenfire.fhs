@@ -366,12 +366,13 @@ handleAction action = do
         "open"  -> do 
             (rot',fp') <- liftIO $ openFile rot filepath
             put $ newState rot' fp'
-        "save" | filepath /= "" -> do liftIO $ saveGraph graph filepath
+        "save" | filepath /= "" -> liftIO $ saveGraph graph filepath
                | otherwise      -> handleAction "saveas"
         "saveas"-> do
             fp' <- liftIO $ saveFile rot filepath True
             modify $ \s -> s { fsFilePath = fp' }
         "quit"  -> liftIO $ mainQuit
+        "about" -> liftIO $ makeAboutDialog >>= widgetShow
         _       -> unhandledEvent
   where putRotation rot = do modify $ \state -> state { fsRotation=rot }
                              setInterp True
@@ -386,6 +387,7 @@ makeActions actionGroup accelGroup = do
             , ( "save"   , stockSave   )
             , ( "saveas" , stockSaveAs )
             , ( "quit"   , stockQuit   )
+            , ( "about"  , stockAbout  )
             ]
     flip mapM actionentries $ \(name,stock) -> do 
         item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
@@ -429,6 +431,7 @@ makeMenus actionGroup root = mapM_ (createMenu root) menuentries
                                                      "breakr","breakl","",
                                                      "mark","connr","connl","",
                                                      "rmlit"])
+                      , Tree.Node "_Help" (map leaf ["about"])
                       ]
         createMenu :: MenuShellClass menu => menu -> Tree.Tree String -> IO ()
         createMenu parent (Tree.Node name children) = 
@@ -580,3 +583,26 @@ makeWindow view stateRef = mdo
     widgetGrabFocus canvas
 
     return window
+
+makeAboutDialog = do
+    dialog <- aboutDialogNew
+    pixbuf <- Control.Exception.catch (pixbufNewFromFile "data/logo.svg")
+                  (\e -> return $ Left (undefined, show e))
+    logo <- case pixbuf of Left (_,msg)  -> do 
+                               putStr "Opening data/logo.svg failed: "
+                               putStrLn msg
+                               return Nothing
+                           Right pixbuf' -> return . Just =<< 
+                               pixbufScaleSimple pixbuf'
+                                   200 (floor (200*(1.40::Double))) 
+                                   InterpHyper 
+    set dialog [ aboutDialogName := "Fenfire" 
+               , aboutDialogVersion := "alpha version"
+               , aboutDialogCopyright := "Licensed under GNU GPL v2 or later"
+               , aboutDialogComments := 
+                     "An application for notetaking and RDF graph browsing."
+               , aboutDialogLogo := logo
+               , aboutDialogWebsite := "http://fenfire.org"
+               , aboutDialogAuthors := ["Benja Fallenstein", "Tuukka Hastrup"]
+               ]
+    return dialog
