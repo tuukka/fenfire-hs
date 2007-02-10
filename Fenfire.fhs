@@ -53,7 +53,7 @@ import System.Random (randomIO)
 
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 data FenState = FenState { fsRotation :: Rotation, fsMark :: Mark,
-                           fsFilePath :: FilePath }
+                           fsFilePath :: FilePath, fsGraphModified :: Bool }
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 
@@ -113,7 +113,7 @@ propView g n = (useFadeColor $ fill extents)
 
 
 vanishingView :: (?vs :: ViewSettings) => Int -> Int -> FenState -> Vob Node
-vanishingView depth maxnodes (FenState startRotation mark _fp) = 
+vanishingView depth maxnodes (FenState {fsRotation=startRotation,fsMark=mark})=
     runVanishing depth maxnodes view where
     -- place the center of the view and all subtrees in both directions
     view = do placeNode startRotation
@@ -305,7 +305,7 @@ openFile rot0 fileName0 = do
                              return (rot, fileName)
         _              -> return (rot0, fileName0)
         
-saveFile :: Rotation -> FilePath -> Bool -> IO FilePath
+saveFile :: Rotation -> FilePath -> Bool -> IO (FilePath,Bool)
 saveFile (Rotation graph _ _) fileName0 confirmSame = do
     dialog <- fileChooserDialogNew Nothing Nothing FileChooserActionSave
                                    [("gtk-cancel", ResponseCancel),
@@ -324,12 +324,12 @@ saveFile (Rotation graph _ _) fileName0 confirmSame = do
     case response of
         ResponseAccept -> do Just fileName <- fileChooserGetFilename dialog
                              saveGraph graph fileName
-                             return fileName
-        _              -> return fileName0
+                             return (fileName, True)
+        _              -> return (fileName0, False)
 
 
 newState :: Rotation -> FilePath -> FenState
-newState rot fp = FenState rot Set.empty fp
+newState rot fp = FenState rot Set.empty fp False
 
 handleEvent :: (?vs :: ViewSettings) => Handler Event FenState
 handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
@@ -340,21 +340,26 @@ handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
         x | x == "Left"  || x == "j"     -> handleAction "left"
         x | x == "Right" || x == "l"     -> handleAction "right"
         "O" -> handleAction "open"
-        "S" -> do fp' <- liftIO $ saveFile rot fileName False
-                  put $ state { fsFilePath = fp' }
+        "S" -> do (fp',saved) <- liftIO $ saveFile rot fileName False
+                  let modified' = fsGraphModified state && not saved
+                  put $ state { fsFilePath = fp', fsGraphModified = modified' }
         _   -> unhandledEvent
 handleEvent _ = unhandledEvent
 
 handleAction :: (?vs :: ViewSettings) => Handler String FenState
 handleAction action = do
-    FenState { fsRotation = rot@(Rotation graph node _),
-               fsMark = mark, fsFilePath = filepath } <- get
+    FenState { fsRotation = rot@(Rotation graph node _), fsMark = mark, 
+               fsFilePath = filepath, fsGraphModified = modified
+             } <- get
     let m f x = maybeDo (f rot x) putRotation
+        b f x = maybeDo (f rot x) $ \rot' -> do 
+                    putRotation rot'
+                    modify $ \s -> s { fsGraphModified = modified }
         n f x = liftIO (f rot x) >>= putRotation
         o f x = putState (f rot x mark) Set.empty
     case action of
-        "up"    -> m rotate (-1)    ; "down"  -> m rotate 1
-        "left"  -> m move Neg       ; "right" -> m move Pos
+        "up"    -> b rotate (-1)    ; "down"  -> b rotate 1
+        "left"  -> b move Neg       ; "right" -> b move Pos
         "nodel" -> n newNode Neg    ; "noder" -> n newNode Pos
         "connl" -> o connect Neg    ; "connr" -> o connect Pos
         "breakl"-> m disconnect Neg ; "breakr"-> m disconnect Pos
@@ -366,15 +371,19 @@ handleAction action = do
         "open"  -> do 
             (rot',fp') <- liftIO $ openFile rot filepath
             put $ newState rot' fp'
-        "save" | filepath /= "" -> liftIO $ saveGraph graph filepath
+        "save" | filepath /= "" -> do 
+                     liftIO $ saveGraph graph filepath
+                     modify $ \s -> s { fsGraphModified = False }
                | otherwise      -> handleAction "saveas"
         "saveas"-> do
-            fp' <- liftIO $ saveFile rot filepath True
-            modify $ \s -> s { fsFilePath = fp' }
+            (fp',saved) <- liftIO $ saveFile rot filepath True
+            let modified' = modified && not saved
+            modify $ \s -> s { fsFilePath = fp', fsGraphModified = modified' }
         "quit"  -> liftIO $ mainQuit
         "about" -> liftIO $ makeAboutDialog >>= widgetShow
         _       -> unhandledEvent
-  where putRotation rot = do modify $ \state -> state { fsRotation=rot }
+  where putRotation rot = do modify $ \state -> state { fsRotation=rot, 
+                                                        fsGraphModified=True }
                              setInterp True
         putMark mk      = do modify $ \state -> state { fsMark=mk }
         putState rot mk = do putMark mk; putRotation rot
@@ -394,6 +403,10 @@ makeActions actionGroup accelGroup = do
         action <- actionNew name (siLabel $ fromJust item) Nothing (Just stock)
         actionGroupAddActionWithAccel actionGroup action Nothing
         actionSetAccelGroup action accelGroup
+
+enableSave actionGroup enable = do
+    Just action <- actionGroupGetAction actionGroup "save"
+    actionSetSensitive action enable
 
 makeBindings actionGroup bindings = do
     let bindingentries =
@@ -507,7 +520,8 @@ makeWindow view stateRef = mdo
     textViewSetWrapMode textView WrapWordChar
 
     -- this needs to be called whenever the node or its text changes:
-    let stateChanged (FenState { fsRotation = Rotation g n _r })	 = do
+    let stateChanged (FenState { fsRotation = Rotation g n _r, 
+                                 fsGraphModified=modified }) = do
             buf <- textBufferNew Nothing
             textBufferSetText buf (maybe "" id $ getText g n)
             afterBufferChanged buf $ do 
@@ -519,12 +533,12 @@ makeWindow view stateRef = mdo
                 let g'' = setText g' n text -- buf corresponds to n, not to n'
 
                 modifyIORef stateRef $ \s -> 
-                    s { fsRotation = Rotation g'' n' r' }
+                    s { fsRotation = Rotation g'' n' r', fsGraphModified=True }
+                enableSave actionGroup True
                 updateCanvas True
 
             textViewSetBuffer textView buf
-
-    readIORef stateRef >>= stateChanged
+            enableSave actionGroup modified
 
     -- canvas for view:
     
@@ -579,6 +593,8 @@ makeWindow view stateRef = mdo
     set window [ containerChild := vbox ]
 
     -- start:
+
+    readIORef stateRef >>= stateChanged
     
     widgetGrabFocus canvas
 
