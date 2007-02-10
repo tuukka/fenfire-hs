@@ -17,8 +17,12 @@ patches (Document _ _ (Elem "changelog" _ c) _) = map patch (elems c) where
         
 triples :: String -> Patch -> String
 triples repo (Patch hash name date author) =
-    "<"++repo++"> <ex:hasPatch> "++uri++".\n" ++
-    uri++" <http://www.w3.org/2000/01/rdf-schema#label> " ++
+    "<"++repo++"> <" ++ seeAlso ++ "> <"++month++">.\n" ++
+    "<"++month++"> <" ++ seeAlso ++ "> <"++day++">.\n" ++
+    "<"++month++"> <" ++ label ++ "> " ++ show (take 7 date') ++ ".\n" ++
+    "<"++day++"> <" ++ seeAlso ++ "> "++uri++".\n" ++
+    "<"++day++"> <" ++ label ++ "> " ++ show (take 10 date') ++ ".\n" ++
+    uri++" <"++label++"> " ++
         ""++show name++".\n" ++
     uri++" <foaf:author> "++authorURI ++ ".\n" ++
     (if not $ null authorName
@@ -32,7 +36,10 @@ triples repo (Patch hash name date author) =
           authorURI = "<byemail:"++authorMail++">"
           [/ y@(/_,_,_,_/),m@(/_,_/),d@(/_,_/),h@(/_,_/),mi@(/_,_/),s@(/_,_/) /] = date
           date' = y++"-"++m++"-"++d++"T"++h++":"++mi++":"++s++"+0000"
-          
+          month = "ex:patches:" ++ take 7 date' ++ ":" ++ repo
+          day = "ex:patches:" ++ take 10 date' ++ ":" ++ repo
+          seeAlso = "http://www.w3.org/2000/01/rdf-schema#seeAlso"
+          label = "http://www.w3.org/2000/01/rdf-schema#label"
 
 elems :: [Content] -> [Element]
 elems (CElem e : cs) = e : elems cs
