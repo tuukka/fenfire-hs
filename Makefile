@@ -33,15 +33,18 @@ fenfire: Fenfire.hs $(SOURCES)
 darcs2rdf: Darcs2RDF.hs $(SOURCES)
 functortest vobtest fenfire darcs2rdf:
 	$(GHCCMD) $(opts) -o $@ -main-is $(basename $<).main --make $<
-	touch $@
+	touch --no-create $@ # now up-to-date even if ghc didn't update
 
 run-functortest: functortest
 run-vobtest: vobtest
 run-fenfire: ARGS=test.nt
-run-fenfire: fenfire darcs.nt
+run-fenfire: fenfire $(ARGS)
 run-darcs2rdf: darcs2rdf
 run-%: %
 	./$< $(ARGS)
+
+run-project: fenfire ../fenfire-project/project.nt darcs.nt
+	./fenfire ../fenfire-project/project.nt darcs.nt $(ARGS)
 
 darcs.nt: darcs2rdf _darcs/inventory
 	darcs changes --xml | ./darcs2rdf "http://antti-juhani.kaijanaho.fi/darcs/fenfire-hs/" > darcs.nt

@@ -17,21 +17,23 @@ The source code is available using Darcs.
 
 Requirements for compilation:
 fenfire-hs source code
-  ghc 6.4
-  gtk2hs 0.9.10
-  raptor 1.4.8
-  c2hs 0.14.5
+  ghc    6.4    (The Glorious Glasgow Haskell Compilation System)
+  gtk2hs 0.9.10 (A GUI library for Haskell based on Gtk)
+  raptor 1.4.8  (Raptor RDF Parser Toolkit)
+  c2hs   0.14.5 (C->Haskell, An Interface Generator for Haskell)
+  haxml         (Haskell and XML)
 trhsx from our modified haskell-src-exts
-  happy
-  alex
+  happy         (The Parser Generator for Haskell)
+  alex          (A lexical analyser generator for Haskell)
 
-(Packages in Debian: ghc6 libghc6-gtk-dev libraptor1-dev c2hs happy alex)
+(Packages in Debian: ghc6 libghc6-gtk-dev libraptor1-dev c2hs libghc6-haxml-dev
+ happy alex)
 
 
 Running a precompiled binary only requires:
-gmp
-gtk
-raptor
+gmp             (The GNU MP Bignum Library)
+gtk             (The GIMP Toolkit)
+raptor          (Raptor RDF Parser Toolkit)
 
 (Packages in Debian: libgmp3c2 libgtk2.0-0 libraptor1)
 
