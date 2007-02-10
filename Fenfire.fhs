@@ -213,6 +213,14 @@ withAngleChanged delta = local $ \s -> s { vvAngle = vvAngle s + delta }
 
 
 
+tryMove :: (?vs :: ViewSettings) => Rotation -> Dir -> Maybe Rotation
+tryMove rot@(Rotation g n r) dir = maybe rot' Just (move rot dir) where
+    rot' | r == nearest = Nothing
+         | otherwise    = Just $ Rotation g n nearest
+    nearest | r > 0     = len-1 - len `div` 2
+            | otherwise = 0 - len `div` 2
+    len = (length $ conns g n dir)
+
 newURI :: IO Node
 newURI = do rand <- randomIO
             return $ URI $ "ex:" ++ show (rand :: Int)
@@ -359,7 +367,7 @@ handleAction action = do
         o f x = putState (f rot x mark) Set.empty
     case action of
         "up"    -> b rotate (-1)    ; "down"  -> b rotate 1
-        "left"  -> b move Neg       ; "right" -> b move Pos
+        "left"  -> b tryMove Neg    ; "right" -> b tryMove Pos
         "nodel" -> n newNode Neg    ; "noder" -> n newNode Pos
         "connl" -> o connect Neg    ; "connr" -> o connect Pos
         "breakl"-> m disconnect Neg ; "breakr"-> m disconnect Pos
