@@ -315,7 +315,6 @@ openFile rot0 fileName0 = do
                                     ("gtk-open", ResponseAccept)]
     when (fileName0 /= "") $ do fileChooserSetFilename dialog fileName0
                                 return ()
-    widgetShow dialog
     response <- dialogRun dialog
     widgetHide dialog
     case response of
@@ -346,11 +345,24 @@ saveFile (Rotation graph _ _) fileName0 confirmSame = do
                              return (fileName, True)
         _              -> return (fileName0, False)
 
+confirmSave :: (?vs :: ViewSettings, ?pw :: Window) => 
+               Bool -> StateT FenState (StateT (Bool, Bool) IO) () -> 
+               StateT FenState (StateT (Bool, Bool) IO) ()
+confirmSave False action = action
+confirmSave True action = do
+    response <- liftIO $ do
+        dialog <- makeConfirmUnsavedDialog
+        response' <- dialogRun dialog
+        widgetHide dialog
+        return response'
+    case response of ResponseClose  -> action
+                     ResponseAccept -> handleAction "save" >> action
+                     _              -> return ()
 
 newState :: Rotation -> FilePath -> FenState
 newState rot fp = FenState rot Set.empty fp False
 
-handleEvent :: (?vs :: ViewSettings) => Handler Event FenState
+handleEvent :: (?vs :: ViewSettings, ?pw :: Window) => Handler Event FenState
 handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
     state <- get; let rot = fsRotation state; fileName = fsFilePath state
     case key of 
@@ -365,7 +377,7 @@ handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
         _   -> unhandledEvent
 handleEvent _ = unhandledEvent
 
-handleAction :: (?vs :: ViewSettings) => Handler String FenState
+handleAction :: (?vs :: ViewSettings, ?pw :: Window) => Handler String FenState
 handleAction action = do
     FenState { fsRotation = rot@(Rotation graph node _), fsMark = mark, 
                fsFilePath = filepath, fsGraphModified = modified
@@ -384,10 +396,10 @@ handleAction action = do
         "breakl"-> m disconnect Neg ; "breakr"-> m disconnect Pos
         "rmlit" -> putState (delLit rot) mark
         "mark"  -> putMark $ toggleMark node mark
-        "new"   -> do
+        "new"   -> confirmSave modified $ do
             rot' <- liftIO newGraph
             put $ newState rot' ""
-        "open"  -> do 
+        "open"  -> confirmSave modified $ do 
             (rot',fp') <- liftIO $ openFile rot filepath
             put $ newState rot' fp'
         "save" | filepath /= "" -> do 
@@ -398,7 +410,7 @@ handleAction action = do
             (fp',saved) <- liftIO $ saveFile rot filepath True
             let modified' = modified && not saved
             modify $ \s -> s { fsFilePath = fp', fsGraphModified = modified' }
-        "quit"  -> liftIO $ mainQuit
+        "quit"  -> do confirmSave modified $ liftIO mainQuit
         "about" -> liftIO $ makeAboutDialog >>= widgetShow
         _       -> unhandledEvent
   where putRotation rot = do modify $ \state -> state { fsRotation=rot, 
@@ -516,16 +528,16 @@ main = let ?vs = ViewSettings { hiddenProps=[rdfs_label] } in do
     -- start:
 
     window <- makeWindow view stateRef
-    onDestroy window mainQuit
     widgetShowAll window
 
     mainGUI
 
-makeWindow view stateRef = mdo
+makeWindow view stateRef = do
 
     -- main window:
 
     window <- windowNew
+    let ?pw = window in mdo
     Control.Exception.catch (windowSetIconFromFile window "data/logo48.png")
           (\e -> putStr "Opening data/logo48.png failed: " >> print e)
     windowSetTitle window "Fenfire"
@@ -616,8 +628,12 @@ makeWindow view stateRef = mdo
     
     widgetGrabFocus canvas
 
+    onDelete window $ \_event -> canvasAction "quit"
+
     return window
 
+
+makeAboutDialog :: (?pw :: Window) => IO AboutDialog
 makeAboutDialog = do
     dialog <- aboutDialogNew
     pixbuf <- Control.Exception.catch (pixbufNewFromFile "data/logo.svg")
@@ -638,5 +654,21 @@ makeAboutDialog = do
                , aboutDialogLogo := logo
                , aboutDialogWebsite := "http://fenfire.org"
                , aboutDialogAuthors := ["Benja Fallenstein", "Tuukka Hastrup"]
+               , windowTransientFor := ?pw
                ]
+    return dialog
+
+makeConfirmUnsavedDialog :: (?pw :: Window) => IO Dialog
+makeConfirmUnsavedDialog = do 
+    dialog <- dialogNew
+    set dialog [ windowTitle := "Confirm unsaved changes"
+               , windowTransientFor := ?pw
+               , windowModal := True
+               , windowDestroyWithParent := True
+               , dialogHasSeparator := False
+               ]
+    mapM_ (uncurry $ dialogAddButton dialog) 
+                                   [("Discard changes", ResponseClose),
+                                    ("gtk-cancel", ResponseCancel),
+                                    ("gtk-save", ResponseAccept)]
     return dialog
