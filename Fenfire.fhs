@@ -49,7 +49,7 @@ import qualified Control.Exception
 import System.Directory (canonicalizePath)
 import System.Environment (getArgs, getProgName)
 import System.Mem.StableName
-import System.Random (randomIO)
+import System.Random (randomRIO)
 
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 data FenState = FenState { fsRotation :: Rotation, fsMark :: Mark,
@@ -221,11 +221,21 @@ tryMove rot@(Rotation g n r) dir = maybe rot' Just (move rot dir) where
             | otherwise = 0 - len `div` 2
     len = (length $ conns g n dir)
 
-newURI :: IO Node
-newURI = do rand <- randomIO
-            return $ URI $ "ex:" ++ show (rand :: Int)
+type URIMaker = (String, IORef Integer)
 
-newNode :: (?vs :: ViewSettings) => Rotation -> Dir -> IO Rotation
+newURIMaker :: IO URIMaker
+newURIMaker = do rand <- sequence [randomRIO (0,63) | _ <- [1..27::Int]]
+                 let chars = ['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ "+-"
+                 ref <- newIORef 1
+                 return ("urn:urn-5:" ++ map (chars !!) rand, ref)
+
+newURI :: (?uriMaker :: URIMaker) => IO Node
+newURI = do let (base, ref) = ?uriMaker
+            i <- readIORef ref; writeIORef ref (i+1)
+            return $ URI (base ++ ":" ++ show i)
+
+newNode :: (?vs :: ViewSettings, ?uriMaker :: URIMaker) => 
+           Rotation -> Dir -> IO Rotation
 newNode (Rotation graph node _) dir = do
     node' <- newURI
     let graph' = insert (triple dir (node, rdfs_seeAlso, node'))
@@ -263,7 +273,7 @@ toggleMark :: Node -> Mark -> Mark
 toggleMark n mark | n `Set.member` mark = Set.delete n mark
                   | otherwise           = Set.insert n mark
 
-newGraph :: IO Rotation
+newGraph :: (?uriMaker :: URIMaker) => IO Rotation
 newGraph = do
     home0 <- newURI
 
@@ -345,7 +355,7 @@ saveFile (Rotation graph _ _) fileName0 confirmSame = do
                              return (fileName, True)
         _              -> return (fileName0, False)
 
-confirmSave :: (?vs :: ViewSettings, ?pw :: Window) => 
+confirmSave :: (?vs :: ViewSettings, ?pw :: Window, ?uriMaker :: URIMaker) => 
                Bool -> HandlerAction FenState -> 
                HandlerAction FenState
 confirmSave False action = action
@@ -375,7 +385,8 @@ confirmRevert True  action = do
 newState :: Rotation -> FilePath -> FenState
 newState rot fp = FenState rot Set.empty fp False
 
-handleEvent :: (?vs :: ViewSettings, ?pw :: Window) => Handler Event FenState
+handleEvent :: (?vs :: ViewSettings, ?pw :: Window,
+                ?uriMaker :: URIMaker) => Handler Event FenState
 handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
     state <- get; let rot = fsRotation state; fileName = fsFilePath state
     case key of 
@@ -390,7 +401,8 @@ handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
         _   -> unhandledEvent
 handleEvent _ = unhandledEvent
 
-handleAction :: (?vs :: ViewSettings, ?pw :: Window) => Handler String FenState
+handleAction :: (?vs :: ViewSettings, ?pw :: Window, 
+                 ?uriMaker :: URIMaker) => Handler String FenState
 handleAction action = do
     FenState { fsRotation = rot@(Rotation graph node _), fsMark = mark, 
                fsFilePath = filepath, fsGraphModified = modified
@@ -526,7 +538,12 @@ makeToolbarItems actionGroup toolbar = do
 
 
 main :: IO ()
-main = let ?vs = ViewSettings { hiddenProps=[rdfs_label] } in do
+main = do
+
+    uriMaker <- newURIMaker
+
+    let ?vs = ViewSettings { hiddenProps=[rdfs_label] }
+        ?uriMaker = uriMaker in do
 
     -- initial state:
 
@@ -534,16 +551,14 @@ main = let ?vs = ViewSettings { hiddenProps=[rdfs_label] } in do
 
     let view = vanishingView 20 30
 
-    stateRef <- do rot <- newGraph
-                   newIORef $ newState rot ""
-
-    case args of []                   -> return ()
-                 (fileName:fileNames) -> do
-                     let load fn = loadGraph =<< canonicalizePath fn
-                     g' <- load fileName
-                     gs <- mapM load fileNames
-                     let rot' = findStartRotation (foldl mergeGraphs g' gs)
-                     writeIORef stateRef $ newState rot' fileName
+    stateRef <- case args of 
+        []                   -> do rot <- newGraph; newIORef $ newState rot ""
+        (fileName:fileNames) -> do
+            let load fn = loadGraph =<< canonicalizePath fn
+            g' <- load fileName
+            gs <- mapM load fileNames
+            let rot = findStartRotation (foldl mergeGraphs g' gs)
+            newIORef $ newState rot fileName
 
     -- start:
 

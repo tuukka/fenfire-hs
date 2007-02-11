@@ -38,7 +38,7 @@ functortest vobtest fenfire darcs2rdf:
 run-functortest: functortest
 run-vobtest: vobtest
 run-fenfire: ARGS=test.nt
-run-fenfire: fenfire $(ARGS)
+run-fenfire: fenfire
 run-darcs2rdf: darcs2rdf
 run-%: %
 	./$< $(ARGS)
