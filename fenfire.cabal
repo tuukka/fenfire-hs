@@ -15,8 +15,8 @@ Main-Is:        Fenfire.hs
 Other-Modules:  Fenfire, Vobs, RDF, Cache, Cairo, Utils, Raptor
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations
-                -main-is Fenfire.main -lraptor
+                -fno-warn-orphans -fno-warn-deprecations -main-is Fenfire.main
+Extra-Libraries: raptor
 
 Executable:     functortest
 Main-Is:        FunctorTest.hs
