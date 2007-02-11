@@ -656,6 +656,7 @@ makeAboutDialog = do
                , aboutDialogAuthors := ["Benja Fallenstein", "Tuukka Hastrup"]
                , windowTransientFor := ?pw
                ]
+    onResponse dialog $ \_response -> widgetHide dialog
     return dialog
 
 makeConfirmUnsavedDialog :: (?pw :: Window) => IO Dialog
