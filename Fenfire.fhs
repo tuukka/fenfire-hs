@@ -25,7 +25,7 @@ import Vobs
 import Utils
 import RDF
 
-import Paths_Fenfire (getDataFileName)
+import Paths_fenfire (getDataFileName)
 
 import qualified Raptor (filenameToTriples, triplesToFilename, Identifier(..))
 
