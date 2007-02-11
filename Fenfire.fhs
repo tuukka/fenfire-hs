@@ -25,6 +25,8 @@ import Vobs
 import Utils
 import RDF
 
+import Paths_Fenfire (getDataFileName)
+
 import qualified Raptor (filenameToTriples, triplesToFilename, Identifier(..))
 
 import qualified Data.Map as Map
@@ -573,8 +575,9 @@ makeWindow view stateRef = do
 
     window <- windowNew
     let ?pw = window in mdo
-    Control.Exception.catch (windowSetIconFromFile window "data/logo48.png")
-          (\e -> putStr "Opening data/logo48.png failed: " >> print e)
+    logo <- getDataFileName "data/logo48.png"
+    Control.Exception.catch (windowSetIconFromFile window logo)
+          (\e -> putStr ("Opening "++logo++" failed: ") >> print e)
     windowSetTitle window "Fenfire"
     windowSetDefaultSize window 800 550
 
@@ -673,10 +676,11 @@ makeWindow view stateRef = do
 makeAboutDialog :: (?pw :: Window) => IO AboutDialog
 makeAboutDialog = do
     dialog <- aboutDialogNew
-    pixbuf <- Control.Exception.catch (pixbufNewFromFile "data/logo.svg")
+    logoFilename <- getDataFileName "data/logo.svg"
+    pixbuf <- Control.Exception.catch (pixbufNewFromFile logoFilename)
                   (\e -> return $ Left (undefined, show e))
     logo <- case pixbuf of Left (_,msg)  -> do 
-                               putStr "Opening data/logo.svg failed: "
+                               putStr ("Opening "++logoFilename++" failed: ")
                                putStrLn msg
                                return Nothing
                            Right pixbuf' -> return . Just =<< 

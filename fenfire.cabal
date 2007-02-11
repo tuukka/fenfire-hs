@@ -8,6 +8,7 @@ Stability:      alpha
 Homepage:       http://fenfire.org/
 Build-Depends:  base, HaXml, haskell-src-exts, purefun, gtk, mtl, unix, cairo,
                 harp
+Data-Files:     data/logo.svg data/logo48.png
 
 Executable:     fenfire
 Main-Is:        Fenfire.hs
