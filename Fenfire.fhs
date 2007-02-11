@@ -700,8 +700,9 @@ makeAboutDialog = do
     onResponse dialog $ \_response -> widgetHide dialog
     return dialog
 
-makeDialog :: (?pw :: Window) => String -> [(String, ResponseId)] -> IO Dialog
-makeDialog title buttons = do
+makeDialog :: (?pw :: Window) => String -> [(String, ResponseId)] -> 
+                                 ResponseId -> IO Dialog
+makeDialog title buttons preset = do
     dialog <- dialogNew
     set dialog [ windowTitle := title
                , windowTransientFor := ?pw
@@ -710,17 +711,20 @@ makeDialog title buttons = do
                , dialogHasSeparator := False
                ]
     mapM_ (uncurry $ dialogAddButton dialog) buttons
+    dialogSetDefaultResponse dialog preset
     return dialog
 
 makeConfirmUnsavedDialog :: (?pw :: Window) => IO Dialog
 makeConfirmUnsavedDialog = do 
-    makeDialog "Confirm unsaved changes"
-                                   [("Discard changes", ResponseClose),
-                                    (stockCancel, ResponseCancel),
-                                    (stockSave, ResponseAccept)]
+    makeDialog "Confirm unsaved changes" 
+        [("Discard changes", ResponseClose),
+         (stockCancel, ResponseCancel),
+         (stockSave, ResponseAccept)]
+        ResponseAccept
 
 makeConfirmRevertDialog :: (?pw :: Window) => IO Dialog
 makeConfirmRevertDialog = do
     makeDialog "Confirm revert"
-                  [(stockCancel, ResponseCancel),
-                   (stockRevertToSaved,ResponseClose)]
+        [(stockCancel, ResponseCancel),
+         (stockRevertToSaved,ResponseClose)]
+        ResponseCancel
