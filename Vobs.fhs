@@ -313,7 +313,7 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
     
     widgetSetCanFocus canvas True
     
-    animRef <- newIORef (mempty, noAnim Map.empty)
+    animRef <- newIORef (mempty, Map.empty, noAnim Map.empty)
     
     let getWH = do (cw, ch) <- drawingAreaGetSize canvas
                    return (fromIntegral cw, fromIntegral ch)
@@ -327,7 +327,7 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
                 rcFgColor=black, rcBgColor=white, rcFadeColor=bgColor }
                    
         updateAnim interpolate' = mdo
-	    (_,anim) <- readIORef animRef
+	    (vob,scene,_) <- readIORef animRef
             vob' <- getVob
 
             rc' <- getRenderContext scene'
@@ -335,12 +335,11 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
 	        
 	    time <- scene' `seq` getTime
 	    
-	    let (scene, _rerender) = anim time
-	        anim' = if interpolate' && isInterpUseful scene scene'
+	    let anim' = if interpolate' && isInterpUseful scene scene'
                         then interpAnim time animTime scene scene'
 	                else noAnim scene'
 
-	    writeIORef animRef (vob', anim')
+	    writeIORef animRef (vob', scene', anim')
 	
 	    widgetQueueDraw canvas
 
@@ -362,7 +361,7 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
 
     onRealize canvas $ mdo vob <- getVob; rc <- getRenderContext scene
                            let scene = vobScene vob rc
-                           writeIORef animRef (vob, noAnim scene)
+                           writeIORef animRef (vob, scene, noAnim scene)
     
     onConfigure canvas $ \_event -> do updateAnim False; return True
 
@@ -381,7 +380,7 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
     onExpose canvas $ \(Expose {}) -> do
         drawable <- drawingAreaGetDrawWindow canvas
         
-        (vob, anim) <- readIORef animRef;  time <- getTime
+        (vob, _, anim) <- readIORef animRef;  time <- getTime
         let (scene, rerender) = anim time
         rc <- getRenderContext scene
         
