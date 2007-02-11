@@ -368,7 +368,10 @@ confirmSave True action = do
         widgetHide dialog
         return response'
     case response of ResponseClose  -> action
-                     ResponseAccept -> handleAction "save" >> action
+                     ResponseAccept -> do 
+                         handleAction "save"
+                         saved <- get >>= return . not . fsGraphModified
+                         when (saved) action
                      _              -> return ()
 
 confirmRevert :: (?vs :: ViewSettings, ?pw :: Window) => 
