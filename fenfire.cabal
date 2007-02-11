@@ -11,24 +11,28 @@ Build-Depends:  base, HaXml, haskell-src-exts, purefun, gtk, mtl, unix, cairo,
 
 Executable:     fenfire
 Main-Is:        Fenfire.hs
+Other-Modules:  Fenfire, Vobs, RDF, Cache, Cairo, Utils, Raptor
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations
 
 Executable:     functortest
 Main-Is:        FunctorTest.hs
+Other-Modules:  FunctorTest
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations
 
 Executable:     vobtest
 Main-Is:        VobTest.hs
+Other-Modules:  VobTest, Vobs, Cairo, Utils
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations
 
 Executable:     darcs2rdf
 Main-Is:        Darcs2RDF.hs
+Other-Modules:  Darcs2RDF
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations
