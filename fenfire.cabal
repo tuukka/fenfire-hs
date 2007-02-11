@@ -15,24 +15,27 @@ Other-Modules:  Fenfire, Vobs, RDF, Cache, Cairo, Utils, Raptor
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations
+                -main-is Fenfire.main -lraptor
 
 Executable:     functortest
 Main-Is:        FunctorTest.hs
 Other-Modules:  FunctorTest
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations
+                -fno-warn-orphans -fno-warn-deprecations 
+                -main-is FunctorTest.main
 
 Executable:     vobtest
 Main-Is:        VobTest.hs
 Other-Modules:  VobTest, Vobs, Cairo, Utils
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations
+                -fno-warn-orphans -fno-warn-deprecations -main-is VobTest.main
 
 Executable:     darcs2rdf
 Main-Is:        Darcs2RDF.hs
 Other-Modules:  Darcs2RDF
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations
+                -fno-warn-orphans -fno-warn-deprecations 
+                -main-is Darcs2RDF.main
