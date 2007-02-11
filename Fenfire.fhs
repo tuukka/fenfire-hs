@@ -55,7 +55,8 @@ import System.Random (randomRIO)
 
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 data FenState = FenState { fsRotation :: Rotation, fsMark :: Mark,
-                           fsFilePath :: FilePath, fsGraphModified :: Bool }
+                           fsFilePath :: FilePath, fsGraphModified :: Bool,
+                           fsFocus :: Bool }
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 
@@ -114,11 +115,18 @@ propView g n = (useFadeColor $ fill extents)
 
 
 
-vanishingView :: (?vs :: ViewSettings) => Int -> Int -> FenState -> Vob Node
-vanishingView depth maxnodes (FenState {fsRotation=startRotation,fsMark=mark})=
-    runVanishing depth maxnodes view where
+vanishingView :: (?vs :: ViewSettings) => Int -> Int -> Color -> Color -> 
+                                           Color -> FenState -> Vob Node
+vanishingView depth maxnodes bgColor focusColor blurColor
+              (FenState {fsRotation=startRotation,fsMark=mark,fsFocus=focus})=
+    background' & runVanishing depth maxnodes view where
+    x1 = 0.382; y1 = 0.1; x2 = 0.618; y2 = 0.9
+    background' = withColor #bgColor $ fill $ moveTo (anchor #x1 #y1) &
+        lineTo (anchor #x2 #y1) & lineTo (anchor #x2 #y2) & 
+        lineTo (anchor #x1 #y2) & lineTo (anchor #x1 #y1)
     -- place the center of the view and all subtrees in both directions
-    view = do placeNode startRotation
+    view = do placeNode (if focus then Just focusColor else Just blurColor)
+                  startRotation
               let Rotation _ n _ = startRotation in visitNode n
               forM_ [Pos, Neg] $ \dir -> do
                   placeConns startRotation dir True
@@ -139,7 +147,7 @@ vanishingView depth maxnodes (FenState {fsRotation=startRotation,fsMark=mark})=
             let Rotation _ n2 _ = rotation'
             scale' <- getScale
             withCenterMoved dir (280 * (scale'**3)) $ do
-                ifUnvisited n2 $ placeNode rotation'
+                ifUnvisited n2 $ placeNode Nothing rotation'
                 let (nl,nr) = if dir==Pos then (n1,n2) else (n2,n1)
                 addVob $ between (center @@ nl) (center @@ nr) $ ownSize $
                     centerVob $ scale #scale' $ propView graph prop
@@ -150,11 +158,18 @@ vanishingView depth maxnodes (FenState {fsRotation=startRotation,fsMark=mark})=
                     withDepthIncreased 3 $
                         placeConns rotation' (rev dir) False
     -- place one node view
-    placeNode (Rotation graph node _) = do
+    placeNode bgColor' (Rotation graph node _) = do
         scale' <- getScale
-        let f vob = if not (node `Set.member` mark) then vob
-                     else setBgColor (Color 1 0 0 1) vob
-        placeVob $ ownSize $ scale #scale' $ keyVob node $ f $ nodeView graph node
+        let f vob = case bg of Nothing -> vob
+                               Just c  -> setBgColor c vob
+            markColor = if node `Set.member` mark then Just (Color 1 0 0 1)
+                            else Nothing
+            bg = combine bgColor' markColor
+            combine Nothing c = c
+            combine c Nothing = c
+            combine (Just c1) (Just c2) = Just $ interpolate 0.5 c1 c2
+        placeVob $ ownSize $ scale #scale' $ keyVob node $ f $ 
+            nodeView graph node
         
     getScale :: VV Double
     getScale = do d <- asks vvDepth; return (0.97 ** fromIntegral d)
@@ -387,8 +402,8 @@ confirmRevert True  action = do
     case response of ResponseClose  -> action
                      _              -> return ()
 
-newState :: Rotation -> FilePath -> FenState
-newState rot fp = FenState rot Set.empty fp False
+newState :: Rotation -> FilePath -> Bool -> FenState
+newState rot fp focus = FenState rot Set.empty fp False focus
 
 handleEvent :: (?vs :: ViewSettings, ?pw :: Window,
                 ?uriMaker :: URIMaker) => Handler Event FenState
@@ -410,7 +425,7 @@ handleAction :: (?vs :: ViewSettings, ?pw :: Window,
                  ?uriMaker :: URIMaker) => Handler String FenState
 handleAction action = do
     FenState { fsRotation = rot@(Rotation graph node _), fsMark = mark, 
-               fsFilePath = filepath, fsGraphModified = modified
+               fsFilePath = filepath, fsGraphModified = modified, fsFocus=focus
              } <- get
     let m f x = maybeDo (f rot x) putRotation
         b f x = maybeDo (f rot x) $ \rot' -> do 
@@ -428,13 +443,13 @@ handleAction action = do
         "mark"  -> putMark $ toggleMark node mark
         "new"   -> confirmSave modified $ do
             rot' <- liftIO newGraph
-            put $ newState rot' ""
+            put $ newState rot' "" focus
         "open"  -> confirmSave modified $ do 
             (rot',fp') <- liftIO $ openFile rot filepath
-            put $ newState rot' fp'
+            put $ newState rot' fp' focus
         "revert" | filepath /= "" -> confirmRevert modified $ do
             g' <- liftIO $ loadGraph filepath
-            put $ newState (findStartRotation g') filepath
+            put $ newState (findStartRotation g') filepath focus
         "save" | filepath /= "" -> do 
                      liftIO $ saveGraph graph filepath
                      modify $ \s -> s { fsGraphModified = False }
@@ -554,16 +569,19 @@ main = do
 
     args <- initGUI
 
-    let view = vanishingView 20 30
+    let view = vanishingView 20 30 (Color 0.7 0.7 0.7 1) 
+                   (Color 0.54 0.54 0.63 1) (Color 0.89 0.89 0.89 1)
 
     stateRef <- case args of 
-        []                   -> do rot <- newGraph; newIORef $ newState rot ""
+        []                   -> do 
+            rot <- newGraph
+            newIORef $ newState rot "" False
         (fileName:fileNames) -> do
             let load fn = loadGraph =<< canonicalizePath fn
             g' <- load fileName
             gs <- mapM load fileNames
             let rot = findStartRotation (foldl mergeGraphs g' gs)
-            newIORef $ newState rot fileName
+            newIORef $ newState rot fileName False
 
     -- start:
 
@@ -619,10 +637,16 @@ makeWindow view stateRef = do
         vobCanvas stateRef view handleEvent handleAction
                   stateChanged lightGray 0.5
 
-    onFocusIn canvas $ \_event -> do windowAddAccelGroup window bindings
-                                     return True
-    onFocusOut canvas $ \_event -> do windowRemoveAccelGroup window bindings
-                                      return True
+    onFocusIn canvas $ \_event -> do 
+        modifyIORef stateRef $ \s -> s { fsFocus = True }
+        windowAddAccelGroup window bindings
+        updateCanvas True
+        return True
+    onFocusOut canvas $ \_event -> do 
+        modifyIORef stateRef $ \s -> s { fsFocus = False }
+        windowRemoveAccelGroup window bindings
+        updateCanvas True
+        return True
 
     -- action widgets:
 
@@ -651,9 +675,19 @@ makeWindow view stateRef = do
 
     -- layout:
 
+    canvasFrame <- frameNew
+    set canvasFrame [ containerChild := canvas
+                      , frameShadowType := ShadowIn 
+                      ]
+
+    textViewFrame <- frameNew
+    set textViewFrame [ containerChild := textView
+                      , frameShadowType := ShadowIn 
+                      ]
+
     paned <- vPanedNew
-    panedAdd1 paned canvas
-    panedAdd2 paned textView
+    panedAdd1 paned canvasFrame
+    panedAdd2 paned textViewFrame
 
     vbox <- vBoxNew False 0
     boxPackStart vbox menubar PackNatural 0
