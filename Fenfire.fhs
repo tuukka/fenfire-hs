@@ -311,8 +311,8 @@ openFile :: (?vs :: ViewSettings) => Rotation -> FilePath ->
             IO (Rotation,FilePath)
 openFile rot0 fileName0 = do
     dialog <- fileChooserDialogNew Nothing Nothing FileChooserActionOpen
-                                   [("gtk-cancel", ResponseCancel),
-                                    ("gtk-open", ResponseAccept)]
+                                   [(stockCancel, ResponseCancel),
+                                    (stockOpen, ResponseAccept)]
     when (fileName0 /= "") $ do fileChooserSetFilename dialog fileName0
                                 return ()
     response <- dialogRun dialog
@@ -326,8 +326,8 @@ openFile rot0 fileName0 = do
 saveFile :: Rotation -> FilePath -> Bool -> IO (FilePath,Bool)
 saveFile (Rotation graph _ _) fileName0 confirmSame = do
     dialog <- fileChooserDialogNew Nothing Nothing FileChooserActionSave
-                                   [("gtk-cancel", ResponseCancel),
-                                    ("gtk-save", ResponseAccept)]
+                                   [(stockCancel, ResponseCancel),
+                                    (stockSave, ResponseAccept)]
     fileChooserSetDoOverwriteConfirmation dialog True
     dialogSetDefaultResponse dialog ResponseAccept
     when (fileName0 /= "") $ do fileChooserSetFilename dialog fileName0
@@ -346,8 +346,8 @@ saveFile (Rotation graph _ _) fileName0 confirmSame = do
         _              -> return (fileName0, False)
 
 confirmSave :: (?vs :: ViewSettings, ?pw :: Window) => 
-               Bool -> StateT FenState (StateT (Bool, Bool) IO) () -> 
-               StateT FenState (StateT (Bool, Bool) IO) ()
+               Bool -> HandlerAction FenState -> 
+               HandlerAction FenState
 confirmSave False action = action
 confirmSave True action = do
     response <- liftIO $ do
@@ -357,6 +357,19 @@ confirmSave True action = do
         return response'
     case response of ResponseClose  -> action
                      ResponseAccept -> handleAction "save" >> action
+                     _              -> return ()
+
+confirmRevert :: (?vs :: ViewSettings, ?pw :: Window) => 
+               Bool -> HandlerAction FenState -> 
+               HandlerAction FenState
+confirmRevert False action = action
+confirmRevert True  action = do
+    response <- liftIO $ do
+        dialog <- makeConfirmRevertDialog
+        response' <- dialogRun dialog
+        widgetHide dialog
+        return response'
+    case response of ResponseClose  -> action
                      _              -> return ()
 
 newState :: Rotation -> FilePath -> FenState
@@ -402,6 +415,9 @@ handleAction action = do
         "open"  -> confirmSave modified $ do 
             (rot',fp') <- liftIO $ openFile rot filepath
             put $ newState rot' fp'
+        "revert" | filepath /= "" -> confirmRevert modified $ do
+            g' <- liftIO $ loadGraph filepath
+            put $ newState (findStartRotation g') filepath
         "save" | filepath /= "" -> do 
                      liftIO $ saveGraph graph filepath
                      modify $ \s -> s { fsGraphModified = False }
@@ -422,12 +438,13 @@ handleAction action = do
 
 makeActions actionGroup accelGroup = do
     let actionentries = 
-            [ ( "new"    , stockNew    )
-            , ( "open"   , stockOpen   )
-            , ( "save"   , stockSave   )
-            , ( "saveas" , stockSaveAs )
-            , ( "quit"   , stockQuit   )
-            , ( "about"  , stockAbout  )
+            [ ( "new"    , stockNew           )
+            , ( "open"   , stockOpen          )
+            , ( "save"   , stockSave          )
+            , ( "saveas" , stockSaveAs        )
+            , ( "revert" , stockRevertToSaved )
+            , ( "quit"   , stockQuit          )
+            , ( "about"  , stockAbout         )
             ]
     flip mapM actionentries $ \(name,stock) -> do 
         item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
@@ -435,9 +452,11 @@ makeActions actionGroup accelGroup = do
         actionGroupAddActionWithAccel actionGroup action Nothing
         actionSetAccelGroup action accelGroup
 
-enableSave actionGroup enable = do
-    Just action <- actionGroupGetAction actionGroup "save"
-    actionSetSensitive action enable
+updateActionSensitivity actionGroup modified readable = do
+    Just save <- actionGroupGetAction actionGroup "save"
+    actionSetSensitive save modified
+    Just revert <- actionGroupGetAction actionGroup "revert"
+    actionSetSensitive revert (modified && readable)
 
 makeBindings actionGroup bindings = do
     let bindingentries =
@@ -469,7 +488,8 @@ makeMenus actionGroup root = mapM_ (createMenu root) menuentries
     where
         leaf x = Tree.Node x []
         menuentries = [ Tree.Node "_File" (map leaf ["new","open","",
-                                                     "save","saveas","",
+                                                     "save","saveas","revert",
+                                                     "",
                                                      "quit"])
                       , Tree.Node "_Edit" (map leaf ["noder","nodel","",
                                                      "breakr","breakl","",
@@ -551,24 +571,26 @@ makeWindow view stateRef = do
 
     -- this needs to be called whenever the node or its text changes:
     let stateChanged (FenState { fsRotation = Rotation g n _r, 
-                                 fsGraphModified=modified }) = do
+                                 fsGraphModified=modified,
+                                 fsFilePath=filepath }) = do
             buf <- textBufferNew Nothing
             textBufferSetText buf (maybe "" id $ getText g n)
             afterBufferChanged buf $ do 
                 start <- textBufferGetStartIter buf
                 end   <- textBufferGetEndIter buf
                 text  <- textBufferGetText buf start end True
-                FenState { fsRotation = (Rotation g' n' r') } 
+                FenState { fsRotation = (Rotation g' n' r'),
+                           fsFilePath = filepath' } 
                     <- readIORef stateRef
                 let g'' = setText g' n text -- buf corresponds to n, not to n'
 
                 modifyIORef stateRef $ \s -> 
                     s { fsRotation = Rotation g'' n' r', fsGraphModified=True }
-                enableSave actionGroup True
+                updateActionSensitivity actionGroup True (filepath' /= "")
                 updateCanvas True
 
             textViewSetBuffer textView buf
-            enableSave actionGroup modified
+            updateActionSensitivity actionGroup modified (filepath /= "")
 
     -- canvas for view:
     
@@ -659,17 +681,27 @@ makeAboutDialog = do
     onResponse dialog $ \_response -> widgetHide dialog
     return dialog
 
-makeConfirmUnsavedDialog :: (?pw :: Window) => IO Dialog
-makeConfirmUnsavedDialog = do 
+makeDialog :: (?pw :: Window) => String -> [(String, ResponseId)] -> IO Dialog
+makeDialog title buttons = do
     dialog <- dialogNew
-    set dialog [ windowTitle := "Confirm unsaved changes"
+    set dialog [ windowTitle := title
                , windowTransientFor := ?pw
                , windowModal := True
                , windowDestroyWithParent := True
                , dialogHasSeparator := False
                ]
-    mapM_ (uncurry $ dialogAddButton dialog) 
-                                   [("Discard changes", ResponseClose),
-                                    ("gtk-cancel", ResponseCancel),
-                                    ("gtk-save", ResponseAccept)]
+    mapM_ (uncurry $ dialogAddButton dialog) buttons
     return dialog
+
+makeConfirmUnsavedDialog :: (?pw :: Window) => IO Dialog
+makeConfirmUnsavedDialog = do 
+    makeDialog "Confirm unsaved changes"
+                                   [("Discard changes", ResponseClose),
+                                    (stockCancel, ResponseCancel),
+                                    (stockSave, ResponseAccept)]
+
+makeConfirmRevertDialog :: (?pw :: Window) => IO Dialog
+makeConfirmRevertDialog = do
+    makeDialog "Confirm revert"
+                  [(stockCancel, ResponseCancel),
+                   (stockRevertToSaved,ResponseClose)]
