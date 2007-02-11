@@ -1,0 +1,34 @@
+Name:           Fenfire
+Version:        0.1
+License:        GPL
+License-file:   LICENSE
+Author:         Benja Fallenstein and Tuukka Hastrup
+Synopsis:       Notetaking system
+Stability:      alpha
+Homepage:       http://fenfire.org/
+Build-Depends:  base, HaXml, haskell-src-exts, purefun, gtk, mtl, unix, cairo,
+                harp
+
+Executable:     fenfire
+Main-Is:        Fenfire.hs
+GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
+                -fno-warn-unused-imports -fno-warn-missing-signatures
+                -fno-warn-orphans -fno-warn-deprecations
+
+Executable:     functortest
+Main-Is:        FunctorTest.hs
+GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
+                -fno-warn-unused-imports -fno-warn-missing-signatures
+                -fno-warn-orphans -fno-warn-deprecations
+
+Executable:     vobtest
+Main-Is:        VobTest.hs
+GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
+                -fno-warn-unused-imports -fno-warn-missing-signatures
+                -fno-warn-orphans -fno-warn-deprecations
+
+Executable:     darcs2rdf
+Main-Is:        Darcs2RDF.hs
+GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
+                -fno-warn-unused-imports -fno-warn-missing-signatures
+                -fno-warn-orphans -fno-warn-deprecations
