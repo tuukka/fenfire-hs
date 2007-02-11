@@ -369,8 +369,6 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
         let Key {eventModifier=mods,eventKeyName=key,eventKeyChar=char} = event
         putStrLn $ show mods++" "++key++" ("++show char++")"
 
-        when (Alt `elem` mods && key == "q") mainQuit
-
         handleEvent event
 
     onButtonPress canvas $ \(Button {}) -> do
