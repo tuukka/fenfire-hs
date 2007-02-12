@@ -119,11 +119,7 @@ vanishingView :: (?vs :: ViewSettings) => Int -> Int -> Color -> Color ->
                                           Color -> Color -> FenState -> Vob Node
 vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor
               (FenState {fsRotation=startRotation,fsMark=mark,fsFocus=focus})=
-    background' & runVanishing depth maxnodes view where
-    x1 = 0.382; y1 = 0.1; x2 = 0.618; y2 = 0.9
-    background' = withColor #bgColor $ fill $ moveTo (anchor #x1 #y1) &
-        lineTo (anchor #x2 #y1) & lineTo (anchor #x2 #y2) & 
-        lineTo (anchor #x1 #y2) & lineTo (anchor #x1 #y1)
+    runVanishing depth maxnodes view where
     -- place the center of the view and all subtrees in both directions
     view = do placeNode (if focus then Just (bgColor, focusColor) 
                                   else Just (blurBgColor, blurColor))
@@ -579,8 +575,9 @@ main = do
 
     args <- initGUI
 
-    let view = vanishingView 20 30 (Color 0.7 0.7 0.7 1) 
-                   (Color 0.54 0.54 0.63 1) (Color 0.89 0.89 0.89 1)
+    let view = vanishingView 20 30 
+                   (Color 0.7 0.7 0.7 0.7)  (Color 0.78 0.78 0.78 0.7)
+                   (Color 0.74 0.74 0.83 1) (Color 0.89 0.89 0.89 1)
 
     stateRef <- case args of 
         []                   -> do 
