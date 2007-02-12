@@ -8,7 +8,12 @@ Stability:      alpha
 Homepage:       http://fenfire.org/
 Build-Depends:  base, HaXml, gtk, mtl, unix, cairo, harp, template-haskell
 Data-Files:     data/logo.svg data/logo48.png
-Extra-Source-Files: README
+Extra-Source-Files: README,
+    Preprocessor/Main.hs, Preprocessor/Hsx.hs, Preprocessor/Hsx/Build.hs,
+    Preprocessor/Hsx/Lexer.hs, Preprocessor/Hsx/ParseMonad.hs,
+    Preprocessor/Hsx/Parser.ly, Preprocessor/Hsx/ParseUtils.hs,
+    Preprocessor/Hsx/Pretty.hs, Preprocessor/Hsx/Syntax.hs,
+    Preprocessor/Hsx/Transform.hs
 
 Executable:     fenfire
 Main-Is:        Fenfire.hs

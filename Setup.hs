@@ -5,6 +5,7 @@ import Distribution.Simple
 import Distribution.Simple.LocalBuildInfo
 import Distribution.Simple.Utils (rawSystemVerbose, dieWithLocation)
 import System.Cmd (system)
+import System.Directory (getModificationTime)
 
 main = defaultMainWithHooks hooks
 hooks = defaultUserHooks { hookedPreProcessors = [trhsx, c2hs] }
@@ -14,6 +15,9 @@ trhsx = ("fhs", f) where
     f buildInfo localBuildInfo inFile outFile verbose = do
         when (verbose > 3) $
             putStrLn ("checking that preprocessor is up-to-date")
+        let [pIn, pOut] = ["Preprocessor/Hsx/Parser."++s | s <- ["ly","hs"]]
+        [tIn, tOut] <- mapM getModificationTime [pIn, pOut]
+        when (tIn > tOut) $ system ("happy "++pIn) >> return ()
         system ("ghc --make Preprocessor/Main.hs -o preprocessor")
 
         when (verbose > 0) $
