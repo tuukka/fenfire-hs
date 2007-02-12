@@ -15,7 +15,10 @@ PREPROCESSED=$(patsubst %.fhs,%.hs,$(wildcard *.fhs)) \
 SOURCES=*.hs *.chs *.fhs $(PREPROCESSED)
 TARGETS=functortest vobtest fenfire darcs2rdf
 
-all: $(TARGETS)
+all: build
+
+build:
+	runghc Setup.hs build
 
 profilable:
 	rm -f $(TARGETS)
@@ -26,14 +29,7 @@ non-profilable:
 	rm -f $(TARGETS)
 	$(MAKE) all
 
-functortest: FunctorTest.hs $(SOURCES)
-vobtest: VobTest.hs $(SOURCES)
-fenfire: opts=-lraptor
-fenfire: Fenfire.hs $(SOURCES)
-darcs2rdf: Darcs2RDF.hs $(SOURCES)
-functortest vobtest fenfire darcs2rdf:
-	$(GHCCMD) $(opts) -o $@ -main-is $(basename $<).main --make $<
-	touch --no-create $@ # now up-to-date even if ghc didn't update
+functortest vobtest fenfire darcs2rdf: build
 
 run-functortest: functortest
 run-vobtest: vobtest
@@ -41,13 +37,13 @@ run-fenfire: ARGS=test.nt
 run-fenfire: fenfire
 run-darcs2rdf: darcs2rdf
 run-%: %
-	./$< $(ARGS)
+	./dist/build/$</$< $(ARGS)
 
 run-project: fenfire ../fenfire-project/project.nt darcs.nt
-	./fenfire ../fenfire-project/project.nt darcs.nt $(ARGS)
+	./dist/build/fenfire/fenfire ../fenfire-project/project.nt darcs.nt $(ARGS)
 
 darcs.nt: darcs2rdf _darcs/inventory
-	darcs changes --xml | ./darcs2rdf "http://antti-juhani.kaijanaho.fi/darcs/fenfire-hs/" > darcs.nt
+	darcs changes --xml | ./dist/build/darcs2rdf/darcs2rdf "http://antti-juhani.kaijanaho.fi/darcs/fenfire-hs/" > darcs.nt
 
 clean:
 	rm -f $(PREPROCESSED) *.p_hi *.hi *.i *.chi Raptor.h Raptor_stub.* *.p_o *.o $(TARGETS)
