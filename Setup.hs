@@ -12,11 +12,15 @@ hooks = defaultUserHooks { hookedPreProcessors = [trhsx, c2hs] }
 trhsx :: PPSuffixHandler
 trhsx = ("fhs", f) where
     f buildInfo localBuildInfo inFile outFile verbose = do
+        when (verbose > 3) $
+            putStrLn ("checking that preprocessor is up-to-date")
+        system ("ghc --make Preprocessor/Main.hs -o preprocessor")
+
         when (verbose > 0) $
             putStrLn ("preprocessing "++inFile++" to "++outFile)
         writeFile outFile ("-- GENERATED file. Edit the ORIGINAL "++inFile++
                            " instead.\n")
-        system ("trhsx "++inFile++" >> "++outFile)
+        system ("./preprocessor "++inFile++" >> "++outFile)
         
 c2hs :: PPSuffixHandler
 c2hs = ("chs", f) where

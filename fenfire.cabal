@@ -6,14 +6,13 @@ Author:         Benja Fallenstein and Tuukka Hastrup
 Synopsis:       Notetaking system
 Stability:      alpha
 Homepage:       http://fenfire.org/
-Build-Depends:  base, HaXml, haskell-src-exts, purefun, gtk, mtl, unix, cairo,
-                harp
+Build-Depends:  base, HaXml, gtk, mtl, unix, cairo, harp, template-haskell
 Data-Files:     data/logo.svg data/logo48.png
 Extra-Source-Files: README
 
 Executable:     fenfire
 Main-Is:        Fenfire.hs
-Other-Modules:  Fenfire, Vobs, RDF, Cache, Cairo, Utils, Raptor
+Other-Modules:  Fenfire, Vobs, RDF, Cache, Cairo, Utils, Raptor, FunctorSugar
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations -main-is Fenfire.main
@@ -21,7 +20,7 @@ Extra-Libraries: raptor
 
 Executable:     functortest
 Main-Is:        FunctorTest.hs
-Other-Modules:  FunctorTest
+Other-Modules:  FunctorTest, FunctorSugar
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations 
@@ -29,14 +28,14 @@ GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall
 
 Executable:     vobtest
 Main-Is:        VobTest.hs
-Other-Modules:  VobTest, Vobs, Cairo, Utils
+Other-Modules:  VobTest, Vobs, Cairo, Utils, FunctorSugar
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations -main-is VobTest.main
 
 Executable:     darcs2rdf
 Main-Is:        Darcs2RDF.hs
-Other-Modules:  Darcs2RDF
+Other-Modules:  Darcs2RDF, FunctorSugar
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations 
