@@ -116,17 +116,17 @@ propView g n = (useFadeColor $ fill extents)
 
 
 vanishingView :: (?vs :: ViewSettings) => Int -> Int -> Color -> Color -> 
-                                           Color -> FenState -> Vob Node
-vanishingView depth maxnodes bgColor focusColor blurColor
+                                          Color -> Color -> FenState -> Vob Node
+vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor
               (FenState {fsRotation=startRotation,fsMark=mark,fsFocus=focus})=
     background' & runVanishing depth maxnodes view where
     x1 = 0.382; y1 = 0.1; x2 = 0.618; y2 = 0.9
-    background' = withDash #[10,5] #0 $
-        withColor #bgColor $ stroke $ moveTo (anchor #x1 #y1) &
+    background' = withColor #bgColor $ fill $ moveTo (anchor #x1 #y1) &
         lineTo (anchor #x2 #y1) & lineTo (anchor #x2 #y2) & 
         lineTo (anchor #x1 #y2) & lineTo (anchor #x1 #y1)
     -- place the center of the view and all subtrees in both directions
-    view = do placeNode (if focus then Just focusColor else Just blurColor)
+    view = do placeNode (if focus then Just (bgColor, focusColor) 
+                                  else Just (blurBgColor, blurColor))
                   startRotation
               let Rotation _ n _ = startRotation in visitNode n
               forM_ [Pos, Neg] $ \dir -> do
@@ -159,17 +159,26 @@ vanishingView depth maxnodes bgColor focusColor blurColor
                     withDepthIncreased 3 $
                         placeConns rotation' (rev dir) False
     -- place one node view
-    placeNode bgColor' (Rotation graph node _) = do
+    placeNode cols (Rotation graph node _) = do
         scale' <- getScale
-        let f vob = case bg of Nothing -> vob
-                               Just c  -> setBgColor c vob
+        let f vob = case cols of Nothing    -> vob
+                                 Just (_,c) -> setBgColor c vob
             markColor = if node `Set.member` mark then Just (Color 1 0 0 1)
                             else Nothing
-            bg = combine bgColor' markColor
+            bg = combine (fmap snd cols) markColor
             combine Nothing c = c
             combine c Nothing = c
             combine (Just c1) (Just c2) = Just $ interpolate 0.5 c1 c2
-        placeVob $ ownSize $ scale #scale' $ keyVob node $ f $ 
+            g vob = case cols of Nothing    -> vob
+                                 Just (c,_) -> frame c & vob
+                where (w,h) = defaultSize vob
+                      frame c = withColor #c $ fill $ 
+                                    moveTo (point #(0-10) #(0-10)) &
+                                    lineTo (point #(w+10) #(0-10)) &
+                                    lineTo (point #(w+10) #(h+10)) &
+                                    lineTo (point #(0-10) #(h+10)) &
+                                    lineTo (point #(0-10) #(0-10))
+        placeVob $ ownSize $ scale #scale' $ keyVob node $ g $ f $ 
             nodeView graph node
         
     getScale :: VV Double
@@ -570,7 +579,7 @@ main = do
 
     args <- initGUI
 
-    let view = vanishingView 20 30 (Color 1 1 0.6 1) 
+    let view = vanishingView 20 30 (Color 0.7 0.7 0.7 1) 
                    (Color 0.54 0.54 0.63 1) (Color 0.89 0.89 0.89 1)
 
     stateRef <- case args of 
