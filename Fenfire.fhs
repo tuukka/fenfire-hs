@@ -576,10 +576,10 @@ main = do
         []                   -> do 
             rot <- newGraph
             newIORef $ newState rot "" False
-        (fileName:fileNames) -> do
-            let load fn = loadGraph =<< canonicalizePath fn
-            g' <- load fileName
-            gs <- mapM load fileNames
+        xs -> do
+            fileName:fileNames <- mapM canonicalizePath xs
+            g' <- loadGraph fileName
+            gs <- mapM loadGraph fileNames
             let rot = findStartRotation (foldl mergeGraphs g' gs)
             newIORef $ newState rot fileName False
 
