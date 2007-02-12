@@ -56,7 +56,7 @@ import System.Random (randomRIO)
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 data FenState = FenState { fsRotation :: Rotation, fsMark :: Mark,
                            fsFilePath :: FilePath, fsGraphModified :: Bool,
-                           fsFocus :: Bool }
+                           fsHasFocus :: Bool }
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 
@@ -118,7 +118,8 @@ propView g n = (useFadeColor $ fill extents)
 vanishingView :: (?vs :: ViewSettings) => Int -> Int -> Color -> Color -> 
                                           Color -> Color -> FenState -> Vob Node
 vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor
-              (FenState {fsRotation=startRotation,fsMark=mark,fsFocus=focus})=
+              (FenState {fsRotation=startRotation, fsMark=mark,
+                         fsHasFocus=focus}) =
     runVanishing depth maxnodes view where
     -- place the center of the view and all subtrees in both directions
     view = do placeNode (if focus then Just (bgColor, focusColor) 
@@ -431,7 +432,8 @@ handleAction :: (?vs :: ViewSettings, ?pw :: Window,
                  ?uriMaker :: URIMaker) => Handler String FenState
 handleAction action = do
     FenState { fsRotation = rot@(Rotation graph node _), fsMark = mark, 
-               fsFilePath = filepath, fsGraphModified = modified, fsFocus=focus
+               fsFilePath = filepath, fsGraphModified = modified,
+               fsHasFocus=focus
              } <- get
     let m f x = maybeDo (f rot x) putRotation
         b f x = maybeDo (f rot x) $ \rot' -> do 
@@ -645,12 +647,12 @@ makeWindow view stateRef = do
                   stateChanged lightGray 0.5
 
     onFocusIn canvas $ \_event -> do 
-        modifyIORef stateRef $ \s -> s { fsFocus = True }
+        modifyIORef stateRef $ \s -> s { fsHasFocus = True }
         windowAddAccelGroup window bindings
         updateCanvas True
         return True
     onFocusOut canvas $ \_event -> do 
-        modifyIORef stateRef $ \s -> s { fsFocus = False }
+        modifyIORef stateRef $ \s -> s { fsHasFocus = False }
         windowRemoveAccelGroup window bindings
         updateCanvas True
         return True
