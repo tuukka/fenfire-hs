@@ -695,7 +695,7 @@ makeWindow view stateRef = do
     boxPackStart vbox paned PackGrow 0
     containerSetFocusChain vbox [toWidget paned]
     
-    set paned [ panedPosition := 380, panedChildResize textView := False ]
+    set paned [ panedPosition := 380, panedChildResize textViewFrame := False ]
 
     set window [ containerChild := vbox ]
 
