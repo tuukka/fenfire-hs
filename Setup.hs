@@ -5,7 +5,7 @@ import Distribution.Simple
 import Distribution.Simple.LocalBuildInfo
 import Distribution.Simple.Utils (rawSystemVerbose, dieWithLocation)
 import System.Cmd (system)
-import System.Directory (getModificationTime)
+import System.Directory (getModificationTime, doesFileExist)
 
 main = defaultMainWithHooks hooks
 hooks = defaultUserHooks { hookedPreProcessors = [trhsx, c2hs] }
@@ -16,8 +16,11 @@ trhsx = ("fhs", f) where
         when (verbose > 3) $
             putStrLn ("checking that preprocessor is up-to-date")
         let [pIn, pOut] = ["Preprocessor/Hsx/Parser."++s | s <- ["ly","hs"]]
-        [tIn, tOut] <- mapM getModificationTime [pIn, pOut]
-        when (tIn > tOut) $ system ("happy "++pIn) >> return ()
+        exists <- doesFileExist pOut
+        runHappy <- if not exists then return True else do
+            [tIn, tOut] <- mapM getModificationTime [pIn, pOut]
+            return (tIn > tOut)
+        when runHappy $ system ("happy "++pIn) >> return ()
         system ("ghc --make Preprocessor/Main.hs -o preprocessor")
 
         when (verbose > 0) $
@@ -29,7 +32,8 @@ trhsx = ("fhs", f) where
 c2hs :: PPSuffixHandler
 c2hs = ("chs", f) where
     f buildInfo localBuildInfo inFile outFile verbose = do
-        putStrLn $ "preprocess "++inFile++" to "++outFile
+        when (verbose > 0) $
+            putStrLn $ "preprocess "++inFile++" to "++outFile
         maybe (dieWithLocation inFile Nothing "no c2hs available")
               (\c2hs -> rawSystemVerbose verbose c2hs
                             ["--cppopts", "-D\"__attribute__(A)= \"", 
