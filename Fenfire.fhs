@@ -375,9 +375,14 @@ saveFile (Rotation graph _ _) fileName0 confirmSame = do
     widgetHide dialog
     case response of
         ResponseAccept -> do Just fileName <- fileChooserGetFilename dialog
-                             saveGraph graph fileName
-                             return (fileName, True)
+                             let fileName' = checkSuffix fileName
+                             saveGraph graph fileName'
+                             return (fileName', True)
         _              -> return (fileName0, False)
+        
+checkSuffix :: FilePath -> FilePath
+checkSuffix s | Data.List.isSuffixOf ".nt" s = s
+              | otherwise                    = s ++ ".nt"
 
 confirmSave :: (?vs :: ViewSettings, ?pw :: Window, ?uriMaker :: URIMaker) => 
                Bool -> HandlerAction FenState -> 
