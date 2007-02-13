@@ -18,15 +18,18 @@ The source code is available using Darcs.
 Requirements for compilation
 ============================
 
-fenfire source code
-  ghc    6.4    (The Glorious Glasgow Haskell Compilation System)
-  gtk2hs 0.9.10 (A GUI library for Haskell based on Gtk)
-  raptor 1.4.8  (Raptor RDF Parser Toolkit)
+Fenfire source code
+
+Dependencies with known-to-work version numbers:
+
+  ghc    6.6    (The Glorious Glasgow Haskell Compilation System)
+  gtk2hs 0.9.11 (A GUI library for Haskell based on Gtk, release candidate ok)
+  raptor 1.4.9  (Raptor RDF Parser Toolkit)
   c2hs   0.14.5 (C->Haskell, An Interface Generator for Haskell)
-  harp          (Haskell Regular Patterns, in haskell-src-exts)
-  haxml         (Haskell and XML)
-  happy         (The Parser Generator for Haskell)
-  alex          (A lexical analyser generator for Haskell)
+  harp   0.2    (Haskell Regular Patterns, in haskell-src-exts)
+  haxml  1.13.2 (Haskell and XML)
+  happy  1.15   (The Parser Generator for Haskell)
+  alex   2.0.1  (A lexical analyser generator for Haskell)
 
 (Packages in Debian: ghc6 libghc6-gtk-dev libraptor1-dev c2hs libghc6-harp-dev 
  libghc6-haxml-dev happy alex)
