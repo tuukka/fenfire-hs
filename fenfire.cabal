@@ -3,7 +3,12 @@ Version:        0.1
 License:        GPL
 License-file:   LICENSE
 Author:         Benja Fallenstein and Tuukka Hastrup
-Synopsis:       Notetaking system
+Maintainer:     fenfire-dev@nongnu.org
+Synopsis:       Graph-based notetaking system
+Description:    Fenfire is a graph-based notetaking system. (We're
+                planning to add a kitchen sink soon.) It is developed 
+                on the channel #fenfire on the Freenode IRC network.
+Category:       User Interfaces
 Stability:      alpha
 Homepage:       http://fenfire.org/
 Build-Depends:  base, HaXml, gtk, mtl, unix, cairo, harp, template-haskell
