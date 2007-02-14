@@ -28,6 +28,7 @@ import Control.Applicative
 import Control.Monad
 
 import Data.Monoid (Monoid(mappend, mempty))
+import qualified Data.Word
 
 import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get, fill)
 import qualified Graphics.Rendering.Cairo as C
@@ -35,7 +36,9 @@ import Graphics.Rendering.Cairo.Matrix (Matrix(Matrix))
 import qualified Graphics.Rendering.Cairo.Matrix as Matrix
 import Graphics.UI.Gtk.Cairo
 
-data Color = Color Double Double Double Double
+import qualified Graphics.UI.Gtk as Gtk
+
+data Color = Color Double Double Double Double deriving Show
 type Size  = (Double, Double)
 type Point = (Double, Double)
 type Rect  = (Matrix, Size)
@@ -191,3 +194,8 @@ line p1 p2 = moveTo p1 & lineTo p2
 extents :: (Cairo cx r, Monoid (cx Path)) => cx Path
 extents = moveTo (anchor #0 #0) & lineTo (anchor #0 #1) & lineTo (anchor #1 #1)
         & lineTo (anchor #1 #0) & lineTo (anchor #0 #0)
+        
+        
+fromGtkColor :: Gtk.Color -> Color
+fromGtkColor (Gtk.Color r g b) = Color (f r) (f g) (f b) 1 where
+    f x = fromIntegral x / fromIntegral (maxBound :: Data.Word.Word16)
