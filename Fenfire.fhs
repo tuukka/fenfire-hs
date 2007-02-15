@@ -185,7 +185,7 @@ vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor
                                     lineTo (point #(w+10) #(0-10)) &
                                     lineTo (point #(w+10) #(h+10)) &
                                     lineTo (point #(0-10) #(h+10)) &
-                                    lineTo (point #(0-10) #(0-10))
+                                    closePath
         placeVob $ ownSize $ scale #scale' $ keyVob node $ g $ f $ 
             nodeView graph node
         

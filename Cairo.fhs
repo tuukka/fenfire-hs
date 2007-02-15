@@ -193,7 +193,7 @@ line p1 p2 = moveTo p1 & lineTo p2
 
 extents :: (Cairo cx r, Monoid (cx Path)) => cx Path
 extents = moveTo (anchor #0 #0) & lineTo (anchor #0 #1) & lineTo (anchor #1 #1)
-        & lineTo (anchor #1 #0) & lineTo (anchor #0 #0)
+        & lineTo (anchor #1 #0) & closePath
         
         
 fromGtkColor :: Gtk.Color -> Color
