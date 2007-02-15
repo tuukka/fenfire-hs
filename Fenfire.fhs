@@ -65,6 +65,8 @@ data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 data FenState = FenState { fsRotation :: Rotation, fsMark :: Mark,
                            fsFilePath :: FilePath, fsGraphModified :: Bool,
                            fsHasFocus :: Bool, fsView :: Int }
+                           
+type Views = [(String, View FenState Node)]
 
 data Rotation = Rotation Graph Node Int         deriving (Eq, Show)
 
@@ -413,7 +415,7 @@ checkSuffix s | Data.List.isSuffixOf ".nt" s = s
               | otherwise                    = s ++ ".nt"
 
 confirmSave :: (?vs :: ViewSettings, ?pw :: Window,
-                ?views :: [View FenState Node], ?uriMaker :: URIMaker) => 
+                ?views :: Views, ?uriMaker :: URIMaker) => 
                Bool -> HandlerAction FenState -> 
                HandlerAction FenState
 confirmSave False action = action
@@ -446,8 +448,7 @@ confirmRevert True  action = do
 newState :: Rotation -> FilePath -> Bool -> FenState
 newState rot fp focus = FenState rot Set.empty fp False focus 0
 
-handleEvent :: (?vs :: ViewSettings, ?pw :: Window,
-                ?views :: [View FenState Node],
+handleEvent :: (?vs :: ViewSettings, ?pw :: Window, ?views :: Views,
                 ?uriMaker :: URIMaker) => Handler Event FenState
 handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
     state <- get; let rot = fsRotation state; fileName = fsFilePath state
@@ -464,8 +465,7 @@ handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
         _   -> unhandledEvent
 handleEvent _ = unhandledEvent
 
-handleAction :: (?vs :: ViewSettings, ?pw :: Window,
-                 ?views :: [View FenState Node],
+handleAction :: (?vs :: ViewSettings, ?pw :: Window, ?views :: Views,
                  ?uriMaker :: URIMaker) => Handler String FenState
 handleAction action = do
     state@(FenState { fsRotation = rot@(Rotation graph node _), fsMark = mark, 
@@ -507,6 +507,9 @@ handleAction action = do
         "about" -> liftIO $ makeAboutDialog >>= widgetShow
         "chgview" -> do put $ state { fsView = (fsView state + 1) `mod` 
                                                (length ?views) }
+                        setInterp True
+        name | Just i <- Data.List.findIndex ((==name) . fst) ?views -> do
+                        put $ state { fsView = i }
                         setInterp True
         _       -> unhandledEvent
   where putRotation rot = do modify $ \state -> state { fsRotation=rot, 
@@ -564,6 +567,10 @@ makeBindings actionGroup bindings = do
         actionGroupAddActionWithAccel actionGroup action accel
         actionSetAccelGroup action bindings
 
+    flip mapM ?views $ \(name, _view) -> do
+        action <- actionNew name name Nothing Nothing
+        actionGroupAddAction actionGroup action
+
 makeMenus actionGroup root = mapM_ (createMenu root) menuentries
     where
         leaf x = Tree.Node x []
@@ -575,6 +582,7 @@ makeMenus actionGroup root = mapM_ (createMenu root) menuentries
                                                      "breakr","breakl","",
                                                      "mark","connr","connl","",
                                                      "rmlit"])
+                      , Tree.Node "_View" (map (leaf . fst) ?views)
                       , Tree.Node "_Help" (map leaf ["about"])
                       ]
         createMenu :: MenuShellClass menu => menu -> Tree.Tree String -> IO ()
@@ -612,10 +620,10 @@ main = do
 
     let ?vs = ViewSettings { hiddenProps=[rdfs_label] }
         ?uriMaker = uriMaker in let
-        ?views = [vanishingView 20 30 
+        ?views = [("Wheel view", vanishingView 20 30 
                      (Color 0.7 0.7 0.8 0.7) (Color 0.7 0.7 0.7 0.7)
-                     (Color 0.93 0.93 1 1)   (Color 0.93 0.93 0.93 1),
-                  presentationView] in do
+                     (Color 0.93 0.93 1 1)   (Color 0.93 0.93 0.93 1)),
+                  ("Presentation view", presentationView)] in do
 
     -- initial state:
 
