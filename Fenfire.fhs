@@ -328,7 +328,8 @@ loadGraph fileName = do
         f (Raptor.Uri s) = URI s
         f (Raptor.Literal s) = PlainLiteral s
         f (Raptor.Blank s) = URI $ "blank:" ++ s
-    triples <- Raptor.filenameToTriples fileName >>= return . map convert
+    raptorTriples <- Raptor.filenameToTriples fileName (Just "fakebase:/")
+    triples <- return $ map convert raptorTriples
     return $ listToGraph triples
 
 saveGraph :: Graph -> FilePath -> IO ()

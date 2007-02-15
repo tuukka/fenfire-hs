@@ -170,14 +170,17 @@ triplesToFilename triples filename = do
 
 -- | Parse a file with the given filename into triples
 --
-filenameToTriples :: String -> IO [Triple]
-filenameToTriples filename = do 
+filenameToTriples :: String -> Maybe String -> IO [Triple]
+filenameToTriples filename baseURI = do 
   result <- newIORef []
 
   initRaptor
   let suffix = reverse $ takeWhile (/= '.') $ reverse filename
       parsertype = case suffix of "turtle" -> "turtle"
-                                  _        -> "guess"
+                                  "ttl"    -> "turtle"
+                                  "rdf"    -> "rdfxml"
+                                  "nt"     -> "ntriples"
+                                  _        -> "ntriples"
   rdf_parser <- withCString parsertype new_parser 
   when (rdf_parser == nullPtr) $ fail "parser is null"
   handler <- mkHandler $ \_user_data triple -> do
@@ -189,7 +192,7 @@ filenameToTriples filename = do
   set_statement_handler rdf_parser nullPtr handler
   uri_str <- withCString filename uri_filename_to_uri_string
   uri <- new_uri uri_str
-  base_uri <- uri_copy uri
+  base_uri <- maybe (uri_copy uri) (\s -> withCString s new_uri) baseURI
   parse_file rdf_parser uri base_uri
 
   {# call free_parser #} (Parser rdf_parser)
