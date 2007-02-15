@@ -41,7 +41,7 @@ import Data.List (intersect)
 import Data.Map (Map, keys, fromList, toList, insert, empty)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe, isJust)
-import Data.Monoid (Monoid(mempty, mappend))
+import Data.Monoid (Monoid(mempty, mappend, mconcat))
 
 import Control.Monad (when)
 import Control.Monad.State
@@ -151,13 +151,28 @@ keyVob key vob = vob {
     renderVob = \cx -> 
         maybeDo (maybeReturn =<< (Map.lookup key $ rcScene cx)) $ \rect ->
             renderVob vob $ cx { rcRect = rect } }
+            
+showAtKey :: Ord k => k -> Endo (Vob k)
+showAtKey key vob = vob {
+    vobScene = \cx -> let mrect = maybeReturn =<< Map.lookup key (rcScene cx)
+                          mcx = fmap (\rect' -> cx { rcRect=rect' }) mrect
+                          msc = liftM (vobScene vob) mcx
+                      in Map.mapWithKey (\k _ -> msc >>= (Map.! k)) 
+                                        (vobScene vob cx),
+    renderVob = \cx -> 
+        maybeDo (maybeReturn =<< (Map.lookup key $ rcScene cx)) $ \rect ->
+            renderVob vob $ cx { rcRect = rect } }
         
 
 rectBox :: Ord k => Endo (Vob k)
 rectBox vob = useBgColor (fill extents) & clip extents vob & 
               useFgColor (stroke extents)
+              
+vbox :: Ord k => [Vob k] -> Vob k
+vbox vobs = mconcat [translate #0 #y $ ownSize v | (v,y) <- zip vobs ys] where
+    ys = scanl (+) 0 $ map defaultHeight $ init vobs
+    
         
-
 pangoContext :: PangoContext
 pangoContext = unsafePerformIO $ do
     context <- cairoCreateContext Nothing
@@ -232,6 +247,10 @@ pad2 x y   = pad4 x x y y
 
 pad :: Ord k => Double -> Endo (Vob k)
 pad pixels = pad2 pixels pixels
+
+scaleVob :: Ord k => Double -> Endo (Vob k)
+scaleVob sc vob = scale #sc $ vob { defaultSize = (sc*w, sc*h) } where
+    (w,h) = defaultSize vob
     
     
 class Interpolate a where
