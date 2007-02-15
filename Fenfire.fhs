@@ -713,12 +713,12 @@ makeWindow window canvasBgColor view stateRef = do
 
     onFocusIn canvas $ \_event -> do 
         modifyIORef stateRef $ \s -> s { fsHasFocus = True }
-        windowAddAccelGroup window bindings
+        forM_ bindingActions $ actionConnectAccelerator
         updateCanvas True
         return True
     onFocusOut canvas $ \_event -> do 
         modifyIORef stateRef $ \s -> s { fsHasFocus = False }
-        windowRemoveAccelGroup window bindings
+        forM_ bindingActions $ actionDisconnectAccelerator
         updateCanvas True
         return True
 
@@ -728,14 +728,21 @@ makeWindow window canvasBgColor view stateRef = do
     windowAddAccelGroup window accelGroup
     -- bindings are active only when the canvas has the focus:
     bindings <- uiManagerNew >>= uiManagerGetAccelGroup -- XXX Gtk2Hs
+    windowAddAccelGroup window bindings
+    -- fake bindings aren't used
+    fake <- uiManagerNew >>= uiManagerGetAccelGroup -- XXX Gtk2Hs
 
     actionGroup <- actionGroupNew "main"
+    bindingGroup <- actionGroupNew "bindings"
 
     makeActions actionGroup accelGroup 
-    makeBindings actionGroup bindings
+    makeBindings bindingGroup bindings
+    makeBindings actionGroup fake
 
     actions <- actionGroupListActions actionGroup
-    forM_ actions $ \action -> do
+    bindingActions <- actionGroupListActions bindingGroup
+
+    forM_ (actions ++ bindingActions) $ \action -> do
         name <- actionGetName action
         onActionActivate action $ canvasAction name >> return ()
 
