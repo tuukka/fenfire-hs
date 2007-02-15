@@ -116,7 +116,7 @@ setText :: Graph -> Node -> String -> Graph
 setText g n t = update (n, rdfs_label, PlainLiteral t) g
 
 nodeView :: Graph -> Node -> Vob Node
-nodeView g n = rectBox $ pad 5 $ useFgColor $ multiline False 20 s
+nodeView g n = useFgColor $ multiline False 20 s
     where s = maybe (show n) id (getText g n)
     
 propView :: Graph -> Node -> Vob Node
@@ -189,8 +189,9 @@ vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor
                                     lineTo (point #(w+10) #(h+10)) &
                                     lineTo (point #(0-10) #(h+10)) &
                                     closePath
-        placeVob $ ownSize $ scale #scale' $ keyVob node $ g $ f $ 
-            nodeView graph node
+        placeVob $ ownSize $ scale #scale' $ keyVob node $ g $ 
+            f (useBgColor (fill extents) & pad 5 (nodeView graph node)) &
+            useFgColor (stroke extents)
         
     getScale :: VV Double
     getScale = do d <- asks vvDepth; return (0.97 ** fromIntegral d)
