@@ -631,6 +631,8 @@ main = do
     blurColor <- styleGetBase style StateActive
     textColor <- styleGetText style StateSelected
     blurTextColor <- styleGetText style StateActive
+    
+    canvasBgColor <- styleGetBackground style StateNormal
 
     let alpha x (Color r g b a) = Color r g b (x*a)
 
@@ -658,12 +660,12 @@ main = do
 
     -- start:
 
-    makeWindow window view stateRef
+    makeWindow window canvasBgColor view stateRef
     widgetShowAll window
 
     mainGUI
 
-makeWindow window view stateRef = do
+makeWindow window canvasBgColor view stateRef = do
 
     -- main window:
 
@@ -707,7 +709,7 @@ makeWindow window view stateRef = do
     
     (canvas, updateCanvas, canvasAction) <- 
         vobCanvas stateRef view handleEvent handleAction
-                  stateChanged lightGray 0.5
+                  stateChanged (fromGtkColor canvasBgColor) 0.5
 
     onFocusIn canvas $ \_event -> do 
         modifyIORef stateRef $ \s -> s { fsHasFocus = True }
