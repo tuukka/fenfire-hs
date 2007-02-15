@@ -632,10 +632,13 @@ main = do
     textColor <- styleGetText StateSelected style
     blurTextColor <- styleGetText StateActive style
 
+    let alpha x (Color r g b a) = Color r g b (x*a)
+
     let ?vs = ViewSettings { hiddenProps=[rdfs_label] }
         ?uriMaker = uriMaker in let
         ?views = [("Wheel view", vanishingView 20 30 
-                       (fromGtkColor bgColor)    (fromGtkColor blurBgColor)
+                       (alpha 0.7 $ fromGtkColor bgColor)
+                           (alpha 0.7 $ fromGtkColor blurBgColor)
                        (fromGtkColor focusColor) (fromGtkColor blurColor)
                        (fromGtkColor textColor)  (fromGtkColor blurTextColor)),
                   ("Presentation view", presentationView)] in do
