@@ -27,7 +27,8 @@ import RDF
 
 import Paths_fenfire (getDataFileName)
 
-import qualified Raptor (filenameToTriples, triplesToFilename, Identifier(..))
+import qualified Raptor (filenameToTriples, uriToTriples,
+                         triplesToFilename, Identifier(..))
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -358,7 +359,9 @@ loadGraph fileName = do
         f (Raptor.Uri s) = URI s
         f (Raptor.Literal s) = PlainLiteral s
         f (Raptor.Blank s) = URI $ "blank:" ++ s
-    raptorTriples <- Raptor.filenameToTriples fileName (Just "fakebase:/")
+    raptorTriples <- if Data.List.isPrefixOf "http:" fileName
+        then Raptor.uriToTriples fileName Nothing
+        else Raptor.filenameToTriples fileName (Just "fakebase:/")
     triples <- return $ map convert raptorTriples
     return $ listToGraph triples
 
@@ -469,7 +472,7 @@ handleEvent _ = unhandledEvent
 handleAction :: (?vs :: ViewSettings, ?pw :: Window, ?views :: Views,
                  ?uriMaker :: URIMaker) => Handler String FenState
 handleAction action = do
-    state@(FenState { fsRotation = rot@(Rotation graph node _), fsMark = mark, 
+    state@(FenState { fsRotation = rot@(Rotation graph node r), fsMark = mark, 
                       fsFilePath = filepath, fsGraphModified = modified,
                       fsHasFocus=focus
                     }) <- get
@@ -493,6 +496,14 @@ handleAction action = do
         "open"  -> confirmSave modified $ do 
             (rot',fp') <- liftIO $ openFile rot filepath
             put $ newState rot' fp' focus
+        "loadURI" -> case node of URI uri -> do g <- liftIO $ loadGraph uri
+                                                let ts = graphToList g
+                                                    g' = foldr insertVirtual
+                                                             graph ts
+                                                    r' = Rotation g' node r
+                                                    s' = state {fsRotation=r'}
+                                                put s'
+                                  _       -> unhandledEvent
         "revert" | filepath /= "" -> confirmRevert modified $ do
             g' <- liftIO $ loadGraph filepath
             put $ newState (findStartRotation g') filepath focus
@@ -560,6 +571,8 @@ makeBindings actionGroup bindings = do
                stockGoBack        , Just "<Shift>C"       )
             , ("rmlit"  , Just "Remove _literal text"       ,
                stockStrikethrough , Just "<Alt>BackSpace" )
+            , ("loadURI", Just "_Load node's URI"           ,
+               stockGoForward     , Just "<Ctl>L"         )
             ]
     flip mapM bindingentries $ \(name,label',stock,accel) -> do 
         item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
@@ -575,7 +588,7 @@ makeBindings actionGroup bindings = do
 makeMenus actionGroup root = mapM_ (createMenu root) menuentries
     where
         leaf x = Tree.Node x []
-        menuentries = [ Tree.Node "_File" (map leaf ["new","open","",
+        menuentries = [ Tree.Node "_File" (map leaf ["new","open","loadURI","",
                                                      "save","saveas","revert",
                                                      "",
                                                      "quit"])
@@ -653,7 +666,9 @@ main = do
             rot <- newGraph
             newIORef $ newState rot "" False
         xs -> do
-            fileName:fileNames <- mapM canonicalizePath xs
+            let f x | Data.List.isPrefixOf "http:" x = return x
+                    | otherwise = canonicalizePath x
+            fileName:fileNames <- mapM f xs
             g' <- loadGraph fileName
             gs <- mapM loadGraph fileNames
             let rot = findStartRotation (foldl mergeGraphs g' gs)
