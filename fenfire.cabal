@@ -11,7 +11,7 @@ Description:    Fenfire is a graph-based notetaking system. (We're
 Category:       User Interfaces
 Stability:      alpha
 Homepage:       http://fenfire.org/
-Build-Depends:  base, HaXml, gtk, mtl, unix, cairo, harp, template-haskell
+Build-Depends:  base, HaXml, gtk, mtl, unix, cairo, harp, template-haskell, glib
 Data-Files:     data/logo.svg data/logo48.png
 
 Executable:     fenfire

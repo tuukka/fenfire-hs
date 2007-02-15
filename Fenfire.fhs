@@ -45,7 +45,14 @@ import Control.Monad.State (StateT, get, gets, modify, put, execStateT)
 import Control.Monad.Trans (lift, liftIO)
 import Control.Monad.Writer (Writer, execWriter, tell)
 
-import Graphics.UI.Gtk hiding (Color, get, disconnect, fill)
+import GtkFixes
+import Graphics.UI.Gtk hiding (Color, get, disconnect, fill,
+-- GtkFixes overrides:
+                               widgetGetStyle,
+                               styleGetForeground, styleGetBackground, 
+                               styleGetLight, styleGetMiddle, styleGetDark,
+                               styleGetText, styleGetBase, 
+                               styleGetAntiAliasing)
 
 import qualified Control.Exception
 import System.Directory (canonicalizePath)
