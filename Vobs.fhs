@@ -274,8 +274,10 @@ interpolateScene fract sc1 sc2 =
     fromList [(key, liftM2 f (sc1 Map.! key) (sc2 Map.! key)) 
              | key <- interpKeys] where
         interpKeys = intersect (keys sc1) (keys sc2)
-        f (m1,(w1,h1)) (m2,(w2,h2)) = (i m1 m2, (i w1 w2, i h1 h2))
+        f (m1,(w1,h1)) (m2,(w2,h2)) = (i m1 m2, (j w1 w2, j h1 h2))
         i x y = interpolate fract x y
+        -- don't bounce width and height, it usually doesn't look good:
+        j x y = interpolate (max 0 $ min 1 $ fract) x y
              
 
 isInterpUseful :: Ord k => Scene k -> Scene k -> Bool             
