@@ -168,12 +168,12 @@ vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor
     placeNode cols (Rotation graph node _) = do
         scale' <- getScale
         let f vob = case bg of Nothing -> vob
-                               _       -> setFgColor (fromJust fg) $ 
-                                          setBgColor (fromJust bg) vob
+                               Just c  -> setFgColor fg $ 
+                                          setBgColor c vob
             markColor = if node `Set.member` mark then Just (Color 1 0 0 1)
                             else Nothing
             bg = combine (fmap (\(_,b,_) -> b) cols) markColor
-            fg = combine (fmap (\(_,_,c) -> c) cols) markColor
+            fg = maybe (Color 0 0 0 1) (\(_,_,c) -> c) cols
             combine Nothing c = c
             combine c Nothing = c
             combine (Just c1) (Just c2) = Just $ interpolate 0.5 c1 c2
