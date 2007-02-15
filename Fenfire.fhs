@@ -625,12 +625,12 @@ main = do
     window <- windowNew
     style <- widgetGetStyle window
 
-    bgColor <- styleGetBackground StateSelected style
-    blurBgColor <- styleGetBackground StateActive style
-    focusColor <- styleGetBase StateSelected style
-    blurColor <- styleGetBase StateActive style
-    textColor <- styleGetText StateSelected style
-    blurTextColor <- styleGetText StateActive style
+    bgColor <- styleGetBackground style StateSelected
+    blurBgColor <- styleGetBackground style StateActive
+    focusColor <- styleGetBase style StateSelected
+    blurColor <- styleGetBase style StateActive
+    textColor <- styleGetText style StateSelected
+    blurTextColor <- styleGetText style StateActive
 
     let alpha x (Color r g b a) = Color r g b (x*a)
 

@@ -53,34 +53,34 @@ foreign import ccall safe " gtk_widget_get_style"
   gtk_widget_get_style :: ((Ptr Widget) -> (IO (Ptr Style)))
 
 -- from Structs.hs generated from Benja's style patch to gtk2hs:
-styleGetForeground :: StateType -> Style -> IO Color
-styleGetForeground ty st = withForeignPtr (unStyle st) $ \stPtr -> do
+styleGetForeground :: Style -> StateType -> IO Color
+styleGetForeground st ty = withForeignPtr (unStyle st) $ \stPtr -> do
   peek $ advancePtr ((\hsc_ptr -> hsc_ptr `plusPtr` 12) stPtr) (fromEnum ty)
 
-styleGetBackground :: StateType -> Style -> IO Color
-styleGetBackground ty st = withForeignPtr (unStyle st) $ \stPtr ->
+styleGetBackground :: Style -> StateType -> IO Color
+styleGetBackground st ty = withForeignPtr (unStyle st) $ \stPtr ->
   peek $ advancePtr ((\hsc_ptr -> hsc_ptr `plusPtr` 72) stPtr) (fromEnum ty)
 
-styleGetLight :: StateType -> Style -> IO Color
-styleGetLight ty st = withForeignPtr (unStyle st) $ \stPtr ->
+styleGetLight :: Style -> StateType -> IO Color
+styleGetLight st ty = withForeignPtr (unStyle st) $ \stPtr ->
   peek $ advancePtr ((\hsc_ptr -> hsc_ptr `plusPtr` 132) stPtr) (fromEnum ty)
 
-styleGetMiddle :: StateType -> Style -> IO Color
-styleGetMiddle ty st = withForeignPtr (unStyle st) $ \stPtr ->
+styleGetMiddle :: Style -> StateType -> IO Color
+styleGetMiddle st ty = withForeignPtr (unStyle st) $ \stPtr ->
   peek $ advancePtr ((\hsc_ptr -> hsc_ptr `plusPtr` 252) stPtr) (fromEnum ty)
 
-styleGetDark :: StateType -> Style -> IO Color
-styleGetDark ty st = withForeignPtr (unStyle st) $ \stPtr ->
+styleGetDark :: Style -> StateType -> IO Color
+styleGetDark st ty = withForeignPtr (unStyle st) $ \stPtr ->
   peek $ advancePtr ((\hsc_ptr -> hsc_ptr `plusPtr` 192) stPtr) (fromEnum ty)
 
-styleGetText :: StateType -> Style -> IO Color
-styleGetText ty st = withForeignPtr (unStyle st) $ \stPtr ->
+styleGetText :: Style -> StateType -> IO Color
+styleGetText st ty = withForeignPtr (unStyle st) $ \stPtr ->
   peek $ advancePtr ((\hsc_ptr -> hsc_ptr `plusPtr` 312) stPtr) (fromEnum ty)
 
-styleGetBase :: StateType -> Style -> IO Color
-styleGetBase ty st = withForeignPtr (unStyle st) $ \stPtr ->
+styleGetBase :: Style -> StateType -> IO Color
+styleGetBase st ty = withForeignPtr (unStyle st) $ \stPtr ->
   peek $ advancePtr ((\hsc_ptr -> hsc_ptr `plusPtr` 372) stPtr) (fromEnum ty)
 
-styleGetAntiAliasing :: StateType -> Style -> IO Color
-styleGetAntiAliasing ty st = withForeignPtr (unStyle st) $ \stPtr ->
+styleGetAntiAliasing :: Style -> StateType -> IO Color
+styleGetAntiAliasing st ty = withForeignPtr (unStyle st) $ \stPtr ->
   peek $ advancePtr ((\hsc_ptr -> hsc_ptr `plusPtr` 432) stPtr) (fromEnum ty)
