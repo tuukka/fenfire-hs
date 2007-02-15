@@ -618,20 +618,29 @@ main = do
 
     uriMaker <- newURIMaker
 
-    let ?vs = ViewSettings { hiddenProps=[rdfs_label] }
-        ?uriMaker = uriMaker in let
-        ?views = [("Wheel view", vanishingView 20 30 
-                     (Color 0.7 0.7 0.8 0.7) (Color 0.7 0.7 0.7 0.7)
-                     (Color 0.93 0.93 1 1)   (Color 0.93 0.93 0.93 1)),
-                  ("Presentation view", presentationView)] in do
-
     -- initial state:
 
     args <- initGUI
 
-    let view = vanishingView 20 30 
-                   (Color 0.7 0.7 0.8 0.7) (Color 0.7 0.7 0.7 0.7)
-                   (Color 0.93 0.93 1 1)   (Color 0.93 0.93 0.93 1)
+    window <- windowNew
+    style <- widgetGetStyle window
+
+    bgColor <- styleGetBackground StateSelected style
+    blurBgColor <- styleGetBackground StateActive style
+    focusColor <- styleGetBase StateSelected style
+    blurColor <- styleGetBase StateActive style
+    textColor <- styleGetText StateSelected style
+    blurTextColor <- styleGetText StateActive style
+
+    let ?vs = ViewSettings { hiddenProps=[rdfs_label] }
+        ?uriMaker = uriMaker in let
+        ?views = [("Wheel view", vanishingView 20 30 
+                       (fromGtkColor bgColor)    (fromGtkColor blurBgColor)
+                       (fromGtkColor focusColor) (fromGtkColor blurColor)
+                       (fromGtkColor textColor)  (fromGtkColor blurTextColor)),
+                  ("Presentation view", presentationView)] in do
+
+    let view s = snd (?views !! fsView s) s
 
     stateRef <- case args of 
         [] -> do 
