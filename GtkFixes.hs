@@ -36,7 +36,23 @@ import Control.Exception (bracket)
 import System.Glib.GObject
 import System.Glib.FFI
 import Graphics.UI.Gtk
+import qualified Graphics.UI.Gtk
 import Graphics.UI.Gtk.Types
+
+
+-- while Gtk2Hs actionNew needs the label:
+actionNew name maybeLabel tooltip stock = do
+    item <- maybe (return Nothing) stockLookupItem stock
+    let label' = case (maybeLabel, fmap siLabel item) of
+            (Just label, _) -> label
+            (_, Just label) -> label
+            _               -> error "actionNew: no label"
+    Graphics.UI.Gtk.actionNew name label' tooltip stock
+
+-- until Gtk2Hs gets another way to create accel groups:
+accelGroupNew :: IO AccelGroup
+accelGroupNew = uiManagerNew >>= uiManagerGetAccelGroup
+
 
 -- from Widget.hs generated from Benja's style patch to gtk2hs:
 widgetGetStyle :: WidgetClass widget => widget -> IO Style

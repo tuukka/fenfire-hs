@@ -50,6 +50,7 @@ import Control.Monad.Writer (Writer, execWriter, tell)
 import GtkFixes
 import Graphics.UI.Gtk hiding (Color, get, disconnect, fill,
 -- GtkFixes overrides:
+                               actionNew,
                                widgetGetStyle,
                                styleGetForeground, styleGetBackground, 
                                styleGetLight, styleGetMiddle, styleGetDark,
@@ -542,8 +543,7 @@ makeActions actionGroup accelGroup = do
             , ( "about"  , stockAbout         )
             ]
     flip mapM actionentries $ \(name,stock) -> do 
-        item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
-        action <- actionNew name (siLabel $ fromJust item) Nothing (Just stock)
+        action <- actionNew name Nothing Nothing (Just stock)
         actionGroupAddActionWithAccel actionGroup action Nothing
         actionSetAccelGroup action accelGroup
 
@@ -575,14 +575,12 @@ makeBindings actionGroup bindings = do
                stockGoForward     , Just "<Ctl>L"         )
             ]
     flip mapM bindingentries $ \(name,label',stock,accel) -> do 
-        item <- stockLookupItem stock -- XXX Gtk2Hs actionNew needs the label
-        let label'' = maybe (siLabel $ fromJust item) id label'
-        action <- actionNew name label'' Nothing (Just stock)
+        action <- actionNew name label' Nothing (Just stock)
         actionGroupAddActionWithAccel actionGroup action accel
         actionSetAccelGroup action bindings
 
     flip mapM ?views $ \(name, _view) -> do
-        action <- actionNew name name Nothing Nothing
+        action <- actionNew name (Just name) Nothing Nothing
         actionGroupAddAction actionGroup action
 
 makeMenus actionGroup root = mapM_ (createMenu root) menuentries
@@ -740,13 +738,13 @@ makeWindow window canvasBgColor view stateRef = do
 
     -- action widgets:
 
-    accelGroup <- uiManagerNew >>= uiManagerGetAccelGroup -- XXX Gtk2Hs
+    accelGroup <- accelGroupNew
     windowAddAccelGroup window accelGroup
     -- bindings are active only when the canvas has the focus:
-    bindings <- uiManagerNew >>= uiManagerGetAccelGroup -- XXX Gtk2Hs
+    bindings <- accelGroupNew
     windowAddAccelGroup window bindings
     -- fake bindings aren't used
-    fake <- uiManagerNew >>= uiManagerGetAccelGroup -- XXX Gtk2Hs
+    fake <- accelGroupNew
 
     actionGroup <- actionGroupNew "main"
     bindingGroup <- actionGroupNew "bindings"
