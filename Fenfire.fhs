@@ -123,14 +123,16 @@ propView g n = (useFadeColor $ fill extents)
 
 
 vanishingView :: (?vs :: ViewSettings) => Int -> Int -> Color -> Color -> 
+                                          Color -> Color -> 
                                           Color -> Color -> FenState -> Vob Node
-vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor
+vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor 
+              textColor blurTextColor
               (FenState {fsRotation=startRotation, fsMark=mark,
                          fsHasFocus=focus}) =
     runVanishing depth maxnodes view where
     -- place the center of the view and all subtrees in both directions
-    view = do placeNode (if focus then Just (bgColor, focusColor) 
-                                  else Just (blurBgColor, blurColor))
+    view = do placeNode (if focus then Just (bgColor, focusColor, textColor) 
+                             else Just (blurBgColor, blurColor, blurTextColor))
                   startRotation
               let Rotation _ n _ = startRotation in visitNode n
               forM_ [Pos, Neg] $ \dir -> do
@@ -166,15 +168,17 @@ vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor
     placeNode cols (Rotation graph node _) = do
         scale' <- getScale
         let f vob = case bg of Nothing -> vob
-                               Just c  -> setBgColor c vob
+                               _       -> setFgColor (fromJust fg) $ 
+                                          setBgColor (fromJust bg) vob
             markColor = if node `Set.member` mark then Just (Color 1 0 0 1)
                             else Nothing
-            bg = combine (fmap snd cols) markColor
+            bg = combine (fmap (\(_,b,_) -> b) cols) markColor
+            fg = combine (fmap (\(_,_,c) -> c) cols) markColor
             combine Nothing c = c
             combine c Nothing = c
             combine (Just c1) (Just c2) = Just $ interpolate 0.5 c1 c2
             g vob = case cols of Nothing    -> vob
-                                 Just (c,_) -> frame c & vob
+                                 Just (a,_,_) -> frame a & vob
                 where (w,h) = defaultSize vob
                       frame c = withColor #c $ fill $ 
                                     moveTo (point #(0-10) #(0-10)) &
@@ -590,9 +594,20 @@ main = do
 
     args <- initGUI
 
+    window <- windowNew
+    style <- widgetGetStyle window
+
+    bgColor <- styleGetBackground StateSelected style
+    blurBgColor <- styleGetBackground StateActive style
+    focusColor <- styleGetBase StateSelected style
+    blurColor <- styleGetBase StateActive style
+    textColor <- styleGetText StateSelected style
+    blurTextColor <- styleGetText StateActive style
+
     let view = vanishingView 20 30 
-                   (Color 0.7 0.7 0.8 0.7) (Color 0.7 0.7 0.7 0.7)
-                   (Color 0.93 0.93 1 1)   (Color 0.93 0.93 0.93 1)
+                   (fromGtkColor bgColor) (fromGtkColor blurBgColor)
+                   (fromGtkColor focusColor)   (fromGtkColor blurColor)
+                   (fromGtkColor textColor)   (fromGtkColor blurTextColor)
 
     stateRef <- case args of 
         [] -> do 
@@ -607,16 +622,15 @@ main = do
 
     -- start:
 
-    window <- makeWindow view stateRef
+    makeWindow window view stateRef
     widgetShowAll window
 
     mainGUI
 
-makeWindow view stateRef = do
+makeWindow window view stateRef = do
 
     -- main window:
 
-    window <- windowNew
     let ?pw = window in mdo
     logo <- getDataFileName "data/logo48.png"
     Control.Exception.catch (windowSetIconFromFile window logo)
@@ -728,8 +742,6 @@ makeWindow view stateRef = do
     widgetGrabFocus canvas
 
     onDelete window $ \_event -> canvasAction "quit"
-
-    return window
 
 
 makeAboutDialog :: (?pw :: Window) => IO AboutDialog
