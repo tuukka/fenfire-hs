@@ -581,10 +581,6 @@ makeBindings actionGroup bindings = do
         actionGroupAddActionWithAccel actionGroup action accel
         actionSetAccelGroup action bindings
 
-    flip mapM ?views $ \(name, _view) -> do
-        action <- actionNew name name Nothing Nothing
-        actionGroupAddAction actionGroup action
-
 makeMenus actionGroup root = mapM_ (createMenu root) menuentries
     where
         leaf x = Tree.Node x []
