@@ -41,7 +41,7 @@ import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
 import Data.Monoid(Monoid(mempty, mconcat), Dual(Dual), getDual)
 
 import Control.Applicative
-import Control.Monad (when, guard, msum)
+import Control.Monad (when, guard, msum, liftM)
 import Control.Monad.Reader (ReaderT, runReaderT, local, ask, asks)
 import Control.Monad.State (StateT, get, gets, modify, put, execStateT)
 import Control.Monad.Trans (lift, liftIO)
@@ -597,35 +597,26 @@ makeBindings actionGroup bindings = do
         actionGroupAddActionWithAccel actionGroup action accel
         actionSetAccelGroup action bindings
 
-makeMenus actionGroup root = mapM_ (createMenu root) menuentries
-    where
-        leaf x = Tree.Node x []
-        menuentries = [ Tree.Node "_File" (map leaf ["new","open","loadURI","",
-                                                     "save","saveas","revert",
-                                                     "",
-                                                     "quit"])
-                      , Tree.Node "_Edit" (map leaf ["noder","nodel","",
-                                                     "breakr","breakl","",
-                                                     "mark","connr","connl","",
-                                                     "rmlit"])
-                      , Tree.Node "_View" (map (leaf . fst) ?views)
-                      , Tree.Node "_Help" (map leaf ["about"])
-                      ]
-        createMenu :: MenuShellClass menu => menu -> Tree.Tree String -> IO ()
-        createMenu parent (Tree.Node name children) = 
-            if children /= [] then do
-                item <- menuItemNewWithMnemonic name
-                menu <- menuNew
-                mapM_ (createMenu menu) children
-                menuItemSetSubmenu item menu
-                menuShellAppend parent item
-            else if name == "" then do
-                item <- separatorMenuItemNew
-                menuShellAppend parent item
-            else do 
-                Just action <- actionGroupGetAction actionGroup name
+makeMenus actionGroup root = addAll root menu where
+    menu = [m "_File" [a "new", a "open", a "loadURI", sep,
+                       a "save", a "saveas", a "revert", sep,
+                       a "quit"],
+            m "_Edit" [a "noder", a "nodel", sep,
+                       a "breakr", a "breakl", sep,
+                       a "mark", a "connr", a "connl", sep, a "rmlit"],
+            m "_View" (map (a . fst) ?views),
+            m "_Help" [a "about"]]
+    addAll parent items = mapM_ (menuShellAppend parent) =<< sequence items
+    m :: String -> [IO MenuItem] -> IO MenuItem
+    m name children = do item <- menuItemNewWithMnemonic name
+                         menu' <- menuNew
+                         addAll menu' children
+                         menuItemSetSubmenu item menu'
+                         return item
+    sep = liftM castToMenuItem separatorMenuItemNew
+    a name = do Just action <- actionGroupGetAction actionGroup name
                 item <- actionCreateMenuItem action
-                menuShellAppend parent (castToMenuItem item)
+                return (castToMenuItem item)
 
 makeToolbarItems actionGroup toolbar = do
     forM_ ["new", "open", "", "save"] $ \name -> 
