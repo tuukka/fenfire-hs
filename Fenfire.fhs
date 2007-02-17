@@ -472,7 +472,6 @@ handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
         x | x == "Right" || x == "l"     -> handleAction "right"
         "v" -> handleAction "chgview"
         "p" -> handleAction "chgprop"
-        "P" -> handleAction "addprop"
         "O" -> handleAction "open"
         "S" -> do (fp',saved) <- liftIO $ saveFile rot fileName False
                   let modified' = fsGraphModified state && not saved
@@ -535,8 +534,6 @@ handleAction action = do
                             prop' = props !! ((i+1) `mod` length props)
                         liftIO $ putStrLn $ "Prop changed to: " ++ show prop'
                         put $ state { fsProperty = prop' }
-        "addprop" -> do put $ state { fsProperty = node,
-                                      fsPropertyList = props ++ [node] }
         _       -> unhandledEvent
   where putRotation rot = do modify $ \state -> state { fsRotation=rot, 
                                                         fsGraphModified=True }
@@ -560,16 +557,34 @@ makeActions actionGroup accelGroup = do
         actionGroupAddActionWithAccel actionGroup action Nothing
         actionSetAccelGroup action accelGroup
 
-updateActions actionGroup state = do
+updateActions actionGroup stateRef = do
+    state <- readIORef stateRef
     let readable = fsFilePath state /= ""
         modified = fsGraphModified state
         view = fst $ ?views !! (fsView state)
+
     Just save <- actionGroupGetAction actionGroup "save"
     actionSetSensitive save modified
     Just revert <- actionGroupGetAction actionGroup "revert"
     actionSetSensitive revert (modified && readable)
     Just changeView <- actionGroupGetAction actionGroup view
     toggleActionSetActive (castToToggleAction changeView) True
+    
+updatePropMenu propmenu actionGroup stateRef updateCanvas = do
+    state <- readIORef stateRef
+    Just addProp <- actionGroupGetAction actionGroup "addprop"
+                
+    menu <- menuNew
+    flip mapM (fsPropertyList state) $ \prop -> do
+        item <- menuItemNewWithLabel (show prop)
+        onActivateLeaf item $ do writeIORef stateRef $ state {fsProperty=prop}
+                                 updateCanvas False
+        menuShellAppend menu item
+    menuShellAppend menu =<< separatorMenuItemNew
+    item <- actionCreateMenuItem addProp
+    menuShellAppend menu $ castToMenuItem item
+    
+    menuItemSetSubmenu propmenu menu
 
 makeBindings actionGroup bindings = do
     let bindingentries =
@@ -597,11 +612,11 @@ makeBindings actionGroup bindings = do
         actionGroupAddActionWithAccel actionGroup action accel
         actionSetAccelGroup action bindings
 
-makeMenus actionGroup root = addAll root menu where
+makeMenus actionGroup root propmenu = addAll root menu where
     menu = [m "_File" [a "new", a "open", a "loadURI", sep,
                        a "save", a "saveas", a "revert", sep,
                        a "quit"],
-            m "_Edit" [a "noder", a "nodel", sep,
+            m "_Edit" [return propmenu, a "noder", a "nodel", sep,
                        a "breakr", a "breakl", sep,
                        a "mark", a "connr", a "connl", sep, a "rmlit"],
             m "_View" (map (a . fst) ?views),
@@ -701,7 +716,7 @@ makeWindow window canvasBgColor view stateRef = do
     textViewSetWrapMode textView WrapWordChar
 
     -- this needs to be called whenever the node or its text changes:
-    let stateChanged state@(FenState { fsRotation = Rotation g n _r }) = do
+    let stateChanged (FenState { fsRotation = Rotation g n _r }) = do
             buf <- textBufferNew Nothing
             textBufferSetText buf (maybe "" id $ getText g n)
             afterBufferChanged buf $ do 
@@ -714,12 +729,11 @@ makeWindow window canvasBgColor view stateRef = do
 
                 modifyIORef stateRef $ \s -> 
                     s { fsRotation = Rotation g'' n' r', fsGraphModified=True }
-                state' <- readIORef stateRef
-                updateActions actionGroup state'
+                updateActions actionGroup stateRef
                 updateCanvas True
 
             textViewSetBuffer textView buf
-            updateActions actionGroup state
+            updateActions actionGroup stateRef
 
     -- canvas for view:
     
@@ -776,10 +790,22 @@ makeWindow window canvasBgColor view stateRef = do
     flip mapM (tail viewActs) $ \x -> radioActionSetGroup x (head viewActs)
     toggleActionSetActive (toToggleAction $ head viewActs) True
 
+    addProp <- actionNew "addprop" (Just "Make _focused node a property")
+                         Nothing (Just stockAdd)
+    actionGroupAddActionWithAccel actionGroup addProp (Just "<Shift>P")
+    actionSetAccelGroup addProp bindings
+    onActionActivate addProp $ do
+        modifyIORef stateRef $ \s -> 
+            let Rotation _ n _ = fsRotation s
+             in s { fsProperty = n, fsPropertyList = fsPropertyList s ++ [n] }
+        updatePropMenu propmenu actionGroup stateRef updateCanvas
+        updateCanvas False
+
     -- user interface widgets:
 
     menubar <- menuBarNew
-    makeMenus actionGroup menubar
+    propmenu <- menuItemNewWithMnemonic "Set _property"
+    makeMenus actionGroup menubar propmenu
 
     toolbar <- toolbarNew
     makeToolbarItems actionGroup toolbar
@@ -813,6 +839,7 @@ makeWindow window canvasBgColor view stateRef = do
     -- start:
 
     readIORef stateRef >>= stateChanged
+    updatePropMenu propmenu actionGroup stateRef updateCanvas
     
     widgetGrabFocus canvas
 
