@@ -66,7 +66,8 @@ import System.Random (randomRIO)
 data ViewSettings = ViewSettings { hiddenProps :: [Node] }
 data FenState = FenState { fsRotation :: Rotation, fsMark :: Mark,
                            fsFilePath :: FilePath, fsGraphModified :: Bool,
-                           fsHasFocus :: Bool, fsView :: Int }
+                           fsHasFocus :: Bool, fsView :: Int,
+                           fsProperty :: Node, fsPropertyList :: [Node] }
                            
 type Views = [(String, View FenState Node)]
 
@@ -133,8 +134,10 @@ vanishingView :: (?vs :: ViewSettings) => Int -> Int -> Color -> Color ->
 vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor 
               textColor blurTextColor
               (FenState {fsRotation=startRotation, fsMark=mark,
-                         fsHasFocus=focus}) =
-    runVanishing depth maxnodes view where
+                         fsHasFocus=focus, fsProperty=property}) =
+    currentProp & runVanishing depth maxnodes view where
+    Rotation graph _ _ = startRotation
+    currentProp = ownSize $ rectBox $ pad 5 $ nodeView graph property
     -- place the center of the view and all subtrees in both directions
     view = do placeNode (if focus then Just (bgColor, focusColor, textColor) 
                              else Just (blurBgColor, blurColor, blurTextColor))
@@ -154,7 +157,7 @@ vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor
                 placeConn rotation' xdir
                 placeConns' rotation' xdir ydir
     -- place one subtree
-    placeConn rotation@(Rotation graph n1 _) dir = withDepthIncreased 1 $
+    placeConn rotation@(Rotation _ n1 _) dir = withDepthIncreased 1 $
         maybeDo (getConn rotation dir) $ \(prop, rotation') -> do
             let Rotation _ n2 _ = rotation'
             scale' <- getScale
@@ -170,7 +173,7 @@ vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor
                     withDepthIncreased 3 $
                         placeConns rotation' (rev dir) False
     -- place one node view
-    placeNode cols (Rotation graph node _) = do
+    placeNode cols (Rotation _ node _) = do
         scale' <- getScale
         let f vob = case bg of Nothing -> vob
                                Just c  -> setFgColor fg $ 
@@ -291,20 +294,20 @@ newURI = do let (base, ref) = ?uriMaker
             return $ URI (base ++ ":" ++ show i)
 
 newNode :: (?vs :: ViewSettings, ?uriMaker :: URIMaker) => 
-           Rotation -> Dir -> IO Rotation
-newNode (Rotation graph node _) dir = do
+           Rotation -> Dir -> Node -> IO Rotation
+newNode (Rotation graph node _) dir prop = do
     node' <- newURI
-    let graph' = insert (triple dir (node, rdfs_seeAlso, node'))
+    let graph' = insert (triple dir (node, prop, node'))
                $ insert (node', rdfs_label, PlainLiteral "") graph
-    return $ fromJust $ getRotation graph' node' rdfs_seeAlso (rev dir) node
+    return $ fromJust $ getRotation graph' node' prop (rev dir) node
     
-connect :: (?vs :: ViewSettings) => Rotation -> Dir -> Mark -> Rotation
-connect r _ mark | Set.null mark = r
-connect (Rotation graph node _) dir mark =
+connect :: (?vs :: ViewSettings) => Rotation -> Dir -> Node -> Mark -> Rotation
+connect r _ _ mark | Set.null mark = r
+connect (Rotation graph node _) dir prop mark =
     let nodes = Set.toList mark
-        graph' = foldr (\n -> insert $ triple dir (node, rdfs_seeAlso, n))
+        graph' = foldr (\n -> insert $ triple dir (node, prop, n))
                        graph nodes
-    in fromJust $ getRotation graph' node rdfs_seeAlso dir (head nodes)
+    in fromJust $ getRotation graph' node prop dir (head nodes)
 
 disconnect :: (?vs :: ViewSettings) => Rotation -> Dir -> Maybe Rotation
 disconnect (Rotation graph node rot) dir = 
@@ -451,7 +454,12 @@ confirmRevert True  action = do
                      _              -> return ()
 
 newState :: Rotation -> FilePath -> Bool -> FenState
-newState rot fp focus = FenState rot Set.empty fp False focus 0
+newState rot fp focus = FenState rot Set.empty fp False focus 0 rdfs_seeAlso ps
+    where Rotation graph _ _ = rot
+          ps = Set.toAscList $ Set.insert rdfs_seeAlso $ Set.fromList $
+                   map predicate $ filter f $ graphToList graph
+          f (_, _, URI _) = True
+          f _             = False
 
 handleEvent :: (?vs :: ViewSettings, ?pw :: Window, ?views :: Views,
                 ?uriMaker :: URIMaker) => Handler Event FenState
@@ -463,6 +471,8 @@ handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
         x | x == "Left"  || x == "j"     -> handleAction "left"
         x | x == "Right" || x == "l"     -> handleAction "right"
         "v" -> handleAction "chgview"
+        "p" -> handleAction "chgprop"
+        "P" -> handleAction "addprop"
         "O" -> handleAction "open"
         "S" -> do (fp',saved) <- liftIO $ saveFile rot fileName False
                   let modified' = fsGraphModified state && not saved
@@ -475,14 +485,14 @@ handleAction :: (?vs :: ViewSettings, ?pw :: Window, ?views :: Views,
 handleAction action = do
     state@(FenState { fsRotation = rot@(Rotation graph node r), fsMark = mark, 
                       fsFilePath = filepath, fsGraphModified = modified,
-                      fsHasFocus=focus
+                      fsHasFocus=focus, fsProperty=prop, fsPropertyList=props
                     }) <- get
     let m f x = maybeDo (f rot x) putRotation
         b f x = maybeDo (f rot x) $ \rot' -> do 
                     putRotation rot'
                     modify $ \s -> s { fsGraphModified = modified }
-        n f x = liftIO (f rot x) >>= putRotation
-        o f x = putState (f rot x mark) Set.empty
+        n f x = liftIO (f rot x prop) >>= putRotation
+        o f x = putState (f rot x prop mark) Set.empty
     case action of
         "up"    -> b rotate (-1)    ; "down"  -> b rotate 1
         "left"  -> b tryMove Neg    ; "right" -> b tryMove Pos
@@ -521,6 +531,12 @@ handleAction action = do
         "chgview" -> do put $ state { fsView = (fsView state + 1) `mod` 
                                                (length ?views) }
                         setInterp True
+        "chgprop" -> do let i = fromJust $ Data.List.findIndex (==prop) props
+                            prop' = props !! ((i+1) `mod` length props)
+                        liftIO $ putStrLn $ "Prop changed to: " ++ show prop'
+                        put $ state { fsProperty = prop' }
+        "addprop" -> do put $ state { fsProperty = node,
+                                      fsPropertyList = props ++ [node] }
         _       -> unhandledEvent
   where putRotation rot = do modify $ \state -> state { fsRotation=rot, 
                                                         fsGraphModified=True }
