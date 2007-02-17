@@ -521,9 +521,6 @@ handleAction action = do
         "chgview" -> do put $ state { fsView = (fsView state + 1) `mod` 
                                                (length ?views) }
                         setInterp True
-        name | Just i <- Data.List.findIndex ((==name) . fst) ?views -> do
-                        put $ state { fsView = i }
-                        setInterp True
         _       -> unhandledEvent
   where putRotation rot = do modify $ \state -> state { fsRotation=rot, 
                                                         fsGraphModified=True }
@@ -547,11 +544,16 @@ makeActions actionGroup accelGroup = do
         actionGroupAddActionWithAccel actionGroup action Nothing
         actionSetAccelGroup action accelGroup
 
-updateActionSensitivity actionGroup modified readable = do
+updateActions actionGroup state = do
+    let readable = fsFilePath state /= ""
+        modified = fsGraphModified state
+        view = fst $ ?views !! (fsView state)
     Just save <- actionGroupGetAction actionGroup "save"
     actionSetSensitive save modified
     Just revert <- actionGroupGetAction actionGroup "revert"
     actionSetSensitive revert (modified && readable)
+    Just changeView <- actionGroupGetAction actionGroup view
+    toggleActionSetActive (castToToggleAction changeView) True
 
 makeBindings actionGroup bindings = do
     let bindingentries =
@@ -580,7 +582,7 @@ makeBindings actionGroup bindings = do
         actionSetAccelGroup action bindings
 
     flip mapM ?views $ \(name, _view) -> do
-        action <- actionNew name (Just name) Nothing Nothing
+        action <- actionNew name name Nothing Nothing
         actionGroupAddAction actionGroup action
 
 makeMenus actionGroup root = mapM_ (createMenu root) menuentries
@@ -605,14 +607,13 @@ makeMenus actionGroup root = mapM_ (createMenu root) menuentries
                 mapM_ (createMenu menu) children
                 menuItemSetSubmenu item menu
                 menuShellAppend parent item
-            else
-                if name == "" then do
-                    item <- separatorMenuItemNew
-                    menuShellAppend parent item
-                else do 
-                    Just action <- actionGroupGetAction actionGroup name
-                    item <- actionCreateMenuItem action
-                    menuShellAppend parent (castToMenuItem item)
+            else if name == "" then do
+                item <- separatorMenuItemNew
+                menuShellAppend parent item
+            else do 
+                Just action <- actionGroupGetAction actionGroup name
+                item <- actionCreateMenuItem action
+                menuShellAppend parent (castToMenuItem item)
 
 makeToolbarItems actionGroup toolbar = do
     forM_ ["new", "open", "", "save"] $ \name -> 
@@ -697,27 +698,25 @@ makeWindow window canvasBgColor view stateRef = do
     textViewSetWrapMode textView WrapWordChar
 
     -- this needs to be called whenever the node or its text changes:
-    let stateChanged (FenState { fsRotation = Rotation g n _r, 
-                                 fsGraphModified=modified,
-                                 fsFilePath=filepath }) = do
+    let stateChanged state@(FenState { fsRotation = Rotation g n _r }) = do
             buf <- textBufferNew Nothing
             textBufferSetText buf (maybe "" id $ getText g n)
             afterBufferChanged buf $ do 
                 start <- textBufferGetStartIter buf
                 end   <- textBufferGetEndIter buf
                 text  <- textBufferGetText buf start end True
-                FenState { fsRotation = (Rotation g' n' r'),
-                           fsFilePath = filepath' } 
+                FenState { fsRotation = (Rotation g' n' r') } 
                     <- readIORef stateRef
                 let g'' = setText g' n text -- buf corresponds to n, not to n'
 
                 modifyIORef stateRef $ \s -> 
                     s { fsRotation = Rotation g'' n' r', fsGraphModified=True }
-                updateActionSensitivity actionGroup True (filepath' /= "")
+                state' <- readIORef stateRef
+                updateActions actionGroup state'
                 updateCanvas True
 
             textViewSetBuffer textView buf
-            updateActionSensitivity actionGroup modified (filepath /= "")
+            updateActions actionGroup state
 
     -- canvas for view:
     
@@ -759,6 +758,20 @@ makeWindow window canvasBgColor view stateRef = do
     forM_ (actions ++ bindingActions) $ \action -> do
         name <- actionGetName action
         onActionActivate action $ canvasAction name >> return ()
+        
+    viewActs <- flip mapM (zip [0..] ?views) $ \(index, (name, _view)) -> do
+        action <- radioActionNew name name Nothing Nothing index
+        actionGroupAddAction actionGroup action
+        onActionActivate action $ do
+            i <- radioActionGetCurrentValue action
+            state <- readIORef stateRef
+            when (i /= fsView state) $ do
+                writeIORef stateRef $ state { fsView = i }
+                updateCanvas True
+        return action
+        
+    flip mapM (tail viewActs) $ \x -> radioActionSetGroup x (head viewActs)
+    toggleActionSetActive (toToggleAction $ head viewActs) True
 
     -- user interface widgets:
 
