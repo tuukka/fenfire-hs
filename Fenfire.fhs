@@ -582,7 +582,9 @@ updatePropMenu propmenu actionGroup stateRef updateCanvas = do
             updateCanvas False
         menuShellAppend menu item
         widgetShow item
-    menuShellAppend menu =<< separatorMenuItemNew
+    sep <- separatorMenuItemNew
+    menuShellAppend menu sep
+    widgetShow sep
     item <- actionCreateMenuItem addProp
     menuShellAppend menu $ castToMenuItem item
     
