@@ -474,7 +474,7 @@ handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
         x | x == "Left"  || x == "j"     -> handleAction "left"
         x | x == "Right" || x == "l"     -> handleAction "right"
         "v" -> handleAction "chgview"
-        "p" -> handleAction "chgprop"
+        "p" -> handleAction "resetprop"
         "O" -> handleAction "open"
         "S" -> do (fp',saved) <- liftIO $ saveFile rot fileName False
                   let modified' = fsGraphModified state && not saved
@@ -487,7 +487,7 @@ handleAction :: (?vs :: ViewSettings, ?pw :: Window, ?views :: Views,
 handleAction action = do
     state@(FenState { fsRotation = rot@(Rotation graph node r), fsMark = mark, 
                       fsFilePath = filepath, fsGraphModified = modified,
-                      fsHasFocus=focus, fsProperty=prop, fsPropertyList=props
+                      fsHasFocus=focus, fsProperty=prop
                     }) <- get
     let m f x = maybeDo (f rot x) putRotation
         b f x = maybeDo (f rot x) $ \rot' -> do 
@@ -533,10 +533,8 @@ handleAction action = do
         "chgview" -> do put $ state { fsView = (fsView state + 1) `mod` 
                                                (length ?views) }
                         setInterp True
-        "chgprop" -> do let i = fromJust $ Data.List.findIndex (==prop) props
-                            prop' = props !! ((i+1) `mod` length props)
-                        liftIO $ putStrLn $ "Prop changed to: " ++ show prop'
-                        put $ state { fsProperty = prop' }
+        "resetprop" -> when (fsProperty state /= rdfs_seeAlso) $
+                           put $ state { fsProperty = rdfs_seeAlso }
         _       -> unhandledEvent
   where putRotation rot = do modify $ \state -> state { fsRotation=rot, 
                                                         fsGraphModified=True }
