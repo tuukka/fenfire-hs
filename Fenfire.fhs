@@ -293,7 +293,7 @@ newURIMaker = do rand <- sequence [randomRIO (0,63) | _ <- [1..27::Int]]
 newURI :: (?uriMaker :: URIMaker) => IO Node
 newURI = do let (base, ref) = ?uriMaker
             i <- readIORef ref; writeIORef ref (i+1)
-            return $ URI (base ++ ":" ++ show i)
+            return $ URI (base ++ ":_" ++ show i)
 
 newNode :: (?vs :: ViewSettings, ?uriMaker :: URIMaker) => 
            Rotation -> Dir -> Node -> IO Rotation
