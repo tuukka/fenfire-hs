@@ -37,7 +37,7 @@ import Data.List (intersperse)
 import qualified Data.List
 import Data.Set (Set)
 import Data.IORef
-import Data.Maybe (fromJust, isJust, isNothing, catMaybes)
+import Data.Maybe (fromMaybe, fromJust, isJust, isNothing, catMaybes)
 import Data.Monoid(Monoid(mempty, mconcat), Dual(Dual), getDual)
 
 import Control.Applicative
@@ -572,11 +572,13 @@ updateActions actionGroup stateRef = do
     
 updatePropMenu propmenu actionGroup stateRef updateCanvas = do
     state <- readIORef stateRef
+    let Rotation graph _ _ = fsRotation state
     Just addProp <- actionGroupGetAction actionGroup "addprop"
                 
     menu <- menuNew
     flip mapM (fsPropertyList state) $ \prop -> do
-        item <- menuItemNewWithLabel (show prop)
+        let text = getText graph prop
+        item <- menuItemNewWithLabel $ fromMaybe (show prop) text
         onActivateLeaf item $ do 
             modifyIORef stateRef $ \state' -> state' {fsProperty=prop}
             updateCanvas False
