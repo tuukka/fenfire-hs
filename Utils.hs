@@ -48,6 +48,14 @@ avg :: Fractional a => Op a
 avg x y = (x+y)/2
 
 
+infixl 9 !?
+
+(!?) :: [a] -> Int -> Maybe a
+l !? i | i < 0         = Nothing
+       | i >= length l = Nothing
+       | otherwise     = Just (l !! i)
+
+
 maybeReturn :: MonadPlus m => Maybe a -> m a
 maybeReturn = maybe mzero return
 

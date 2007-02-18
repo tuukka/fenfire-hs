@@ -36,12 +36,12 @@ instance Show Node where
 
 -- This is unfortunately something of a pun because I can't find a good
 -- name for it: A 'coin' is something that has two sides...
-class Coin c a | c -> a where
+class CoinClass c a | c -> a where
     getSide :: Dir -> c -> a
     
-type CoinPair a = (a,a)
+type Coin a = (a,a)
 
-instance Coin (CoinPair a) a where
+instance CoinClass (Coin a) a where
     getSide Neg = fst
     getSide Pos = snd
 
@@ -50,12 +50,48 @@ type Triple     = (Node, Node, Node)
 type Namespaces = Map String String
 data Graph      = Graph {
     graphNamespaces :: Namespaces,
-    graphSides :: CoinPair (Map Node (Map Node (Set Node))),
+    graphSides :: Coin (Map Node (Map Node (Set Node))),
     graphRealTriples :: Set Triple } deriving (Show, Eq)
     
-instance Coin Graph (Map Node (Map Node (Set Node))) where
-    getSide dir graph = getSide dir $ graphSides graph
+type Edge       = (Node, Node, Dir, Node)
+type Path       = [Edge]
 
+instance CoinClass Graph (Map Node (Map Node (Set Node))) where
+    getSide dir graph = getSide dir $ graphSides graph
+    
+instance CoinClass Triple Node where
+    getSide Neg = subject
+    getSide Pos = object
+    
+instance CoinClass Edge Node where
+    getSide Neg (n,_,_,_)  = n
+    getSide Pos (_,_,_,n') = n'
+    
+instance CoinClass Path Node where
+    getSide Neg path = getSide Neg (head path)
+    getSide Pos path = getSide Pos (last path)
+
+class TripleClass t where
+    toTriple :: t -> Triple
+    
+instance TripleClass Triple where
+    toTriple = id
+    
+instance TripleClass Edge where
+    toTriple (n,p,d,n') = triple d (n,p,n')
+    
+class Reversible r where
+    rev :: Endo r
+    
+instance Reversible Dir where
+    rev Neg = Pos; rev Pos = Neg
+    
+instance Reversible Edge where
+    rev (node, prop, dir, node') = (node', prop, rev dir, node)
+    
+instance Reversible Path where
+    rev edges = reverse (map rev edges)
+    
 instance Hashable Node where
     hash (URI s) = hash s
     hash (PlainLiteral s) = hash s
@@ -78,14 +114,14 @@ showNode ns (URI uri) = f (Map.toAscList ns) where
     f [] = "<" ++ uri ++ ">"
 showNode _  (PlainLiteral lit) = show lit
 
-subject :: Triple -> Node
-subject (s,_,_) = s
+subject :: TripleClass t => t -> Node
+subject t = case toTriple t of (s,_,_) -> s
 
-predicate :: Triple -> Node
-predicate (_,p,_) = p
+predicate :: TripleClass t => t -> Node
+predicate t = case toTriple t of (_,p,_) -> p
 
-object :: Triple -> Node
-object (_,_,o) = o
+object :: TripleClass t => t -> Node
+object t = case toTriple t of (_,_,o) -> o
 
 hasConn :: Graph -> Node -> Node -> Dir -> Bool
 hasConn g node prop dir = isJust $ do m <- Map.lookup node (getSide dir g)
@@ -149,10 +185,6 @@ triple Neg (o,p,s) = (s,p,o)
 fromNode :: Node -> String
 fromNode (URI uri)        = uri
 fromNode (PlainLiteral s) = s
-
-rev :: Dir -> Dir
-rev Pos = Neg
-rev Neg = Pos
 
 mul :: Num a => Dir -> a -> a
 mul Pos = id
