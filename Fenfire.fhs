@@ -116,7 +116,7 @@ getText g n = fmap f $ getOne g n rdfs_label Pos where
     f (PlainLiteral s) = s; f _ = error "getText argh"
     
 getTextOrURI :: Graph -> Node -> String
-getTextOrURI g n = fromMaybe (showNode (getNamespaces g) n) (getText g n)
+getTextOrURI g n = fromMaybe (showNode (graphNamespaces g) n) (getText g n)
                     
 setText :: Graph -> Node -> String -> Graph
 setText g n t = update (n, rdfs_label, PlainLiteral t) g
@@ -378,7 +378,7 @@ saveGraph graph fileName = do
         f (URI s) = Raptor.Uri s
         f (PlainLiteral s) = Raptor.Literal s
         triples = graphToList graph
-        namespaces = Map.toAscList $ getNamespaces graph
+        namespaces = Map.toAscList $ graphNamespaces graph
     Raptor.triplesToFilename (map convert triples) namespaces fileName
     putStrLn $ "Saved: " ++ fileName
 

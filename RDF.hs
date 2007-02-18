@@ -32,11 +32,29 @@ data Dir  = Pos | Neg                           deriving (Eq, Ord, Show)
 
 instance Show Node where
     show = showNode defaultNamespaces
+    
 
-type Triple = (Node, Node, Node)
-type Side   = Map Node (Map Node (Set Node))
+-- This is unfortunately something of a pun because I can't find a good
+-- name for it: A 'coin' is something that has two sides...
+class Coin c a | c -> a where
+    getSide :: Dir -> c -> a
+    
+type CoinPair a = (a,a)
+
+instance Coin (CoinPair a) a where
+    getSide Neg = fst
+    getSide Pos = snd
+
+
+type Triple     = (Node, Node, Node)
 type Namespaces = Map String String
-data Graph  = Graph Namespaces Side Side (Set Triple) deriving (Show, Eq)
+data Graph      = Graph {
+    graphNamespaces :: Namespaces,
+    graphSides :: CoinPair (Map Node (Map Node (Set Node))),
+    graphRealTriples :: Set Triple } deriving (Show, Eq)
+    
+instance Coin Graph (Map Node (Map Node (Set Node))) where
+    getSide dir graph = getSide dir $ graphSides graph
 
 instance Hashable Node where
     hash (URI s) = hash s
@@ -69,12 +87,8 @@ predicate (_,p,_) = p
 object :: Triple -> Node
 object (_,_,o) = o
 
-graphSide :: Dir -> Graph -> Side
-graphSide Neg (Graph _ s _ _) = s
-graphSide Pos (Graph _ _ s _) = s
-
 hasConn :: Graph -> Node -> Node -> Dir -> Bool
-hasConn g node prop dir = isJust $ do m <- Map.lookup node (graphSide dir g)
+hasConn g node prop dir = isJust $ do m <- Map.lookup node (getSide dir g)
                                       Map.lookup prop m
 
 getOne :: Graph -> Node -> Node -> Dir -> Maybe Node
@@ -86,35 +100,33 @@ getAll g node prop dir =
     Map.findWithDefault Set.empty prop $ getConns g node dir
 
 getConns :: Graph -> Node -> Dir -> Map Node (Set Node)
-getConns g node dir = Map.findWithDefault Map.empty node $ graphSide dir g
-
-getNamespaces :: Graph -> Namespaces
-getNamespaces (Graph ns _ _ _) = ns
+getConns g node dir = Map.findWithDefault Map.empty node $ getSide dir g
 
 emptyGraph :: Graph
-emptyGraph = Graph defaultNamespaces (Map.empty) (Map.empty) Set.empty
+emptyGraph = Graph defaultNamespaces (Map.empty, Map.empty) Set.empty
 
 listToGraph :: [Triple] -> Graph
 listToGraph = foldr insert emptyGraph
 
 graphToList :: Graph -> [Triple]
-graphToList (Graph _ _ _ triples) = Set.toAscList triples
+graphToList = Set.toAscList . graphRealTriples
 
 mergeGraphs :: Op Graph
 mergeGraphs real virtual = foldr insertVirtual real (graphToList virtual)
 
 insert :: Triple -> Endo Graph
-insert t (Graph ns neg pos triples) =
-    insertVirtual t (Graph ns neg pos $ Set.insert t triples)
+insert t graph@(Graph { graphRealTriples=ts }) =
+    insertVirtual t $ graph { graphRealTriples = Set.insert t ts }
 
 insertVirtual :: Triple -> Endo Graph
-insertVirtual (s,p,o) (Graph ns neg pos triples) =
-    Graph ns (ins o p s neg) (ins s p o pos) triples where
+insertVirtual (s,p,o) graph@(Graph { graphSides = (neg, pos) }) =
+    graph { graphSides = (ins o p s neg, ins s p o pos) } where
     ins a b c = Map.alter (Just . Map.alter (Just . Set.insert c . fromMaybe Set.empty) b . fromMaybe Map.empty) a   -- Gack!!! Need to make more readable
     
 delete :: Triple -> Endo Graph
-delete (s,p,o) (Graph ns neg pos triples) = 
-    Graph ns (del o p s neg) (del s p o pos) $ Set.delete (s,p,o) triples where
+delete (s,p,o) (Graph ns (neg, pos) triples) = 
+    Graph ns (del o p s neg, del s p o pos) $ 
+        Set.delete (s,p,o) triples where
     del a b c = Map.adjust (Map.adjust (Set.delete c) b) a
     
 deleteAll :: Node -> Node -> Endo Graph
@@ -127,8 +139,8 @@ update :: Triple -> Endo Graph
 update (s,p,o) g = insert (s,p,o) $ deleteAll s p g
 
 addNamespace :: String -> String -> Endo Graph
-addNamespace prefix uri (Graph ns neg pos ts) =
-    Graph (Map.insert prefix uri ns) neg pos ts
+addNamespace prefix uri g =
+    g { graphNamespaces = Map.insert prefix uri $ graphNamespaces g }
     
 triple :: Dir -> (Node,Node,Node) -> Triple
 triple Pos (s,p,o) = (s,p,o)
