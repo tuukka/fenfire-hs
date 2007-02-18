@@ -577,9 +577,11 @@ updatePropMenu propmenu actionGroup stateRef updateCanvas = do
     menu <- menuNew
     flip mapM (fsPropertyList state) $ \prop -> do
         item <- menuItemNewWithLabel (show prop)
-        onActivateLeaf item $ do writeIORef stateRef $ state {fsProperty=prop}
-                                 updateCanvas False
+        onActivateLeaf item $ do 
+            modifyIORef stateRef $ \state' -> state' {fsProperty=prop}
+            updateCanvas False
         menuShellAppend menu item
+        widgetShow item
     menuShellAppend menu =<< separatorMenuItemNew
     item <- actionCreateMenuItem addProp
     menuShellAppend menu $ castToMenuItem item
