@@ -31,12 +31,12 @@ data Node = URI String | PlainLiteral String    deriving (Eq, Ord)
 data Dir  = Pos | Neg                           deriving (Eq, Ord, Show)
 
 instance Show Node where
-    show (URI uri)        = showURI [("rdfs", rdfs)] uri
-    show (PlainLiteral s) = "\"" ++ s ++ "\""
+    show = showNode defaultNamespaces
 
 type Triple = (Node, Node, Node)
 type Side   = Map Node (Map Node (Set Node))
-data Graph  = Graph Side Side (Set Triple) deriving (Show, Eq)
+type Namespaces = Map String String
+data Graph  = Graph Namespaces Side Side (Set Triple) deriving (Show, Eq)
 
 instance Hashable Node where
     hash (URI s) = hash s
@@ -50,10 +50,15 @@ rdfs         =     "http://www.w3.org/2000/01/rdf-schema#"
 rdfs_label   = URI "http://www.w3.org/2000/01/rdf-schema#label"
 rdfs_seeAlso = URI "http://www.w3.org/2000/01/rdf-schema#seeAlso"
 
-showURI ((short, long):xs) uri | take (length long) uri == long =
-                                     short ++ ":" ++ drop (length long) uri
-                               | otherwise = showURI xs uri
-showURI [] uri = "<" ++ uri ++ ">"
+defaultNamespaces = Map.fromList [("rdfs", rdfs)]
+
+showNode :: Namespaces -> Node -> String
+showNode ns (URI uri) = f (Map.toAscList ns) where
+    f ((short, long):xs) | take (length long) uri == long =
+                               short ++ ":" ++ drop (length long) uri
+                         | otherwise = f xs
+    f [] = "<" ++ uri ++ ">"
+showNode _  (PlainLiteral lit) = show lit
 
 subject :: Triple -> Node
 subject (s,_,_) = s
@@ -65,8 +70,8 @@ object :: Triple -> Node
 object (_,_,o) = o
 
 graphSide :: Dir -> Graph -> Side
-graphSide Neg (Graph s _ _) = s
-graphSide Pos (Graph _ s _) = s
+graphSide Neg (Graph _ s _ _) = s
+graphSide Pos (Graph _ _ s _) = s
 
 hasConn :: Graph -> Node -> Node -> Dir -> Bool
 hasConn g node prop dir = isJust $ do m <- Map.lookup node (graphSide dir g)
@@ -83,40 +88,47 @@ getAll g node prop dir =
 getConns :: Graph -> Node -> Dir -> Map Node (Set Node)
 getConns g node dir = Map.findWithDefault Map.empty node $ graphSide dir g
 
+getNamespaces :: Graph -> Namespaces
+getNamespaces (Graph ns _ _ _) = ns
+
 emptyGraph :: Graph
-emptyGraph = Graph (Map.empty) (Map.empty) Set.empty
+emptyGraph = Graph defaultNamespaces (Map.empty) (Map.empty) Set.empty
 
 listToGraph :: [Triple] -> Graph
 listToGraph = foldr insert emptyGraph
 
 graphToList :: Graph -> [Triple]
-graphToList (Graph _ _ triples) = Set.toAscList triples
+graphToList (Graph _ _ _ triples) = Set.toAscList triples
 
 mergeGraphs :: Op Graph
-mergeGraphs g1 g2 = foldr insertVirtual g1 (graphToList g2)
+mergeGraphs real virtual = foldr insertVirtual real (graphToList virtual)
 
-insert :: Triple -> Graph -> Graph
-insert t (Graph neg pos triples) =
-    insertVirtual t (Graph neg pos $ Set.insert t triples)
+insert :: Triple -> Endo Graph
+insert t (Graph ns neg pos triples) =
+    insertVirtual t (Graph ns neg pos $ Set.insert t triples)
 
-insertVirtual :: Triple -> Graph -> Graph
-insertVirtual (s,p,o) (Graph neg pos triples) =
-    Graph (ins o p s neg) (ins s p o pos) triples where
+insertVirtual :: Triple -> Endo Graph
+insertVirtual (s,p,o) (Graph ns neg pos triples) =
+    Graph ns (ins o p s neg) (ins s p o pos) triples where
     ins a b c = Map.alter (Just . Map.alter (Just . Set.insert c . fromMaybe Set.empty) b . fromMaybe Map.empty) a   -- Gack!!! Need to make more readable
     
-delete :: Triple -> Graph -> Graph
-delete (s,p,o) (Graph neg pos triples) = 
-    Graph (del o p s neg) (del s p o pos) $ Set.delete (s,p,o) triples where
+delete :: Triple -> Endo Graph
+delete (s,p,o) (Graph ns neg pos triples) = 
+    Graph ns (del o p s neg) (del s p o pos) $ Set.delete (s,p,o) triples where
     del a b c = Map.adjust (Map.adjust (Set.delete c) b) a
     
-deleteAll :: Node -> Node -> Graph -> Graph
+deleteAll :: Node -> Node -> Endo Graph
 deleteAll s p g = dels s p os g where
     dels s' p' (o':os') g' = dels s' p' os' (delete (s',p',o') g')
     dels _  _  []       g' = g'
     os = Set.toList $ getAll g s p Pos
     
-update :: Triple -> Graph -> Graph
+update :: Triple -> Endo Graph
 update (s,p,o) g = insert (s,p,o) $ deleteAll s p g
+
+addNamespace :: String -> String -> Endo Graph
+addNamespace prefix uri (Graph ns neg pos ts) =
+    Graph (Map.insert prefix uri ns) neg pos ts
     
 triple :: Dir -> (Node,Node,Node) -> Triple
 triple Pos (s,p,o) = (s,p,o)

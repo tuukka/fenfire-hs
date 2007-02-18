@@ -59,6 +59,11 @@ cIntConv  = fromIntegral
 unStatement :: Statement -> Ptr Statement
 unStatement (Statement ptr) = ptr
 
+{#pointer *raptor_namespace as Namespace newtype#}
+
+unNamespace :: Namespace -> Ptr Namespace
+unNamespace (Namespace ptr) = ptr
+
 {#pointer *parser as Parser newtype#}
 
 {#pointer *serializer as Serializer newtype#}
@@ -96,6 +101,15 @@ getPredicate (Statement s) = mkIdentifier ({#get statement->predicate#} s)
 getObject :: Statement -> IO Identifier
 getObject (Statement s) = mkIdentifier ({#get statement->object#} s)
                                        ({#get statement->object_type#} s)
+                                       
+getNamespace :: Namespace -> IO (String, String)
+getNamespace ns = do
+    prefixC <- {#call raptor_namespace_get_prefix#} ns
+    prefixS <- peekCString (castPtr prefixC)
+    uri <- {#call raptor_namespace_get_uri#} ns
+    uriC <- {#call uri_as_string#} (castPtr uri)
+    uriS <- peekCString (castPtr uriC)
+    return (prefixS, uriS)
 
 withURI :: String -> (Ptr URI -> IO a) -> IO a
 withURI string = bracket (withCString string $ {# call new_uri #} . castPtr)
@@ -126,13 +140,18 @@ withPredicate = withIdentifier {# set statement->predicate #}
 withObject = withIdentifier {# set statement->object #}
                             {# set statement->object_type #}
 
-type Handler a = Ptr a -> Statement -> IO ()
+type StatementHandler a = Ptr a -> Statement -> IO ()
 foreign import ccall "wrapper"
-   mkHandler :: (Handler a) -> IO (FunPtr (Handler a))
+   mkHandler :: (StatementHandler a) -> IO (FunPtr (StatementHandler a))
+
+type NamespaceHandler a = Ptr a -> Namespace -> IO ()
+foreign import ccall "wrapper"
+   mkNamespaceHandler :: (NamespaceHandler a) -> IO (FunPtr (NamespaceHandler a))
 
 foreign import ccall "raptor.h raptor_init" initRaptor :: IO ()
 foreign import ccall "raptor.h raptor_new_parser" new_parser :: Ptr CChar -> IO (Ptr Parser)
-foreign import ccall "raptor.h raptor_set_statement_handler" set_statement_handler :: Ptr Parser -> Ptr a -> FunPtr (Handler a) -> IO () 
+foreign import ccall "raptor.h raptor_set_statement_handler" set_statement_handler :: Ptr Parser -> Ptr a -> FunPtr (StatementHandler a) -> IO () 
+foreign import ccall "raptor.h raptor_set_namespace_handler" set_namespace_handler :: Ptr Parser -> Ptr a -> FunPtr (NamespaceHandler a) -> IO () 
 foreign import ccall "raptor.h raptor_uri_filename_to_uri_string" uri_filename_to_uri_string :: CString -> IO CString
 foreign import ccall "raptor.h raptor_new_uri" new_uri :: Ptr CChar -> IO (Ptr URI)
 foreign import ccall "raptor.h raptor_uri_copy" uri_copy :: Ptr URI -> IO (Ptr URI)
@@ -149,14 +168,20 @@ foreign import ccall "string.h memset" c_memset :: Ptr a -> CInt -> CSize -> IO 
 
 -- | Serialize the given triples into a file with the given filename
 --
-triplesToFilename :: [Triple] -> String -> IO ()
-triplesToFilename triples filename = do 
+triplesToFilename :: [Triple] -> [(String, String)] -> String -> IO ()
+triplesToFilename triples namespaces filename = do 
   initRaptor
 
-  serializer <- withCString "ntriples" {# call new_serializer #}
+  serializer <- withCString "turtle" {# call new_serializer #}
   when (unSerializer serializer == nullPtr) $ fail "serializer is null"
   
   withCString filename $ {# call serialize_start_to_filename #} serializer
+  
+  flip mapM_ namespaces $ \(prefixS, uriS) -> do
+      withCString prefixS $ \prefixC -> withCString uriS $ \uriC -> do
+          uri <- new_uri uriC
+          {# call raptor_serialize_set_namespace #} serializer uri $ castPtr prefixC
+          {# call free_uri #} uri
 
   allocaBytes {# sizeof statement #} $ \ptr -> do
     let t = Statement ptr
@@ -171,7 +196,7 @@ triplesToFilename triples filename = do
 
 -- | Parse a file with the given filename into triples
 --
-filenameToTriples :: String -> Maybe String -> IO [Triple]
+filenameToTriples :: String -> Maybe String -> IO ([Triple], [(String, String)])
 filenameToTriples filename baseURI = do
   let suffix = reverse $ takeWhile (/= '.') $ reverse filename
       parsertype = case suffix of "turtle" -> "turtle"
@@ -193,9 +218,9 @@ filenameToTriples filename baseURI = do
   {# call free_memory #} (castPtr uri_str)
   
   {# call finish #}
-  readIORef result
+  return result
   
-uriToTriples :: String -> Maybe String -> IO [Triple]
+uriToTriples :: String -> Maybe String -> IO ([Triple], [(String, String)])
 uriToTriples uri baseURI = do
   initRaptor
 
@@ -208,12 +233,13 @@ uriToTriples uri baseURI = do
   {# call free_uri #} base_uri
   
   {# call finish #}
-  readIORef result
+  return result
 
 parse :: (Ptr Parser -> Ptr URI -> Ptr URI -> IO ()) -> String ->
-         Ptr URI -> Ptr URI -> IO (IORef [Triple])
+         Ptr URI -> Ptr URI -> IO ([Triple], [(String, String)])
 parse fn parsertype uri base_uri = do
-  result <- newIORef []
+  triples <- newIORef []
+  namespaces <- newIORef []
 
   rdf_parser <- withCString parsertype new_parser 
   when (rdf_parser == nullPtr) $ fail "parser is null"
@@ -221,20 +247,26 @@ parse fn parsertype uri base_uri = do
     s <- getSubject triple
     p <- getPredicate triple
     o <- getObject triple
-    modifyIORef result ((s,p,o):)
+    modifyIORef triples ((s,p,o):)
+
+  nsHandler <- mkNamespaceHandler $ \_user_data ns -> do
+    (prefix, uri') <- getNamespace ns
+    modifyIORef namespaces ((prefix, uri'):)
 
   set_statement_handler rdf_parser nullPtr handler
+  set_namespace_handler rdf_parser nullPtr nsHandler
   fn rdf_parser uri base_uri
 
   {# call free_parser #} (Parser rdf_parser)
   freeHaskellFunPtr handler
   
-  return result
+  t <- readIORef triples; n <- readIORef namespaces
+  return (t, n)
 
 -- The following print_triple and filenameToStdout are an incomplete and 
 -- improved translation of raptor examples/rdfprint.c:
 
-print_triple :: Ptr CFile -> Handler a
+print_triple :: Ptr CFile -> StatementHandler a
 print_triple outfile _user_data s = do print_statement_as_ntriples s outfile
                                        fputc (castCharToCChar '\n') outfile
 

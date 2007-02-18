@@ -39,8 +39,8 @@ run-darcs2rdf: darcs2rdf
 run-%: %
 	./dist/build/$</$< $(ARGS)
 
-run-project: fenfire ../fenfire-project/project.nt darcs.nt
-	./dist/build/fenfire/fenfire ../fenfire-project/project.nt darcs.nt $(ARGS)
+run-project: fenfire ../fenfire-project/project.turtle darcs.nt
+	./dist/build/fenfire/fenfire ../fenfire-project/project.turtle darcs.nt $(ARGS)
 
 darcs.nt: darcs2rdf _darcs/inventory
 	darcs changes --xml | ./dist/build/darcs2rdf/darcs2rdf "http://antti-juhani.kaijanaho.fi/darcs/fenfire-hs/" > darcs.nt

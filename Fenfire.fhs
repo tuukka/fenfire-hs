@@ -114,17 +114,19 @@ move rot dir = fmap snd (getConn rot dir)
 getText :: Graph -> Node -> Maybe String
 getText g n = fmap f $ getOne g n rdfs_label Pos where 
     f (PlainLiteral s) = s; f _ = error "getText argh"
+    
+getTextOrURI :: Graph -> Node -> String
+getTextOrURI g n = fromMaybe (showNode (getNamespaces g) n) (getText g n)
                     
 setText :: Graph -> Node -> String -> Graph
 setText g n t = update (n, rdfs_label, PlainLiteral t) g
 
 nodeView :: Graph -> Node -> Vob Node
-nodeView g n = useFgColor $ multiline False 20 s
-    where s = maybe (show n) id (getText g n)
+nodeView g n = useFgColor $ multiline False 20 $ getTextOrURI g n
     
 propView :: Graph -> Node -> Vob Node
 propView g n = (useFadeColor $ fill extents)
-             & (pad 5 $ useFgColor $ label $ maybe (show n) id (getText g n))
+             & (pad 5 $ useFgColor $ label $ getTextOrURI g n)
 
 
 
@@ -264,7 +266,7 @@ presentationView state = cursor & vob where
     selected = fmap (\(_,Rotation _ n _) -> n) $ 
                    getConn (fsRotation state) Pos
     f sc n = keyVob n $ useFgColor $ pad 5 $ scaleVob sc $
-                 multiline True 70 $ maybe (show n) id (getText graph n)
+                 multiline True 70 $ getTextOrURI graph n
     cursor = flip (maybe mempty) selected $ \n -> 
                  showAtKey n $ keyVob (PlainLiteral "CURSOR") $ rectBox mempty
     space = changeSize (const (0, 20)) mempty
@@ -363,11 +365,11 @@ loadGraph fileName = do
         f (Raptor.Uri s) = URI s
         f (Raptor.Literal s) = PlainLiteral s
         f (Raptor.Blank s) = URI $ "blank:" ++ s
-    raptorTriples <- if Data.List.isPrefixOf "http:" fileName
+    (raptorTriples, namespaces) <- if Data.List.isPrefixOf "http:" fileName
         then Raptor.uriToTriples fileName Nothing
         else Raptor.filenameToTriples fileName (Just "fakebase:/")
     triples <- return $ map convert raptorTriples
-    return $ listToGraph triples
+    return $ foldr (uncurry addNamespace) (listToGraph triples) namespaces
 
 saveGraph :: Graph -> FilePath -> IO ()
 saveGraph graph fileName = do
@@ -376,7 +378,8 @@ saveGraph graph fileName = do
         f (URI s) = Raptor.Uri s
         f (PlainLiteral s) = Raptor.Literal s
         triples = graphToList graph
-    Raptor.triplesToFilename (map convert triples) fileName
+        namespaces = Map.toAscList $ getNamespaces graph
+    Raptor.triplesToFilename (map convert triples) namespaces fileName
     putStrLn $ "Saved: " ++ fileName
 
 openFile :: (?vs :: ViewSettings) => Rotation -> FilePath -> 
@@ -506,14 +509,14 @@ handleAction action = do
         "open"  -> confirmSave modified $ do 
             (rot',fp') <- liftIO $ openFile rot filepath
             put $ newState rot' fp' focus
-        "loadURI" -> case node of URI uri -> do g <- liftIO $ loadGraph uri
-                                                let ts = graphToList g
-                                                    g' = foldr insertVirtual
-                                                             graph ts
-                                                    r' = Rotation g' node r
-                                                    s' = state {fsRotation=r'}
-                                                put s'
-                                  _       -> unhandledEvent
+        "loadURI" -> case node of 
+                         URI uri -> do 
+                             g <- liftIO $ loadGraph uri
+                             let g' = mergeGraphs graph g
+                                 r' = Rotation g' node r
+                                 s' = state {fsRotation=r'}
+                             put s'
+                         _ -> unhandledEvent
         "revert" | filepath /= "" -> confirmRevert modified $ do
             g' <- liftIO $ loadGraph filepath
             put $ newState (findStartRotation g') filepath focus
@@ -577,8 +580,7 @@ updatePropMenu propmenu actionGroup stateRef updateCanvas = do
                 
     menu <- menuNew
     flip mapM (fsPropertyList state) $ \prop -> do
-        let text = getText graph prop
-        item <- menuItemNewWithLabel $ fromMaybe (show prop) text
+        item <- menuItemNewWithLabel $ getTextOrURI graph prop
         onActivateLeaf item $ do 
             modifyIORef stateRef $ \state' -> state' {fsProperty=prop}
             updateCanvas False
