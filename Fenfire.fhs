@@ -422,8 +422,8 @@ saveFile (Rotation graph _ _) fileName0 confirmSame = do
         _              -> return (fileName0, False)
         
 checkSuffix :: FilePath -> FilePath
-checkSuffix s | Data.List.isSuffixOf ".nt" s = s
-              | otherwise                    = s ++ ".nt"
+checkSuffix s | Data.List.isSuffixOf ".turtle" s = s
+              | otherwise                        = s ++ ".turtle"
 
 confirmSave :: (?vs :: ViewSettings, ?pw :: Window,
                 ?views :: Views, ?uriMaker :: URIMaker) => 
