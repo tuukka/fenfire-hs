@@ -39,6 +39,9 @@ instance Show Node where
 class CoinClass c a | c -> a where
     getSide :: Dir -> c -> a
     
+    getNeg :: c -> a; getNeg = getSide Neg
+    getPos :: c -> a; getPos = getSide Pos
+    
 type Coin a = (a,a)
 
 instance CoinClass (Coin a) a where
@@ -53,8 +56,14 @@ data Graph      = Graph {
     graphSides :: Coin (Map Node (Map Node (Set Node))),
     graphRealTriples :: Set Triple } deriving (Show, Eq)
     
-type Edge       = (Node, Node, Dir, Node)
-type Path       = [Edge]
+data Conn = Conn { connProp :: Node, connDir :: Dir, connTarget :: Node }
+            deriving (Eq, Ord, Show)
+data Path = Path Node [Conn] deriving (Eq, Ord, Show)
+
+pathToTriples :: Path -> [Triple]
+pathToTriples (Path _ [])                 = []
+pathToTriples (Path n (Conn p d n' : cs)) = 
+    triple d (n,p,n') : pathToTriples (Path n' cs)
 
 instance CoinClass Graph (Map Node (Map Node (Set Node))) where
     getSide dir graph = getSide dir $ graphSides graph
@@ -63,34 +72,20 @@ instance CoinClass Triple Node where
     getSide Neg = subject
     getSide Pos = object
     
-instance CoinClass Edge Node where
-    getSide Neg (n,_,_,_)  = n
-    getSide Pos (_,_,_,n') = n'
-    
 instance CoinClass Path Node where
-    getSide Neg path = getSide Neg (head path)
-    getSide Pos path = getSide Pos (last path)
+    getSide Neg (Path node _)     = node
+    getSide Pos (Path node [])    = node
+    getSide Pos (Path _    conns) = connTarget (last conns)
 
-class TripleClass t where
-    toTriple :: t -> Triple
-    
-instance TripleClass Triple where
-    toTriple = id
-    
-instance TripleClass Edge where
-    toTriple (n,p,d,n') = triple d (n,p,n')
-    
 class Reversible r where
     rev :: Endo r
     
 instance Reversible Dir where
     rev Neg = Pos; rev Pos = Neg
     
-instance Reversible Edge where
-    rev (node, prop, dir, node') = (node', prop, rev dir, node)
-    
 instance Reversible Path where
-    rev edges = reverse (map rev edges)
+    rev (Path node conns) = foldr f (Path node []) (reverse conns) where
+        f (Conn p d n') (Path n cs) = Path n' (Conn p (rev d) n : cs)
     
 instance Hashable Node where
     hash (URI s) = hash s
@@ -114,14 +109,14 @@ showNode ns (URI uri) = f (Map.toAscList ns) where
     f [] = "<" ++ uri ++ ">"
 showNode _  (PlainLiteral lit) = show lit
 
-subject :: TripleClass t => t -> Node
-subject t = case toTriple t of (s,_,_) -> s
+subject :: Triple -> Node
+subject (s,_,_) = s
 
-predicate :: TripleClass t => t -> Node
-predicate t = case toTriple t of (_,p,_) -> p
+predicate :: Triple -> Node
+predicate (_,p,_) = p
 
-object :: TripleClass t => t -> Node
-object t = case toTriple t of (_,_,o) -> o
+object :: Triple -> Node
+object (_,_,o) = o
 
 hasConn :: Graph -> Node -> Node -> Dir -> Bool
 hasConn g node prop dir = isJust $ do m <- Map.lookup node (getSide dir g)

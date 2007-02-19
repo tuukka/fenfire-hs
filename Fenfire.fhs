@@ -20,7 +20,7 @@ module Fenfire where
 -- MA  02111-1307  USA
 
 import qualified Cache
-import Cairo hiding (rotate)
+import Cairo hiding (rotate, Path)
 import Vobs
 import Utils
 import RDF
@@ -41,7 +41,7 @@ import Data.Maybe (fromMaybe, fromJust, isJust, isNothing, catMaybes)
 import Data.Monoid(Monoid(mempty, mconcat), Dual(Dual), getDual)
 
 import Control.Applicative
-import Control.Monad (when, guard, msum, liftM, join)
+import Control.Monad (when, guard, mplus, msum, liftM, join)
 import Control.Monad.Reader (ReaderT, runReaderT, local, ask, asks)
 import Control.Monad.State (StateT, get, gets, modify, put, execStateT)
 import Control.Monad.Trans (lift, liftIO)
@@ -76,25 +76,28 @@ type Views = [(String, View FenState Node)]
 
 data Rotation = Rotation Node Int         deriving (Eq, Show)
 
-fromEdge :: (?vs :: ViewSettings, ?graph :: Graph) => Edge -> Maybe Rotation
-fromEdge (node, prop, dir, node') = let c = conns node dir in do
-    i <- Data.List.elemIndex (prop, node') c
+fromPath :: (?vs :: ViewSettings, ?graph :: Graph) => Path -> Maybe Rotation
+fromPath path@(Path node (Conn _ dir _ : _)) = do
+    let c = conns node dir
+    i <- Data.List.elemIndex path c
     return $ Rotation node (i - min (length c `div` 2) (maxCenter ?vs))
+fromPath _ = error "Fenfire.fromPath: empty path"
                      
-toEdge :: (?vs :: ViewSettings, ?graph :: Graph) => Rotation -> Dir -> Maybe Edge
-toEdge (Rotation node r) dir = let c = conns node dir in do
-    (prop, node') <- c !? (min (length c `div` 2) (maxCenter ?vs) + r)
-    return (node, prop, dir, node')
+toPath :: (?vs :: ViewSettings, ?graph :: Graph) =>
+          Rotation -> Dir -> Maybe Path
+toPath (Rotation node r) dir = let c = conns node dir in
+    c !? (min (length c `div` 2) (maxCenter ?vs) + r)
     
-connsCache :: Cache.Cache (StableName Graph, (Node, Dir)) [(Node, Node)]
+connsCache :: Cache.Cache (StableName Graph, (Node, Dir)) [Path]
 connsCache = Cache.newCache 10000
 
 dc_date = URI "dc:date"
 
-conns :: (?vs :: ViewSettings, ?graph :: Graph) => Node -> Dir -> [(Node, Node)]
+conns :: (?vs :: ViewSettings, ?graph :: Graph) => Node -> Dir -> [Path]
 conns node dir = Cache.cached (Cache.byAddress ?graph, (node,dir))
                               connsCache result where
-    result = Data.List.sortBy cmp' list
+    result = map (\(prop, node') -> Path node [Conn prop dir node']) sorted
+    sorted = Data.List.sortBy cmp' list
     list = [(p,n) | (p,s) <- Map.toList $ getConns ?graph node dir,
                     not (p `elem` hiddenProps ?vs), n <- Set.toList s]
     cmp n1 n2 | p n1 && p n2 = compare (f n1) (f n2) where
@@ -106,11 +109,12 @@ conns node dir = Cache.cached (Cache.byAddress ?graph, (node,dir))
 rotate :: (?vs :: ViewSettings, ?graph :: Graph) =>
           Rotation -> Int -> Maybe Rotation
 rotate (Rotation n r) dir = let rot = Rotation n (r+dir) in do
-    guard $ any isJust [toEdge rot d | d <- [Pos, Neg]]; return rot
+    guard $ any isJust [toPath rot d | d <- [Pos, Neg]]; return rot
 
 move :: (?vs :: ViewSettings, ?graph :: Graph) =>
         Rotation -> Dir -> Maybe Rotation
-move rot dir = join $ fmap fromEdge $ fmap rev $ toEdge rot dir
+move rot dir = do path <- toPath rot dir
+                  fromPath (rev path)
 
 getText :: (?graph :: Graph) => Node -> Maybe String
 getText n = fmap f $ getOne ?graph n rdfs_label Pos where 
@@ -162,8 +166,8 @@ vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor
                 placeConns' rotation' xdir ydir
     -- place one subtree
     placeConn rotation@(Rotation n1 _) dir = withDepthIncreased 1 $
-        maybeDo (toEdge rotation dir) $ \edge@(_, prop, _, n2) -> do
-            let rotation' = fromJust $ fromEdge (rev edge)
+        maybeDo (toPath rotation dir) $ \path@(Path _ [Conn prop _ n2]) -> do
+            let rotation' = fromJust $ fromPath (rev path)
             scale' <- getScale
             withCenterMoved dir (280 * (scale'**3)) $ do
                 ifUnvisited n2 $ placeNode Nothing rotation'
@@ -266,8 +270,8 @@ presentationView state = let ?graph = fsGraph state in result where
     result :: (?graph :: Graph) => Vob Node
     result = cursor & vob where
     Rotation node _ = fsRotation state
-    children = map snd (conns node Pos)
-    selected = fmap (getSide Pos) (toEdge (fsRotation state) Pos)
+    children = map getPos (conns node Pos)
+    selected = fmap (getSide Pos) (toPath (fsRotation state) Pos)
     f sc n = keyVob n $ useFgColor $ pad 5 $ scaleVob sc $
                  multiline True 70 $ getTextOrURI n
     cursor = flip (maybe mempty) selected $ \n -> 
@@ -305,7 +309,7 @@ newNode dir prop (graph, Rotation node _) = do
     node' <- newURI
     let ?graph = insert (triple dir (node, prop, node'))
                $ insert (node', rdfs_label, PlainLiteral "") graph
-     in return (?graph, fromJust $ fromEdge (node', prop, rev dir, node))
+     in return (?graph, fromJust $ fromPath (Path node' [Conn prop (rev dir) node]))
     
 connect :: (?vs :: ViewSettings) => Dir -> Endo FenState
 connect _ state | Set.null (fsMark state) = state
@@ -313,24 +317,22 @@ connect dir state@(FenState { fsRotation=Rotation node _ }) =
     let nodes = Set.toList (fsMark state); prop = fsProperty state in
     let ?graph = foldr (\n -> insert $ triple dir (node, prop, n))
                        (fsGraph state) nodes in
-    state { fsRotation = fromJust $ fromEdge (node, prop, dir, head nodes),
+    state { fsRotation = fromJust $ fromPath (Path node [Conn prop dir (head nodes)]),
             fsGraph = ?graph, fsMark = Set.empty }
 
 disconnect :: (?vs :: ViewSettings) => Dir -> Endo FenState
-disconnect dir state@(FenState { fsRotation=Rotation node rot }) = 
-    let
-        c = (let ?graph = fsGraph state in conns node dir)
-        index = min (length c `div` 2) (maxCenter ?vs) + rot
-        (p,n) = c !! index
-        graph' = delete (triple dir (node, p, n)) (fsGraph state)
-        index' = min ((length c - 1) `div` 2) (maxCenter ?vs) + rot
-        rot' = case index' of x | x == -1                     -> rot+1
-                                | x == length c - 1 && x /= 0 -> rot-1
-                                | otherwise                   -> rot
-    in state { fsGraph=graph',
-               fsRotation = if index >= 0 && index < length c 
-                            then Rotation node rot'
-                            else findStartRotation graph' }
+disconnect dir state@(FenState { fsRotation=rot@(Rotation node _) }) =
+    let ?graph = fsGraph state in 
+    case toPath rot dir of
+        Nothing -> state
+        Just path -> 
+            let path' = msum [flip toPath xdir =<< rotate rot ydir |
+                              xdir <- [Neg,Pos], ydir <- [-1,1]]
+                triples = pathToTriples path
+                graph' = foldr delete (fsGraph state) triples
+                rot' = fromMaybe (Rotation node 0) $
+                       let ?graph = graph' in fromPath =<< path'
+             in state { fsGraph=graph', fsRotation=rot', fsGraphModified=True }
 
 
 type Mark = Set Node
@@ -356,7 +358,7 @@ findStartRotation g = let ?graph = g in result where
     triples = map getRot $ graphToList g
     
     getTriple s p = fmap (\o -> (s,p,o)) $ getOne g s p Pos
-    getRot (s,p,o) = fromEdge (o, p, Neg, s)
+    getRot (s,p,o) = fromPath (Path o [Conn p Neg s])
     
     ffv_startNode = URI "http://fenfire.org/rdf-v/2003/05/ff#startNode"
     foaf_primaryTopic = URI "http://xmlns.com/foaf/0.1/primaryTopic"
