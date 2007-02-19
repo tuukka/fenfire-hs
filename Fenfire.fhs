@@ -63,11 +63,14 @@ import System.Environment (getArgs, getProgName)
 import System.Mem.StableName
 import System.Random (randomRIO)
 
-data ViewSettings = ViewSettings { hiddenProps :: [Node] }
+data ViewSettings = ViewSettings { hiddenProps :: [Node], maxCenter :: Int }
 data FenState = FenState {
     fsGraph :: Graph, fsRotation :: Rotation, fsMark :: Mark,
     fsFilePath :: FilePath, fsGraphModified :: Bool, fsHasFocus :: Bool,
     fsView :: Int, fsProperty :: Node, fsPropertyList :: [Node] }
+    
+fsNode :: FenState -> Node
+fsNode (FenState { fsRotation = Rotation node _ }) = node
                            
 type Views = [(String, View FenState Node)]
 
@@ -76,11 +79,11 @@ data Rotation = Rotation Node Int         deriving (Eq, Show)
 fromEdge :: (?vs :: ViewSettings, ?graph :: Graph) => Edge -> Maybe Rotation
 fromEdge (node, prop, dir, node') = let c = conns node dir in do
     i <- Data.List.elemIndex (prop, node') c
-    return $ Rotation node (i - length c `div` 2)
+    return $ Rotation node (i - min (length c `div` 2) (maxCenter ?vs))
                      
 toEdge :: (?vs :: ViewSettings, ?graph :: Graph) => Rotation -> Dir -> Maybe Edge
 toEdge (Rotation node r) dir = let c = conns node dir in do
-    (prop, node') <- c !? (length c `div` 2 + r)
+    (prop, node') <- c !? (min (length c `div` 2) (maxCenter ?vs) + r)
     return (node, prop, dir, node')
     
 connsCache :: Cache.Cache (StableName Graph, (Node, Dir)) [(Node, Node)]
@@ -279,8 +282,8 @@ tryMove :: (?vs :: ViewSettings, ?graph :: Graph) =>
 tryMove rot@(Rotation n r) dir = maybe rot' Just (move rot dir) where
     rot' | r == nearest = Nothing
          | otherwise    = Just $ Rotation n nearest
-    nearest | r > 0     = len-1 - len `div` 2
-            | otherwise = 0 - len `div` 2
+    nearest | r > 0     = len-1 - min (len `div` 2) (maxCenter ?vs)
+            | otherwise = 0 - min (len `div` 2) (maxCenter ?vs)
     len = (length $ conns n dir)
 
 type URIMaker = (String, IORef Integer)
@@ -317,10 +320,10 @@ disconnect :: (?vs :: ViewSettings) => Dir -> Endo FenState
 disconnect dir state@(FenState { fsRotation=Rotation node rot }) = 
     let
         c = (let ?graph = fsGraph state in conns node dir)
-        index = (length c `div` 2) + rot
+        index = min (length c `div` 2) (maxCenter ?vs) + rot
         (p,n) = c !! index
         graph' = delete (triple dir (node, p, n)) (fsGraph state)
-        index' = ((length c - 1) `div` 2) + rot
+        index' = min ((length c - 1) `div` 2) (maxCenter ?vs) + rot
         rot' = case index' of x | x == -1                     -> rot+1
                                 | x == length c - 1 && x /= 0 -> rot-1
                                 | otherwise                   -> rot
@@ -679,7 +682,7 @@ main = do
 
     let alpha x (Color r g b a) = Color r g b (x*a)
 
-    let ?vs = ViewSettings { hiddenProps=[rdfs_label] }
+    let ?vs = ViewSettings { hiddenProps=[rdfs_label], maxCenter=3 }
         ?uriMaker = uriMaker in let
         ?views = [("Wheel view", vanishingView 20 30 
                        (alpha 0.7 $ fromGtkColor bgColor)
