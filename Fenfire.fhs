@@ -563,7 +563,7 @@ makeActions actionGroup accelGroup = do
             , ( "quit"   , stockQuit          )
             , ( "about"  , stockAbout         )
             ]
-    flip mapM actionentries $ \(name,stock) -> do 
+    forM actionentries $ \(name,stock) -> do 
         action <- actionNew name Nothing Nothing (Just stock)
         actionGroupAddActionWithAccel actionGroup action Nothing
         actionSetAccelGroup action accelGroup
@@ -586,7 +586,7 @@ updatePropMenu propmenu actionGroup stateRef updateCanvas = do
     Just addProp <- actionGroupGetAction actionGroup "addprop"
                 
     menu <- menuNew
-    flip mapM (fsPropertyList state) $ \prop -> do
+    forM (fsPropertyList state) $ \prop -> do
         item <- let ?graph = fsGraph state
                  in menuItemNewWithLabel $ getTextOrURI prop
         onActivateLeaf item $ do 
@@ -623,7 +623,7 @@ makeBindings actionGroup bindings = do
             , ("loadURI", Just "_Load node's URI"           ,
                stockGoForward     , Just "<Ctl>L"         )
             ]
-    flip mapM bindingentries $ \(name,label',stock,accel) -> do 
+    forM bindingentries $ \(name,label',stock,accel) -> do 
         action <- actionNew name label' Nothing (Just stock)
         actionGroupAddActionWithAccel actionGroup action accel
         actionSetAccelGroup action bindings
@@ -794,7 +794,7 @@ makeWindow window canvasBgColor view stateRef = do
         name <- actionGetName action
         onActionActivate action $ canvasAction name >> return ()
         
-    viewActs <- flip mapM (zip [0..] ?views) $ \(index, (name, _view)) -> do
+    viewActs <- forM (zip [0..] ?views) $ \(index, (name, _view)) -> do
         action <- radioActionNew name name Nothing Nothing index
         actionGroupAddAction actionGroup action
         onActionActivate action $ do

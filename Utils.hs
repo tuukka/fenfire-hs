@@ -81,6 +81,12 @@ funzip x = (fmap fst x, fmap snd x)
 ffor :: Functor f => f a -> (a -> b) -> f b
 ffor = flip fmap
 
+for :: [a] -> (a -> b) -> [b]
+for = flip map
+
+forM :: Monad m => [a] -> (a -> m b) -> m [b]
+forM = flip mapM
+
 forM_ :: Monad m => [a] -> (a -> m b) -> m ()
 forM_ = flip mapM_
 
