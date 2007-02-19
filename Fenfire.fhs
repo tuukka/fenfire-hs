@@ -462,6 +462,28 @@ confirmRevert True  action = do
     case response of ResponseClose  -> action
                      _              -> return ()
 
+confirmString :: (?vs :: ViewSettings, ?pw :: Window) => 
+               String -> String -> (String -> HandlerAction FenState) -> 
+               HandlerAction FenState
+confirmString title preset action = do
+    (response,text) <- liftIO $ do 
+        dialog <- makeDialog title
+            [(stockCancel, ResponseCancel),
+             (stockApply, ResponseAccept)]
+            ResponseAccept
+        entry <- entryNew
+        set entry [ entryText := preset ]
+        onEntryActivate entry $ dialogResponse dialog ResponseAccept
+        widgetShow entry
+        vBox <- dialogGetUpper dialog
+        boxPackStart vBox entry PackNatural 0
+        response' <- dialogRun dialog
+        text' <- entryGetText entry
+        widgetHide dialog
+        return (response',text')
+    case response of ResponseAccept -> action text
+                     _              -> return ()
+
 newState :: Graph -> Rotation -> FilePath -> Bool -> FenState
 newState graph rot fp focus = 
     FenState graph rot Set.empty fp False focus 0 rdfs_seeAlso ps
@@ -544,6 +566,10 @@ handleAction action = do
                         setInterp True
         "resetprop" -> when (fsProperty state /= rdfs_seeAlso) $
                            put $ state { fsProperty = rdfs_seeAlso }
+        "changeURI" -> case node of
+                           URI uri -> confirmString "New URI" uri $ \uri' ->
+                               liftIO $ putStrLn $ "Change "++uri++" to "++uri'
+                           _       -> unhandledEvent
         _       -> unhandledEvent
   where putGraph g        = do modify $ \s ->
                                    s { fsGraph=g, fsGraphModified=True }
@@ -622,6 +648,8 @@ makeBindings actionGroup bindings = do
                stockStrikethrough , Just "<Alt>BackSpace" )
             , ("loadURI", Just "_Load node's URI"           ,
                stockGoForward     , Just "<Ctl>L"         )
+            , ("changeURI", Just "Change node's _URI"       ,
+               stockRefresh       , Just "u"              )
             ]
     forM bindingentries $ \(name,label',stock,accel) -> do 
         action <- actionNew name label' Nothing (Just stock)
@@ -635,7 +663,8 @@ makeMenus actionGroup root propmenu = addAll root menu where
             m "_Edit" [return propmenu, sep,
                        a "noder", a "nodel", sep,
                        a "breakr", a "breakl", sep,
-                       a "mark", a "connr", a "connl", sep, a "rmlit"],
+                       a "mark", a "connr", a "connl", sep, 
+                       a "changeURI", a "rmlit"],
             m "_View" (map (a . fst) ?views),
             m "_Help" [a "about"]]
     addAll parent items = mapM_ (menuShellAppend parent) =<< sequence items
