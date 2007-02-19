@@ -788,9 +788,9 @@ makeWindow window canvasBgColor view stateRef = do
     makeBindings actionGroup fake
 
     actions <- actionGroupListActions actionGroup
-    bindingActions <- actionGroupListActions bindingGroup
+    bindingActions0 <- actionGroupListActions bindingGroup
 
-    forM_ (actions ++ bindingActions) $ \action -> do
+    forM_ (actions ++ bindingActions0) $ \action -> do
         name <- actionGetName action
         onActionActivate action $ canvasAction name >> return ()
         
@@ -805,19 +805,22 @@ makeWindow window canvasBgColor view stateRef = do
                 updateCanvas True
         return action
         
-    flip mapM (tail viewActs) $ \x -> radioActionSetGroup x (head viewActs)
+    forM_ (tail viewActs) $ \x -> radioActionSetGroup x (head viewActs)
     toggleActionSetActive (toToggleAction $ head viewActs) True
 
-    addProp <- actionNew "addprop" (Just "Make _focused node a property")
-                         Nothing (Just stockAdd)
-    actionGroupAddActionWithAccel actionGroup addProp (Just "<Shift>P")
-    actionSetAccelGroup addProp bindings
-    onActionActivate addProp $ do
-        modifyIORef stateRef $ \s -> 
-            let Rotation n _ = fsRotation s
-             in s { fsProperty = n, fsPropertyList = fsPropertyList s ++ [n] }
-        updatePropMenu propmenu actionGroup stateRef updateCanvas
-        updateCanvas False
+    forM_ [(bindingGroup, bindings), (actionGroup, fake)] $ \(grp, bds) -> do
+        addProp <- actionNew "addprop" (Just "Make _focused node a property")
+                             Nothing (Just stockAdd)
+        actionGroupAddActionWithAccel grp addProp (Just "<Shift>P")
+        actionSetAccelGroup addProp bds
+        onActionActivate addProp $ do
+            modifyIORef stateRef $ \s -> 
+                let Rotation n _ = fsRotation s
+                 in s { fsProperty=n, fsPropertyList=fsPropertyList s ++ [n] }
+            updatePropMenu propmenu actionGroup stateRef updateCanvas
+            updateCanvas False
+
+    bindingActions <- actionGroupListActions bindingGroup
 
     -- user interface widgets:
 
