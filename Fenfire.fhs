@@ -564,6 +564,8 @@ handleAction action = do
         "chgview" -> do put $ state { fsView = (fsView state + 1) `mod` 
                                                (length ?views) }
                         setInterp True
+        "addprop" -> put $ state { fsProperty = node,
+                             fsPropertyList = fsPropertyList state ++ [node] }
         "resetprop" -> when (fsProperty state /= rdfs_seeAlso) $
                            put $ state { fsProperty = rdfs_seeAlso }
         "changeURI" -> case node of
@@ -648,8 +650,6 @@ makeBindings actionGroup bindings = do
                stockStrikethrough , Just "<Alt>BackSpace" )
             , ("loadURI", Just "_Load node's URI"           ,
                stockGoForward     , Just "<Ctl>L"         )
-            , ("changeURI", Just "Change node's _URI"       ,
-               stockRefresh       , Just "u"              )
             ]
     forM bindingentries $ \(name,label',stock,accel) -> do 
         action <- actionNew name label' Nothing (Just stock)
@@ -762,7 +762,7 @@ makeWindow window canvasBgColor view stateRef = do
     textViewSetWrapMode textView WrapWordChar
 
     -- this needs to be called whenever the node or its text changes:
-    let stateChanged (FenState { fsRotation=Rotation n _, fsGraph=g }) = do
+    let stateChanged _ (FenState { fsRotation=Rotation n _, fsGraph=g }) = do
             buf <- textBufferNew Nothing
             textBufferSetText buf (let ?graph=g in maybe "" id $ getText n)
             afterBufferChanged buf $ do 
@@ -780,6 +780,7 @@ makeWindow window canvasBgColor view stateRef = do
                 updateCanvas True
 
             textViewSetBuffer textView buf
+            updatePropMenu propmenu actionGroup stateRef updateCanvas
             updateActions actionGroup stateRef
 
     -- canvas for view:
@@ -817,9 +818,9 @@ makeWindow window canvasBgColor view stateRef = do
     makeBindings actionGroup fake
 
     actions <- actionGroupListActions actionGroup
-    bindingActions0 <- actionGroupListActions bindingGroup
+    bindingActions <- actionGroupListActions bindingGroup
 
-    forM_ (actions ++ bindingActions0) $ \action -> do
+    forM_ (actions ++ bindingActions) $ \action -> do
         name <- actionGetName action
         onActionActivate action $ canvasAction name >> return ()
         
@@ -836,20 +837,6 @@ makeWindow window canvasBgColor view stateRef = do
         
     forM_ (tail viewActs) $ \x -> radioActionSetGroup x (head viewActs)
     toggleActionSetActive (toToggleAction $ head viewActs) True
-
-    forM_ [(bindingGroup, bindings), (actionGroup, fake)] $ \(grp, bds) -> do
-        addProp <- actionNew "addprop" (Just "Make _focused node a property")
-                             Nothing (Just stockAdd)
-        actionGroupAddActionWithAccel grp addProp (Just "<Shift>P")
-        actionSetAccelGroup addProp bds
-        onActionActivate addProp $ do
-            modifyIORef stateRef $ \s -> 
-                let Rotation n _ = fsRotation s
-                 in s { fsProperty=n, fsPropertyList=fsPropertyList s ++ [n] }
-            updatePropMenu propmenu actionGroup stateRef updateCanvas
-            updateCanvas False
-
-    bindingActions <- actionGroupListActions bindingGroup
 
     -- user interface widgets:
 
@@ -888,8 +875,8 @@ makeWindow window canvasBgColor view stateRef = do
 
     -- start:
 
-    readIORef stateRef >>= stateChanged
-    updatePropMenu propmenu actionGroup stateRef updateCanvas
+    startState <- readIORef stateRef
+    stateChanged (startState { fsPropertyList = [] }) startState
     
     widgetGrabFocus canvas
 

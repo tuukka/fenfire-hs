@@ -326,7 +326,7 @@ noAnim scene = const (scene, False)
     
 
 vobCanvas :: Ord b => IORef a -> View a b -> Handler Event a -> 
-                      Handler c a -> (a -> IO ()) -> Color -> TimeDiff ->
+                      Handler c a -> (a -> a -> IO ()) -> Color -> TimeDiff ->
                       IO (DrawingArea, Bool -> IO (), c -> IO Bool)
 vobCanvas stateRef view eventHandler actionHandler stateChanged 
           bgColor animTime = do
@@ -371,7 +371,7 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
                 runHandler handler state event
 
             when handled $ do writeIORef stateRef state'
-                              stateChanged state'
+                              stateChanged state state'
                               updateAnim interpolate'
 
             return handled
