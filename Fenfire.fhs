@@ -650,6 +650,10 @@ makeBindings actionGroup bindings = do
                stockStrikethrough , Just "<Alt>BackSpace" )
             , ("loadURI", Just "_Load node's URI"           ,
                stockGoForward     , Just "<Ctl>L"         )
+            , ("addprop", Just "Make _focused node a property" ,
+               stockAdd           , Just "<Shift>P"       )
+            , ("changeURI", Just "Change node's _URI"       ,
+               stockRefresh       , Just "u"              )
             ]
     forM bindingentries $ \(name,label',stock,accel) -> do 
         action <- actionNew name label' Nothing (Just stock)
