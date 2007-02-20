@@ -1,0 +1,65 @@
+{-# OPTIONS_GHC -fallow-undecidable-instances -fallow-incoherent-instances #-}
+module FRP where
+
+-- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
+-- This file is part of Fenfire.
+-- 
+-- Fenfire is free software; you can redistribute it and/or modify it under
+-- the terms of the GNU General Public License as published by
+-- the Free Software Foundation; either version 2 of the License, or
+-- (at your option) any later version.
+-- 
+-- Fenfire is distributed in the hope that it will be useful, but WITHOUT
+-- ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+-- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+-- Public License for more details.
+-- 
+-- You should have received a copy of the GNU General
+-- Public License along with Fenfire; if not, write to the Free
+-- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
+-- MA  02111-1307  USA
+
+import Utils
+
+import Graphics.Rendering.Cairo
+import Graphics.UI.Gtk
+
+import Data.IORef
+
+newtype SF i o = SF { runSF :: TimeDiff -> i -> (o, SF i o) }
+
+data Input = Input { mouseX :: Double, mouseY :: Double, mouseClick :: Bool }
+
+test :: SF () (Render ())
+test = f 0 where
+    f i = SF $ \t () -> (ren (i+t), f (i+t))
+    ren i = do save; setSourceRGBA 0 0 0 1
+               arc 100 100 50 (3*i) (3*i+2); stroke; restore
+    
+main = do
+    initGUI
+    window <- windowNew
+    windowSetTitle window "FRP test"
+    windowSetDefaultSize window 700 400
+
+    canvas <- drawingAreaNew
+    set window [ containerChild := canvas ]
+    
+    time0 <- getTime
+    ref <- newIORef (time0, test)
+    
+    onExpose canvas $ \(Expose {}) -> do
+        (time, sf) <- readIORef ref
+        time' <- getTime
+        let (ren, sf') = runSF sf (time' - time) ()
+        writeIORef ref (time', sf')
+
+        drawable <- drawingAreaGetDrawWindow canvas
+        renderWithDrawable drawable ren
+        
+        widgetQueueDraw canvas
+        return True
+        
+    onDestroy window mainQuit
+    widgetShowAll window
+    mainGUI

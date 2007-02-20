@@ -37,6 +37,13 @@ GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations -main-is VobTest.main
 
+Executable:     frptest
+Main-Is:        FRP.hs
+Other-Modules:  FRP, Utils, FunctorSugar
+GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
+                -fno-warn-unused-imports -fno-warn-missing-signatures
+                -fno-warn-orphans -fno-warn-deprecations -main-is FRP.main
+
 Executable:     darcs2rdf
 Main-Is:        Darcs2RDF.hs
 Other-Modules:  Darcs2RDF, FunctorSugar
