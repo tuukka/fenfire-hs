@@ -83,6 +83,10 @@ main = do
     onMotionNotify canvas False $ \e -> case e of
         Motion { eventX=x, eventY=y } -> writeIORef mouse (x,y) >> return False
         _                             -> return False
+
+    onEnterNotify canvas $ \e -> case e of
+        Crossing {eventX=x, eventY=y} -> writeIORef mouse (x,y) >> return False
+        _                             -> return False
         
     onDestroy window mainQuit
     widgetShowAll window
