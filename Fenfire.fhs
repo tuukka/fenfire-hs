@@ -492,6 +492,16 @@ newState graph rot fp focus =
           f (_, _, URI _) = True
           f _             = False
 
+stateReplaceNode :: Node -> Node -> Endo FenState
+stateReplaceNode m n s@(FenState { fsRotation = Rotation node r }) = FenState {
+    fsGraph = replaceNode m n (fsGraph s),
+    fsRotation = Rotation (f node) r,
+    fsMark = Set.insert n $ Set.delete m $ fsMark s,
+    fsProperty = f (fsProperty s), fsPropertyList = map f (fsPropertyList s),
+    fsGraphModified = True,
+    fsFilePath = fsFilePath s, fsHasFocus = fsHasFocus s, fsView = fsView s
+    } where f x = if x == m then n else x
+
 handleEvent :: (?vs :: ViewSettings, ?pw :: Window, ?views :: Views,
                 ?uriMaker :: URIMaker) => Handler Event FenState
 handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
@@ -569,9 +579,8 @@ handleAction action = do
         "resetprop" -> when (fsProperty state /= rdfs_seeAlso) $
                            put $ state { fsProperty = rdfs_seeAlso }
         "changeURI" -> case node of
-                           URI uri -> confirmString "New URI" uri $ \uri' -> do
-                               putGraph $ replaceNode node (URI uri') graph
-                               putRotation $ Rotation (URI uri') r
+                           URI uri -> confirmString "New URI" uri $ \uri' ->
+                              put $ stateReplaceNode (URI uri) (URI uri') state
                            _       -> unhandledEvent
         _       -> unhandledEvent
   where putGraph g        = do modify $ \s ->
