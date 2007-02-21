@@ -319,7 +319,9 @@ connect dir state@(FenState { fsRotation=Rotation node _ }) =
     let ?graph = foldr (\n -> insert $ triple dir (node, prop, n))
                        (fsGraph state) nodes in
     state { fsRotation = fromJust $ fromPath (Path node [Conn prop dir (head nodes)]),
-            fsGraph = ?graph, fsMark = Set.empty }
+            fsGraph = ?graph, fsMark = Set.empty, fsGraphModified = True,
+            fsUndo = (fsGraph state,fsRotation state):fsUndo state,
+            fsRedo = [] }
 
 disconnect :: (?vs :: ViewSettings) => Dir -> Endo FenState
 disconnect dir state@(FenState { fsRotation=rot@(Rotation node _) }) =
@@ -501,7 +503,8 @@ stateReplaceNode m n s@(FenState { fsRotation = Rotation node r }) = FenState {
     fsMark = Set.insert n $ Set.delete m $ fsMark s,
     fsProperty = f (fsProperty s), fsPropertyList = map f (fsPropertyList s),
     fsGraphModified = True,
-    fsFilePath = fsFilePath s, fsHasFocus = fsHasFocus s, fsView = fsView s
+    fsFilePath = fsFilePath s, fsHasFocus = fsHasFocus s, fsView = fsView s,
+    fsUndo = (fsGraph s, fsRotation s) : fsUndo s, fsRedo = []
     } where f x = if x == m then n else x
 
 handleEvent :: (?vs :: ViewSettings, ?pw :: Window, ?views :: Views,
