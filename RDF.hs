@@ -169,6 +169,11 @@ deleteAll s p g = dels s p os g where
 update :: Triple -> Endo Graph
 update (s,p,o) g = insert (s,p,o) $ deleteAll s p g
 
+replaceNode :: Node -> Node -> Endo Graph
+replaceNode m n graph = Set.fold f graph (graphRealTriples graph) where
+    f (s,p,o) = insert (r s, r p, r o) . delete (s,p,o)
+    r x = if x == m then n else x
+
 addNamespace :: String -> String -> Endo Graph
 addNamespace prefix uri g =
     g { graphNamespaces = Map.insert prefix uri $ graphNamespaces g }

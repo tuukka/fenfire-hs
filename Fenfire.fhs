@@ -569,8 +569,9 @@ handleAction action = do
         "resetprop" -> when (fsProperty state /= rdfs_seeAlso) $
                            put $ state { fsProperty = rdfs_seeAlso }
         "changeURI" -> case node of
-                           URI uri -> confirmString "New URI" uri $ \uri' ->
-                               liftIO $ putStrLn $ "Change "++uri++" to "++uri'
+                           URI uri -> confirmString "New URI" uri $ \uri' -> do
+                               putGraph $ replaceNode node (URI uri') graph
+                               putRotation $ Rotation (URI uri') r
                            _       -> unhandledEvent
         _       -> unhandledEvent
   where putGraph g        = do modify $ \s ->
