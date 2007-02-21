@@ -476,8 +476,7 @@ confirmString title preset action = do
              (stockApply, ResponseAccept)]
             ResponseAccept
         entry <- entryNew
-        set entry [ entryText := preset ]
-        onEntryActivate entry $ dialogResponse dialog ResponseAccept
+        set entry [ entryText := preset, entryActivatesDefault := True ]
         widgetShow entry
         vBox <- dialogGetUpper dialog
         boxPackStart vBox entry PackNatural 0
@@ -611,19 +610,21 @@ handleAction action = do
 
 makeActions actionGroup accelGroup = do
     let actionentries = 
-            [ ( "new"    , stockNew           )
-            , ( "open"   , stockOpen          )
-            , ( "save"   , stockSave          )
-            , ( "saveas" , stockSaveAs        )
-            , ( "revert" , stockRevertToSaved )
-            , ( "quit"   , stockQuit          )
-            , ( "about"  , stockAbout         )
-            , ( "undo"   , stockUndo          )
-            , ( "redo"   , stockRedo          )
+            [ ( "new"    , Nothing, stockNew           , Nothing              )
+            , ( "open"   , Nothing, stockOpen          , Nothing              )
+            , ( "save"   , Nothing, stockSave          , Nothing              )
+            , ( "saveas" , Nothing, stockSaveAs        , Just "<Ctl><Shift>S" )
+            , ( "revert" , Nothing, stockRevertToSaved , Nothing              )
+            , ( "quit"   , Nothing, stockQuit          , Nothing              )
+            , ( "about"  , Nothing, stockAbout         , Nothing              )
+            , ( "loadURI", Just "_Load node's URI",
+                                    stockGoForward     , Just "<Ctl>L"        )
+            , ( "undo"   , Nothing, stockUndo          , Just "<Ctl>Z"        )
+            , ( "redo"   , Nothing, stockRedo          , Just "<Ctl><Shift>Z" )
             ]
-    forM actionentries $ \(name,stock) -> do 
-        action <- actionNew name Nothing Nothing (Just stock)
-        actionGroupAddActionWithAccel actionGroup action Nothing
+    forM actionentries $ \(name,label,stock,accel) -> do 
+        action <- actionNew name label Nothing (Just stock)
+        actionGroupAddActionWithAccel actionGroup action accel
         actionSetAccelGroup action accelGroup
 
 updateActions actionGroup stateRef = do
@@ -682,8 +683,6 @@ makeBindings actionGroup bindings = do
                stockGoBack        , Just "<Shift>C"       )
             , ("rmlit"  , Just "Remove _literal text"       ,
                stockStrikethrough , Just "<Alt>BackSpace" )
-            , ("loadURI", Just "_Load node's URI"           ,
-               stockGoForward     , Just "<Ctl>L"         )
             , ("addprop", Just "Make _focused node a property" ,
                stockAdd           , Just "<Shift>P"       )
             , ("changeURI", Just "Change node's _URI"       ,
@@ -967,7 +966,7 @@ makeDialog title buttons preset = do
 makeConfirmUnsavedDialog :: (?pw :: Window) => IO Dialog
 makeConfirmUnsavedDialog = do 
     makeDialog "Confirm unsaved changes" 
-        [("Discard changes", ResponseClose),
+        [("_Discard changes", ResponseClose),
          (stockCancel, ResponseCancel),
          (stockSave, ResponseAccept)]
         ResponseAccept
