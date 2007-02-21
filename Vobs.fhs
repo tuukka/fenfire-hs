@@ -47,6 +47,7 @@ import Control.Monad (when)
 import Control.Monad.State
 import Control.Monad.Reader
 
+import qualified Control.Exception
 
 type Scene k  = Map k (Maybe (Matrix, Size))
 data Vob k    = Vob { defaultSize :: Size,
@@ -366,15 +367,20 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
 
         handle handler event = do
             state <- readIORef stateRef
+            Control.Exception.catch 
+                (do (state', interpolate', handled) <- 
+                        runHandler handler state event
 
-            (state', interpolate', handled) <- 
-                runHandler handler state event
+                    when handled $ do writeIORef stateRef state'
+                                      stateChanged state state'
+                                      updateAnim interpolate'
 
-            when handled $ do writeIORef stateRef state'
-                              stateChanged state state'
-                              updateAnim interpolate'
-
-            return handled
+                    return handled )
+                (\e -> do
+                    putStr ("Exception in event: ") >> print e
+                    writeIORef stateRef state
+                    stateChanged state state -- XXX how to write this?
+                    return True )
 
         handleEvent = handle eventHandler
 
