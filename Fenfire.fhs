@@ -592,9 +592,11 @@ handleAction action = do
         "undo" | (graph',rot'):undos <- fsUndo state -> do
                    put state {fsGraph=graph', fsRotation=rot', 
                               fsUndo=undos, fsRedo=(graph,rot):fsRedo state}
+                   setInterp True
         "redo" | (graph',rot'):redos <- fsRedo state -> do
                    put state {fsGraph=graph', fsRotation=rot', 
                               fsUndo=(graph,rot):fsUndo state, fsRedo=redos}
+                   setInterp True
         _       -> do liftIO $ putStrLn $ "Unhandled action: " ++ action
                       unhandledEvent
   where putGraph g        = do modify $ \s ->
@@ -633,6 +635,10 @@ updateActions actionGroup stateRef = do
     actionSetSensitive save modified
     Just revert <- actionGroupGetAction actionGroup "revert"
     actionSetSensitive revert (modified && readable)
+    Just undo <- actionGroupGetAction actionGroup "undo"
+    actionSetSensitive undo (not $ null $ fsUndo state)
+    Just redo <- actionGroupGetAction actionGroup "redo"
+    actionSetSensitive redo (not $ null $ fsRedo state)
     Just changeView <- actionGroupGetAction actionGroup view
     toggleActionSetActive (castToToggleAction changeView) True
     
@@ -712,7 +718,7 @@ makeMenus actionGroup root propmenu = addAll root menu where
                 return (castToMenuItem item)
 
 makeToolbarItems actionGroup toolbar = do
-    forM_ ["new", "open", "", "save"] $ \name -> 
+    forM_ ["new", "open", "save", "", "undo", "redo"] $ \name -> 
         if name == "" then do 
             item <- separatorToolItemNew
             toolbarInsert toolbar item (-1)
@@ -807,7 +813,8 @@ makeWindow window canvasBgColor view stateRef = do
 
                 modifyIORef stateRef $ \s -> 
                     s { fsGraph=g'', fsRotation = Rotation n' r',
-                        fsGraphModified=True } -- XXX undo
+                        fsGraphModified=True, fsRedo=[],
+                        fsUndo=(fsGraph s, fsRotation s):(fsUndo s) }
                 updateActions actionGroup stateRef
                 updateCanvas True
 
