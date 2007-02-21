@@ -67,7 +67,8 @@ data ViewSettings = ViewSettings { hiddenProps :: [Node], maxCenter :: Int }
 data FenState = FenState {
     fsGraph :: Graph, fsRotation :: Rotation, fsMark :: Mark,
     fsFilePath :: FilePath, fsGraphModified :: Bool, fsHasFocus :: Bool,
-    fsView :: Int, fsProperty :: Node, fsPropertyList :: [Node] }
+    fsView :: Int, fsProperty :: Node, fsPropertyList :: [Node], 
+    fsUndo :: [(Graph,Rotation)], fsRedo :: [(Graph,Rotation)]}
     
 fsNode :: FenState -> Node
 fsNode (FenState { fsRotation = Rotation node _ }) = node
@@ -318,7 +319,7 @@ connect dir state@(FenState { fsRotation=Rotation node _ }) =
     let ?graph = foldr (\n -> insert $ triple dir (node, prop, n))
                        (fsGraph state) nodes in
     state { fsRotation = fromJust $ fromPath (Path node [Conn prop dir (head nodes)]),
-            fsGraph = ?graph, fsMark = Set.empty, fsGraphModified = True }
+            fsGraph = ?graph, fsMark = Set.empty }
 
 disconnect :: (?vs :: ViewSettings) => Dir -> Endo FenState
 disconnect dir state@(FenState { fsRotation=rot@(Rotation node _) }) =
@@ -332,7 +333,8 @@ disconnect dir state@(FenState { fsRotation=rot@(Rotation node _) }) =
                 graph' = foldr delete (fsGraph state) triples
                 rot' = fromMaybe (Rotation node 0) $
                        let ?graph = graph' in fromPath =<< path'
-             in state { fsGraph=graph', fsRotation=rot', fsGraphModified=True }
+             in state { fsGraph=graph', fsRotation=rot', fsGraphModified=True,
+                        fsUndo=(fsGraph state,fsRotation state):fsUndo state, fsRedo=[]}
 
 
 type Mark = Set Node
@@ -486,7 +488,7 @@ confirmString title preset action = do
 
 newState :: Graph -> Rotation -> FilePath -> Bool -> FenState
 newState graph rot fp focus = 
-    FenState graph rot Set.empty fp False focus 0 rdfs_seeAlso ps
+    FenState graph rot Set.empty fp False focus 0 rdfs_seeAlso ps [] []
     where ps = Set.toAscList $ Set.insert rdfs_seeAlso $ Set.fromList $
                    map predicate $ filter f $ graphToList graph
           f (_, _, URI _) = True
@@ -555,7 +557,9 @@ handleAction action = do
                              g <- liftIO $ loadGraph uri
                              let g' = mergeGraphs graph g
                                  r' = Rotation node r
-                                 s' = state {fsGraph=g', fsRotation=r'}
+                                 s' = state {fsGraph=g', fsRotation=r',
+                                             fsUndo=(graph,rot):fsUndo state,
+                                             fsRedo=[]}
                              put s'
                          _ -> unhandledEvent
         "revert" | filepath /= "" -> confirmRevert modified $ do
@@ -582,9 +586,17 @@ handleAction action = do
                            URI uri -> confirmString "New URI" uri $ \uri' ->
                               put $ stateReplaceNode (URI uri) (URI uri') state
                            _       -> unhandledEvent
-        _       -> unhandledEvent
+        "undo" | (graph',rot'):undos <- fsUndo state -> do
+                   put state {fsGraph=graph', fsRotation=rot', 
+                              fsUndo=undos, fsRedo=(graph,rot):fsRedo state}
+        "redo" | (graph',rot'):redos <- fsRedo state -> do
+                   put state {fsGraph=graph', fsRotation=rot', 
+                              fsUndo=(graph,rot):fsUndo state, fsRedo=redos}
+        _       -> do liftIO $ putStrLn $ "Unhandled action: " ++ action
+                      unhandledEvent
   where putGraph g        = do modify $ \s ->
-                                   s { fsGraph=g, fsGraphModified=True }
+                                   s { fsGraph=g, fsGraphModified=True,
+                                       fsUndo=(fsGraph s, fsRotation s):fsUndo s, fsRedo=[]}
                                setInterp True
         putRotation rot   = do modify $ \s -> s { fsRotation=rot }
                                setInterp True
@@ -600,6 +612,8 @@ makeActions actionGroup accelGroup = do
             , ( "revert" , stockRevertToSaved )
             , ( "quit"   , stockQuit          )
             , ( "about"  , stockAbout         )
+            , ( "undo"   , stockUndo          )
+            , ( "redo"   , stockRedo          )
             ]
     forM actionentries $ \(name,stock) -> do 
         action <- actionNew name Nothing Nothing (Just stock)
@@ -674,7 +688,8 @@ makeMenus actionGroup root propmenu = addAll root menu where
     menu = [m "_File" [a "new", a "open", a "loadURI", sep,
                        a "save", a "saveas", a "revert", sep,
                        a "quit"],
-            m "_Edit" [return propmenu, sep,
+            m "_Edit" [a "undo", a "redo", sep,
+                       return propmenu, sep,
                        a "noder", a "nodel", sep,
                        a "breakr", a "breakl", sep,
                        a "mark", a "connr", a "connl", sep, 
@@ -789,7 +804,7 @@ makeWindow window canvasBgColor view stateRef = do
 
                 modifyIORef stateRef $ \s -> 
                     s { fsGraph=g'', fsRotation = Rotation n' r',
-                        fsGraphModified=True }
+                        fsGraphModified=True } -- XXX undo
                 updateActions actionGroup stateRef
                 updateCanvas True
 
