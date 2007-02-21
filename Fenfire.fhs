@@ -500,7 +500,8 @@ stateReplaceNode :: Node -> Node -> Endo FenState
 stateReplaceNode m n s@(FenState { fsRotation = Rotation node r }) = FenState {
     fsGraph = replaceNode m n (fsGraph s),
     fsRotation = Rotation (f node) r,
-    fsMark = Set.insert n $ Set.delete m $ fsMark s,
+    fsMark = if m `Set.member` fsMark s
+             then Set.insert n $ Set.delete m $ fsMark s else fsMark s,
     fsProperty = f (fsProperty s), fsPropertyList = map f (fsPropertyList s),
     fsGraphModified = True,
     fsFilePath = fsFilePath s, fsHasFocus = fsHasFocus s, fsView = fsView s,
