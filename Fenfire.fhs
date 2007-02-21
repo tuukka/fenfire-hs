@@ -318,7 +318,7 @@ connect dir state@(FenState { fsRotation=Rotation node _ }) =
     let ?graph = foldr (\n -> insert $ triple dir (node, prop, n))
                        (fsGraph state) nodes in
     state { fsRotation = fromJust $ fromPath (Path node [Conn prop dir (head nodes)]),
-            fsGraph = ?graph, fsMark = Set.empty }
+            fsGraph = ?graph, fsMark = Set.empty, fsGraphModified = True }
 
 disconnect :: (?vs :: ViewSettings) => Dir -> Endo FenState
 disconnect dir state@(FenState { fsRotation=rot@(Rotation node _) }) =
