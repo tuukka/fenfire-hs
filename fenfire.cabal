@@ -12,7 +12,7 @@ Category:       User Interfaces
 Stability:      alpha
 Homepage:       http://fenfire.org/
 Build-Depends:  base, HaXml, gtk, mtl, unix, cairo, harp, template-haskell, glib
-Data-Files:     data/logo.svg data/logo48.png
+Data-Files:     data/logo.svg data/icon16.png
 
 Executable:     fenfire
 Main-Is:        Fenfire.hs

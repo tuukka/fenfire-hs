@@ -622,8 +622,8 @@ makeActions actionGroup accelGroup = do
             , ( "undo"   , Nothing, stockUndo          , Just "<Ctl>Z"        )
             , ( "redo"   , Nothing, stockRedo          , Just "<Ctl><Shift>Z" )
             ]
-    forM actionentries $ \(name,label,stock,accel) -> do 
-        action <- actionNew name label Nothing (Just stock)
+    forM actionentries $ \(name,label',stock,accel) -> do 
+        action <- actionNew name label' Nothing (Just stock)
         actionGroupAddActionWithAccel actionGroup action accel
         actionSetAccelGroup action accelGroup
 
@@ -787,7 +787,7 @@ makeWindow window canvasBgColor view stateRef = do
     -- main window:
 
     let ?pw = window in mdo
-    logo <- getDataFileName "data/logo48.png"
+    logo <- getDataFileName "data/icon16.png"
     Control.Exception.catch (windowSetIconFromFile window logo)
           (\e -> putStr ("Opening "++logo++" failed: ") >> print e)
     windowSetTitle window "Fenfire"
