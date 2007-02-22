@@ -67,7 +67,7 @@ data ViewSettings = ViewSettings { hiddenProps :: [Node], maxCenter :: Int }
 data FenState = FenState {
     fsGraph :: Graph, fsRotation :: Rotation, fsMark :: Mark,
     fsFilePath :: FilePath, fsGraphModified :: Bool, fsHasFocus :: Bool,
-    fsView :: Int, fsProperty :: Node, fsPropertyList :: [Node], 
+    fsView :: Int, fsProperty :: Node, fsProperties :: Set Node,
     fsUndo :: [(Graph,Rotation)], fsRedo :: [(Graph,Rotation)]}
     
 fsNode :: FenState -> Node
@@ -82,7 +82,7 @@ fromPath path@(Path node (Conn _ dir _ : _)) = do
     let c = conns node dir
     i <- Data.List.elemIndex path c
     return $ Rotation node (i - min (length c `div` 2) (maxCenter ?vs))
-fromPath _ = error "Fenfire.fromPath: empty path"
+fromPath (Path node []) = Just $ Rotation node 0
                      
 toPath :: (?vs :: ViewSettings, ?graph :: Graph) =>
           Rotation -> Dir -> Maybe Path
@@ -490,7 +490,7 @@ confirmString title preset action = do
 newState :: Graph -> Rotation -> FilePath -> Bool -> FenState
 newState graph rot fp focus = 
     FenState graph rot Set.empty fp False focus 0 rdfs_seeAlso ps [] []
-    where ps = Set.toAscList $ Set.insert rdfs_seeAlso $ Set.fromList $
+    where ps = Set.insert rdfs_seeAlso $ Set.fromList $
                    map predicate $ filter f $ graphToList graph
           f (_, _, URI _) = True
           f _             = False
@@ -501,7 +501,7 @@ stateReplaceNode m n s@(FenState { fsRotation = Rotation node r }) = FenState {
     fsRotation = Rotation (f node) r,
     fsMark = if m `Set.member` fsMark s
              then Set.insert n $ Set.delete m $ fsMark s else fsMark s,
-    fsProperty = f (fsProperty s), fsPropertyList = map f (fsPropertyList s),
+    fsProperty = f (fsProperty s), fsProperties = Set.map f (fsProperties s),
     fsGraphModified = True,
     fsFilePath = fsFilePath s, fsHasFocus = fsHasFocus s, fsView = fsView s,
     fsUndo = (fsGraph s, fsRotation s) : fsUndo s, fsRedo = []
@@ -581,8 +581,14 @@ handleAction action = do
         "chgview" -> do put $ state { fsView = (fsView state + 1) `mod` 
                                                (length ?views) }
                         setInterp True
-        "addprop" -> put $ state { fsProperty = node,
-                             fsPropertyList = fsPropertyList state ++ [node] }
+        "addprop" -> do let uri = case node of URI x -> x
+                                               _     -> ""
+                        confirmString "Add property" uri $ \uri' ->
+                            when (uri' /= "") $ do
+                                let prop' = URI uri'
+                                    props = fsProperties state
+                                put $ state { fsProperty = prop',
+                                    fsProperties = Set.insert prop' props }
         "resetprop" -> when (fsProperty state /= rdfs_seeAlso) $
                            put $ state { fsProperty = rdfs_seeAlso }
         "changeURI" -> case node of
@@ -649,7 +655,7 @@ updatePropMenu propmenu actionGroup stateRef updateCanvas = do
     Just addProp <- actionGroupGetAction actionGroup "addprop"
                 
     menu <- menuNew
-    forM (fsPropertyList state) $ \prop -> do
+    forM (Set.toAscList $ fsProperties state) $ \prop -> do
         item <- let ?graph = fsGraph state
                  in menuItemNewWithLabel $ getTextOrURI prop
         onActivateLeaf item $ do 
@@ -683,8 +689,8 @@ makeBindings actionGroup bindings = do
                stockGoBack        , Just "<Shift>C"       )
             , ("rmlit"  , Just "Remove _literal text"       ,
                stockStrikethrough , Just "<Alt>BackSpace" )
-            , ("addprop", Just "Make _focused node a property" ,
-               stockAdd           , Just "<Shift>P"       )
+            , ("addprop", Just "_Add property"              ,
+               stockAdd           , Just "<Ctl>P"         )
             , ("changeURI", Just "Change node's _URI"       ,
                stockRefresh       , Just "u"              )
             ]
@@ -915,7 +921,7 @@ makeWindow window canvasBgColor view stateRef = do
     -- start:
 
     startState <- readIORef stateRef
-    stateChanged (startState { fsPropertyList = [] }) startState
+    stateChanged (startState { fsProperties = Set.empty }) startState
     
     widgetGrabFocus canvas
 
