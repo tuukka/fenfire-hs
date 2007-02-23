@@ -374,6 +374,13 @@ findStartPath g = let ?graph = g in result where
     
     ffv_startNode = URI "http://fenfire.org/rdf-v/2003/05/ff#startNode"
     foaf_primaryTopic = URI "http://xmlns.com/foaf/0.1/primaryTopic"
+    
+containsInfoTriples :: (?vs :: ViewSettings) => Node -> Graph -> [Triple]
+containsInfoTriples s g = [(s, p, o) | o <- os, o /= s] where
+    p = URI "ex:containsInformationAbout"
+    triples = graphToList g
+    [subjects, objects] = for [subject, object] $ \f -> map f triples
+    os = Set.toAscList $ foldr Set.delete (Set.fromList subjects) objects
 
 loadGraph :: FilePath -> IO Graph
 loadGraph fileName = do
@@ -561,12 +568,16 @@ handleAction action = do
             put $ newState g' path' "" focus
         "open"  -> confirmSave modified $ do 
             result <- liftIO $ openFile filepath
-            maybeDo result $ \(g',fp') ->
-                put $ newState g' (findStartPath g') fp' focus
+            maybeDo result $ \(g',fp') -> do
+                let ts = containsInfoTriples (URI $ "file://" ++ fp') g'
+                    g'' = foldr insertVirtual g' ts
+                put $ newState g'' (findStartPath g'') fp' focus
         "loadURI" -> case node of 
                          URI uri -> do 
                              g <- liftIO $ loadGraph uri
-                             let g' = mergeGraphs graph g
+                             let ts = containsInfoTriples (URI uri) g
+                                 g' = foldr insertVirtual 
+                                            (mergeGraphs graph g) ts
                                  s' = state {fsGraph=g',
                                              fsUndo=(graph,path):fsUndo state,
                                              fsRedo=[]}
@@ -574,7 +585,9 @@ handleAction action = do
                          _ -> unhandledEvent
         "revert" | filepath /= "" -> confirmRevert modified $ do
             g' <- liftIO $ loadGraph filepath
-            put $ newState g' (findStartPath g') filepath focus
+            let gNode = URI ("file://" ++ filepath)
+                g'' = foldr insertVirtual g' $ containsInfoTriples gNode g'
+            put $ newState g'' (findStartPath g'') filepath focus
         "save" | filepath /= "" -> do 
                      liftIO $ saveGraph graph filepath
                      modify $ \s -> s { fsGraphModified = False }
@@ -786,7 +799,10 @@ main = do
             fileName:fileNames <- mapM f xs
             g' <- loadGraph fileName
             gs <- mapM loadGraph fileNames
-            let graph = foldl mergeGraphs g' gs
+            let uris = map (URI . ("file://" ++)) fileNames
+                ts = concatMap (uncurry containsInfoTriples) $
+                     (URI $ "file://" ++ fileName, g') : zip uris gs
+                graph = foldr insertVirtual (foldl mergeGraphs g' gs) ts
             newIORef $ newState graph (findStartPath graph) fileName False
 
     -- start:
