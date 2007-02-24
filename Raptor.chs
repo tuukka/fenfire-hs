@@ -193,6 +193,13 @@ triplesToFilename triples namespaces filename = do
   {# call serialize_end #} serializer
   {# call free_serializer #} serializer
   {# call finish #}
+  
+filenameToURI :: String -> IO String
+filenameToURI filename = do
+  uri_str <- withCString filename uri_filename_to_uri_string
+  r <- peekCString uri_str
+  {# call free_memory #} (castPtr uri_str)
+  return r  
 
 -- | Parse a file with the given filename into triples
 --

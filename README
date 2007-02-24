@@ -32,7 +32,7 @@ Dependencies with known-to-work version numbers:
   alex   2.0.1  (A lexical analyser generator for Haskell)
 
 (Packages in Debian: ghc6 libghc6-gtk-dev libraptor1-dev c2hs libghc6-harp-dev 
- libghc6-haxml-dev happy alex)
+ libghc6-haxml-dev happy alex libghc6-network-dev)
 
 
 Running a precompiled binary only requires:

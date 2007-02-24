@@ -28,7 +28,7 @@ import RDF
 import Paths_fenfire (getDataFileName)
 
 import qualified Raptor (filenameToTriples, uriToTriples,
-                         triplesToFilename, Identifier(..))
+                         triplesToFilename, filenameToURI, Identifier(..))
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -41,6 +41,7 @@ import Data.Maybe (fromMaybe, fromJust, isJust, isNothing, catMaybes)
 import Data.Monoid(Monoid(mempty, mconcat), Dual(Dual), getDual)
 
 import Control.Applicative
+import qualified Control.Exception
 import Control.Monad (when, guard, mplus, msum, liftM, join)
 import Control.Monad.Reader (ReaderT, runReaderT, local, ask, asks)
 import Control.Monad.State (StateT, get, gets, modify, put, execStateT)
@@ -57,7 +58,8 @@ import Graphics.UI.Gtk hiding (Color, get, disconnect, fill,
                                styleGetText, styleGetBase, 
                                styleGetAntiAliasing)
 
-import qualified Control.Exception
+import qualified Network.URI
+
 import System.Directory (canonicalizePath)
 import System.Environment (getArgs, getProgName)
 import System.Mem.StableName
@@ -359,18 +361,18 @@ newGraph = do
     let graph = listToGraph [(home, rdfs_label, PlainLiteral "")]
     return (graph, Path home [])
     
-findStartPath :: (?vs :: ViewSettings) => Graph -> Path
-findStartPath g = let ?graph = g in result where
+findStartPath :: (?vs :: ViewSettings) => Node -> Graph -> Path
+findStartPath self g = let ?graph = g in result where
     result :: (?graph :: Graph) => Path
     result = head $ catMaybes $ startNode:topic:triples where
-    self = URI "ex:graph" -- ought to be what the empty URI <> is expanded to
 
-    startNode = fmap getRot $ getTriple self ffv_startNode
-    topic = fmap getRot $ getTriple self foaf_primaryTopic
+    startNode = fmap getRot' $ getTriple self ffv_startNode
+    topic = fmap getRot' $ getTriple self foaf_primaryTopic
     triples = map (Just . getRot) $ graphToList g
     
     getTriple s p = fmap (\o -> (s,p,o)) $ getOne g s p Pos
-    getRot (s,p,o) = Path s [Conn p Pos o]
+    getRot  (s,p,o) = Path s [Conn p Pos o]
+    getRot' (s,p,o) = Path o [Conn p Neg s]
     
     ffv_startNode = URI "http://fenfire.org/rdf-v/2003/05/ff#startNode"
     foaf_primaryTopic = URI "http://xmlns.com/foaf/0.1/primaryTopic"
@@ -392,15 +394,19 @@ loadGraph fileName = do
         f (Raptor.Blank s) = URI $ "blank:" ++ s
     (raptorTriples, namespaces) <- if Data.List.isPrefixOf "http:" fileName
         then Raptor.uriToTriples fileName Nothing
-        else Raptor.filenameToTriples fileName (Just "fakebase:/")
+        else Raptor.filenameToTriples fileName Nothing
     triples <- return $ map convert raptorTriples
     return $ foldr (uncurry addNamespace) (listToGraph triples) namespaces
 
 saveGraph :: Graph -> FilePath -> IO ()
 saveGraph graph fileName = do
     --writeFile fileName $ toNTriples $ reverse graph
+    uri <- liftM (fromJust . Network.URI.parseURI)
+                 (Raptor.filenameToURI fileName)
     let convert (s,p,o) = (f s, f p, f o)
-        f (URI s) = Raptor.Uri s
+        f (URI s) = Raptor.Uri $ fromMaybe s $ do
+                        u <- Network.URI.parseURI s
+                        return $ show $ Network.URI.relativeFrom u uri
         f (PlainLiteral s) = Raptor.Literal s
         triples = graphToList graph
         namespaces = Map.toAscList $ graphNamespaces graph
@@ -569,9 +575,10 @@ handleAction action = do
         "open"  -> confirmSave modified $ do 
             result <- liftIO $ openFile filepath
             maybeDo result $ \(g',fp') -> do
-                let ts = containsInfoTriples (URI $ "file://" ++ fp') g'
+                uri <- liftM URI $ liftIO $ Raptor.filenameToURI fp'
+                let ts = containsInfoTriples uri g'
                     g'' = foldr insertVirtual g' ts
-                put $ newState g'' (findStartPath g'') fp' focus
+                put $ newState g'' (findStartPath uri g'') fp' focus
         "loadURI" -> case node of 
                          URI uri -> do 
                              g <- liftIO $ loadGraph uri
@@ -585,9 +592,9 @@ handleAction action = do
                          _ -> unhandledEvent
         "revert" | filepath /= "" -> confirmRevert modified $ do
             g' <- liftIO $ loadGraph filepath
-            let gNode = URI ("file://" ++ filepath)
-                g'' = foldr insertVirtual g' $ containsInfoTriples gNode g'
-            put $ newState g'' (findStartPath g'') filepath focus
+            gNode <- liftM URI $ liftIO $ Raptor.filenameToURI filepath
+            let g'' = foldr insertVirtual g' $ containsInfoTriples gNode g'
+            put $ newState g'' (findStartPath gNode g'') filepath focus
         "save" | filepath /= "" -> do 
                      liftIO $ saveGraph graph filepath
                      modify $ \s -> s { fsGraphModified = False }
@@ -799,11 +806,12 @@ main = do
             fileName:fileNames <- mapM f xs
             g' <- loadGraph fileName
             gs <- mapM loadGraph fileNames
-            let uris = map (URI . ("file://" ++)) fileNames
-                ts = concatMap (uncurry containsInfoTriples) $
-                     (URI $ "file://" ++ fileName, g') : zip uris gs
+            uri <- Raptor.filenameToURI fileName
+            uris <- mapM Raptor.filenameToURI fileNames
+            let ts = concatMap (uncurry containsInfoTriples) $
+                         (URI uri, g') : zip (map URI uris) gs
                 graph = foldr insertVirtual (foldl mergeGraphs g' gs) ts
-            newIORef $ newState graph (findStartPath graph) fileName False
+            newIORef $ newState graph (findStartPath (URI uri) graph) fileName False
 
     -- start:
 
