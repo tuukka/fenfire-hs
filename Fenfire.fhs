@@ -57,6 +57,7 @@ import Graphics.UI.Gtk hiding (Color, get, disconnect, fill,
                                styleGetLight, styleGetMiddle, styleGetDark,
                                styleGetText, styleGetBase, 
                                styleGetAntiAliasing)
+import Graphics.UI.Gtk.ModelView as New
 
 import qualified Network.URI
 
@@ -752,7 +753,7 @@ makeMenus actionGroup root propmenu = addAll root menu where
                 return (castToMenuItem item)
 
 makeToolbarItems actionGroup toolbar = do
-    forM_ ["new", "open", "save", "", "undo", "redo"] $ \name -> 
+    forM_ ["new", "open", "save", "", "undo", "redo","","addprop"] $ \name -> 
         if name == "" then do 
             item <- separatorToolItemNew
             toolbarInsert toolbar item (-1)
@@ -838,7 +839,7 @@ makeWindow window canvasBgColor view stateRef = do
     textViewSetWrapMode textView WrapWordChar
 
     -- this needs to be called whenever the node or its text changes:
-    let stateChanged _ (FenState { fsPath=Path n _, fsGraph=g }) = do
+    let stateChanged _ state@(FenState { fsPath=Path n _, fsGraph=g }) = do
             buf <- textBufferNew Nothing
             textBufferSetText buf (let ?graph=g in maybe "" id $ getText n)
             afterBufferChanged buf $ do 
@@ -856,6 +857,14 @@ makeWindow window canvasBgColor view stateRef = do
 
             textViewSetBuffer textView buf
             updatePropMenu propmenu actionGroup stateRef updateCanvas
+            New.listStoreClear propList
+            forM_ (Set.toAscList $ fsProperties state) $ \prop -> 
+                let ?graph = g in 
+                        New.listStoreAppend propList (prop, getTextOrURI prop)
+            let activeIndex = Data.List.elemIndex (fsProperty state) 
+                                  (Set.toAscList $ fsProperties state)
+            maybe (return ()) (New.comboBoxSetActive combo) activeIndex
+
             updateActions actionGroup stateRef
 
     -- canvas for view:
@@ -921,6 +930,28 @@ makeWindow window canvasBgColor view stateRef = do
 
     toolbar <- toolbarNew
     makeToolbarItems actionGroup toolbar
+
+    propList <- New.listStoreNew []
+    combo <- New.comboBoxNew
+    set combo [ New.comboBoxModel := Just propList
+              , New.comboBoxFocusOnClick := False ]
+    renderer <- New.cellRendererTextNew
+    New.cellLayoutPackStart combo renderer True
+    New.cellLayoutSetAttributes combo renderer propList $ \row -> 
+        [ New.cellText := snd row ]
+    New.onChanged combo $ do 
+        active <- New.comboBoxGetActive combo 
+        case active of 
+            Nothing -> return ()
+            Just i -> do 
+                (prop,_name) <- listStoreGetValue propList i
+                state' <- readIORef stateRef
+                writeIORef stateRef $ state' {fsProperty=prop}
+                when (fsProperty state' /= prop) $ updateCanvas False
+
+    combotool <- toolItemNew
+    containerAdd combotool combo
+    toolbarInsert toolbar combotool (-1)
 
     -- layout:
 
