@@ -27,8 +27,9 @@ import Data.Maybe (fromMaybe, isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-data Node = URI String | PlainLiteral String    deriving (Eq, Ord)
-data Dir  = Pos | Neg                           deriving (Eq, Ord, Show)
+data Node = URI String | BNode String String | PlainLiteral String
+                          deriving (Eq, Ord)
+data Dir  = Pos | Neg     deriving (Eq, Ord, Show)
 
 instance Show Node where
     show = showNode defaultNamespaces
@@ -90,6 +91,7 @@ instance Reversible Path where
 instance Hashable Node where
     hash (URI s) = hash s
     hash (PlainLiteral s) = hash s
+    hash (BNode g s) = hash (g,s)
     
 instance Hashable Dir where
     hash Pos = 0
@@ -108,6 +110,7 @@ showNode ns (URI uri) = f (Map.toAscList ns) where
                          | otherwise = f xs
     f [] = "<" ++ uri ++ ">"
 showNode _  (PlainLiteral lit) = show lit
+showNode _  (BNode graph id') = "bnode[" ++ id' ++ " @ " ++ graph ++ "]"
 
 subject :: Triple -> Node
 subject (s,_,_) = s
@@ -181,10 +184,6 @@ addNamespace prefix uri g =
 triple :: Dir -> (Node,Node,Node) -> Triple
 triple Pos (s,p,o) = (s,p,o)
 triple Neg (o,p,s) = (s,p,o)
-
-fromNode :: Node -> String
-fromNode (URI uri)        = uri
-fromNode (PlainLiteral s) = s
 
 mul :: Num a => Dir -> a -> a
 mul Pos = id

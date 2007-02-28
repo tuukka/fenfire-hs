@@ -223,7 +223,7 @@ loadGraph fileName = do
     let convert (s,p,o) = (f s, f p, f o)
         f (Raptor.Uri s) = URI s
         f (Raptor.Literal s) = PlainLiteral s
-        f (Raptor.Blank s) = URI $ "blank:" ++ s
+        f (Raptor.Blank s) = BNode fileName s
     (raptorTriples, namespaces) <- if List.isPrefixOf "http:" fileName
         then Raptor.uriToTriples fileName Nothing
         else Raptor.filenameToTriples fileName Nothing
@@ -240,6 +240,8 @@ saveGraph graph fileName = do
                         u <- Network.URI.parseURI s
                         return $ show $ Network.URI.relativeFrom u uri
         f (PlainLiteral s) = Raptor.Literal s
+        f (BNode g s) = if g == fileName then Raptor.Blank s
+                        else error "XXX Cannot save bnode from different graph"
         triples = graphToList graph
         namespaces = Map.toAscList $ graphNamespaces graph
     Raptor.triplesToFilename (map convert triples) namespaces fileName
