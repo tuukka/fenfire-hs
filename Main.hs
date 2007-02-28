@@ -33,7 +33,7 @@ import Control.Monad
 import Control.Monad.State
 
 import Data.IORef
-import qualified Data.List
+import qualified Data.List as List
 import qualified Data.Set as Set
 
 import GtkFixes
@@ -92,7 +92,7 @@ saveFile graph fileName0 confirmSame = do
         _              -> return (fileName0, False)
         
 checkSuffix :: FilePath -> FilePath
-checkSuffix s | Data.List.isSuffixOf ".turtle" s = s
+checkSuffix s | List.isSuffixOf ".turtle" s = s
               | otherwise                        = s ++ ".turtle"
 
 confirmSave :: (?vs :: ViewSettings, ?pw :: Window,
@@ -418,7 +418,7 @@ main = do
             (g, rot) <- newGraph
             newIORef $ newState g rot "" False
         xs -> do
-            let f x | Data.List.isPrefixOf "http:" x = return x
+            let f x | List.isPrefixOf "http:" x = return x
                     | otherwise = canonicalizePath x
             fileName:fileNames <- mapM f xs
             g' <- loadGraph fileName
@@ -477,7 +477,7 @@ makeWindow window canvasBgColor view stateRef = do
             forM_ (Set.toAscList $ fsProperties state) $ \prop -> 
                 let ?graph = g in 
                         New.listStoreAppend propList (prop, getTextOrURI prop)
-            let activeIndex = Data.List.elemIndex (fsProperty state) 
+            let activeIndex = List.elemIndex (fsProperty state) 
                                   (Set.toAscList $ fsProperties state)
             maybe (return ()) (New.comboBoxSetActive combo) activeIndex
 

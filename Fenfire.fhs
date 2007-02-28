@@ -23,44 +23,22 @@ import qualified Cache
 import Cairo hiding (rotate, Path)
 import Vobs
 import Utils
+import qualified Raptor
 import RDF
-
-import qualified Raptor (filenameToTriples, uriToTriples,
-                         triplesToFilename, filenameToURI, Identifier(..))
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import qualified Data.Tree as Tree
-import Data.List (intersperse)
-import qualified Data.List
+import qualified Data.List as List
 import Data.Set (Set)
 import Data.IORef
 import Data.Maybe (fromMaybe, fromJust, isJust, isNothing, catMaybes)
-import Data.Monoid(Monoid(mempty, mconcat), Dual(Dual), getDual)
+import Data.Monoid(Monoid(mempty, mconcat))
 
 import Control.Applicative
-import qualified Control.Exception
 import Control.Monad (when, guard, mplus, msum, liftM, join)
-import Control.Monad.Reader (ReaderT, runReaderT, local, ask, asks)
-import Control.Monad.State (StateT, get, gets, modify, put, execStateT)
-import Control.Monad.Trans (lift, liftIO)
-import Control.Monad.Writer (Writer, execWriter, tell)
-
-import GtkFixes
-import Graphics.UI.Gtk hiding (Color, get, disconnect, fill,
--- GtkFixes overrides:
-                               actionNew,
-                               widgetGetStyle,
-                               styleGetForeground, styleGetBackground, 
-                               styleGetLight, styleGetMiddle, styleGetDark,
-                               styleGetText, styleGetBase, 
-                               styleGetAntiAliasing)
-import Graphics.UI.Gtk.ModelView as New
 
 import qualified Network.URI
 
-import System.Directory (canonicalizePath)
-import System.Environment (getArgs, getProgName)
 import System.Mem.StableName
 import System.Random (randomRIO)
 
@@ -84,7 +62,7 @@ data Rotation = Rotation Node Int         deriving (Eq, Show)
 fromPath :: (?vs :: ViewSettings, ?graph :: Graph) => Path -> Rotation
 fromPath path@(Path node (Conn _ dir _ : _)) = fromMaybe (Rotation node 0) $ do
     let c = conns node dir
-    i <- Data.List.elemIndex path c
+    i <- List.elemIndex path c
     return $ Rotation node (i - min (length c `div` 2) (maxCenter ?vs))
 fromPath (Path node []) = Rotation node 0
                      
@@ -105,7 +83,7 @@ conns :: (?vs :: ViewSettings, ?graph :: Graph) => Node -> Dir -> [Path]
 conns node dir = Cache.cached (Cache.byAddress ?graph, (node,dir))
                               connsCache result where
     result = map (\(prop, node') -> Path node [Conn prop dir node']) sorted
-    sorted = Data.List.sortBy cmp' list
+    sorted = List.sortBy cmp' list
     list = [(p,n) | (p,s) <- Map.toList $ getConns ?graph node dir,
                     not (p `elem` hiddenProps ?vs), n <- Set.toList s]
     cmp n1 n2 | p n1 && p n2 = compare (f n1) (f n2) where
@@ -155,7 +133,7 @@ presentationView state = let ?graph = fsGraph state in result where
     cursor = flip (maybe mempty) selected $ \n -> 
                  showAtKey n $ keyVob (PlainLiteral "CURSOR") $ rectBox mempty
     space = changeSize (const (0, 20)) mempty
-    vob = pad 30 $ vbox $ intersperse space $ f 3 node : map (f 2) children
+    vob = pad 30 $ vbox $ List.intersperse space $ f 3 node : map (f 2) children
 
 
 
@@ -260,7 +238,7 @@ loadGraph fileName = do
         f (Raptor.Uri s) = URI s
         f (Raptor.Literal s) = PlainLiteral s
         f (Raptor.Blank s) = URI $ "blank:" ++ s
-    (raptorTriples, namespaces) <- if Data.List.isPrefixOf "http:" fileName
+    (raptorTriples, namespaces) <- if List.isPrefixOf "http:" fileName
         then Raptor.uriToTriples fileName Nothing
         else Raptor.filenameToTriples fileName Nothing
     triples <- return $ map convert raptorTriples
