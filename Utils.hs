@@ -84,12 +84,6 @@ ffor = flip fmap
 for :: [a] -> (a -> b) -> [b]
 for = flip map
 
-forM :: Monad m => [a] -> (a -> m b) -> m [b]
-forM = flip mapM
-
-forM_ :: Monad m => [a] -> (a -> m b) -> m ()
-forM_ = flip mapM_
-
 forA2 :: Applicative f => f a -> f b -> (a -> b -> c) -> f c
 forA2 x y f = liftA2 f x y
 

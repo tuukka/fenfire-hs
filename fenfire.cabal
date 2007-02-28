@@ -16,11 +16,12 @@ Build-Depends:  base, HaXml, gtk, mtl, unix, cairo, harp, template-haskell,
 Data-Files:     data/logo.svg data/icon16.png
 
 Executable:     fenfire
-Main-Is:        Fenfire.hs
-Other-Modules:  Fenfire, Vobs, RDF, Cache, Cairo, Utils, Raptor, FunctorSugar, GtkFixes
+Main-Is:        Main.hs
+Other-Modules:  Fenfire, Vobs, RDF, Cache, Cairo, Utils, Raptor, FunctorSugar,
+                GtkFixes, VanishingView, Main
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations -main-is Fenfire.main
+                -fno-warn-orphans -fno-warn-deprecations -main-is Main.main
 Extra-Libraries: raptor
 
 Executable:     functortest
