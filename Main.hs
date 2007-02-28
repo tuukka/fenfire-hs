@@ -22,6 +22,7 @@ import Utils
 import Cairo hiding (Path, rotate)
 import Vobs
 import qualified Raptor
+import URN5
 import RDF
 import VanishingView
 import Fenfire
