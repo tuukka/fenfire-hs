@@ -169,15 +169,14 @@ handleAction :: (?vs :: ViewSettings, ?pw :: Window, ?views :: Views,
 handleAction action = do
     state@(FenState { fsGraph = graph, fsPath = path, fsMark = mark, 
                       fsFilePath = filepath, fsGraphModified = modified,
-                      fsHasFocus=focus, fsProperty=prop
+                      fsHasFocus=focus
                     }) <- get
     let ?graph = graph in do
     let rot@(Rotation node _) = fsRotation state
         b f x = maybeDo (f rot x) $ \rot' -> do 
                     putRotation rot'
                     modify $ \s -> s { fsGraphModified = modified }
-        n f x = do (graph', rot') <- liftIO (f x prop (graph, rot))
-                   putGraph graph'; putRotation rot'
+        n f x = do state' <- liftIO (f x state); put state'; setInterp True
         o f x = do put (f x state); setInterp True
     case action of
         "up"    -> b rotate (-1)    ; "down"  -> b rotate 1

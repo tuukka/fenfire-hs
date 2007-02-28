@@ -167,6 +167,11 @@ tryMove rot@(Rotation n r) dir = maybe rot' Just (move rot dir) where
     nearest | r > 0     = len-1 - min (len `div` 2) (maxCenter ?vs)
             | otherwise = 0 - min (len `div` 2) (maxCenter ?vs)
     len = (length $ conns n dir)
+    
+modifyGraph :: Graph -> Path -> Endo FenState
+modifyGraph graph' path' state = 
+    state { fsGraph=graph', fsPath=path', fsGraphModified=True,
+            fsUndo=(fsGraph state, fsPath state):fsUndo state, fsRedo=[]}
 
 type URIMaker = (String, IORef Integer)
 
@@ -182,12 +187,13 @@ newURI = do let (base, ref) = ?uriMaker
             return $ URI (base ++ ":_" ++ show i)
 
 newNode :: (?vs :: ViewSettings, ?uriMaker :: URIMaker) => 
-           Dir -> Node -> EndoM IO (Graph, Rotation)
-newNode dir prop (graph, Rotation node _) = do
+           Dir -> EndoM IO FenState
+newNode dir state@(FenState { fsGraph = graph, fsProperty = prop,
+                              fsPath = Path node _ }) = do
     node' <- newURI
-    let ?graph = insert (triple dir (node, prop, node'))
+    let graph' = insert (triple dir (node, prop, node'))
                $ insert (node', rdfs_label, PlainLiteral "") graph
-     in return (?graph, fromPath (Path node' [Conn prop (rev dir) node]))
+     in return $ modifyGraph graph' (Path node' [Conn prop (rev dir) node]) state
     
 connect :: (?vs :: ViewSettings) => Dir -> Endo FenState
 connect _ state | Set.null (fsMark state) = state
@@ -195,10 +201,7 @@ connect dir state =
     let nodes = Set.toList (fsMark state); prop = fsProperty state in
     let ?graph = foldr (\n -> insert $ triple dir (fsNode state, prop, n))
                        (fsGraph state) nodes in
-    state { fsPath = (Path (fsNode state) [Conn prop dir (head nodes)]),
-            fsGraph = ?graph, fsMark = Set.empty, fsGraphModified = True,
-            fsUndo = (fsGraph state, fsPath state):fsUndo state,
-            fsRedo = [] }
+    modifyGraph ?graph (Path (fsNode state) [Conn prop dir (head nodes)]) state
 
 disconnect :: (?vs :: ViewSettings) => Dir -> Endo FenState
 disconnect dir state = let ?graph = fsGraph state in
@@ -211,9 +214,7 @@ disconnect dir state = let ?graph = fsGraph state in
                               xdir <- [Neg,Pos], ydir <- [-1,1]]
                 triples = pathToTriples path
                 graph' = foldr delete (fsGraph state) triples
-             in state { fsGraph=graph', fsPath=path', fsGraphModified=True,
-                        fsUndo=(fsGraph state, fsPath state):fsUndo state,
-                        fsRedo=[]}
+             in modifyGraph graph' path' state
 
 
 type Mark = Set Node
