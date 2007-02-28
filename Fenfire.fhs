@@ -151,13 +151,12 @@ vanishingView :: (?vs :: ViewSettings) => Int -> Int -> Color -> Color ->
 vanishingView depth maxnodes bgColor blurBgColor focusColor blurColor 
               textColor blurTextColor
               state@(FenState {fsGraph=graph, fsPath=path, fsMark=mark,
-                               fsHasFocus=focus, fsProperty=property}) =
+                               fsHasFocus=focus}) =
     let ?graph = graph in result where
     startRotation :: (?graph :: Graph) => Rotation
     startRotation = fsRotation state
     result :: (?graph :: Graph) => Vob Node
-    result = currentProp & runVanishing depth maxnodes view where
-    currentProp = ownSize $ rectBox $ pad 5 $ nodeView property
+    result = runVanishing depth maxnodes view where
     -- place the center of the view and all subtrees in both directions
     view = do placeNode (if focus then Just (bgColor, focusColor, textColor) 
                              else Just (blurBgColor, blurColor, blurTextColor))
@@ -753,7 +752,7 @@ makeMenus actionGroup root propmenu = addAll root menu where
                 return (castToMenuItem item)
 
 makeToolbarItems actionGroup toolbar = do
-    forM_ ["new", "open", "save", "", "undo", "redo","","addprop"] $ \name -> 
+    forM_ ["new", "open", "save", "", "undo", "redo",""] $ \name -> 
         if name == "" then do 
             item <- separatorToolItemNew
             toolbarInsert toolbar item (-1)
@@ -948,10 +947,26 @@ makeWindow window canvasBgColor view stateRef = do
                 state' <- readIORef stateRef
                 writeIORef stateRef $ state' {fsProperty=prop}
                 when (fsProperty state' /= prop) $ updateCanvas False
+                
+    comboLabel <- labelNew (Just "Property:  ")
+                
+    comboVBox <- hBoxNew False 0
+    boxPackStart comboVBox comboLabel PackNatural 0
+    boxPackStart comboVBox combo PackNatural 0
+
+    comboAlign <- alignmentNew 0.5 0.5 1 0
+    containerAdd comboAlign comboVBox
 
     combotool <- toolItemNew
-    containerAdd combotool combo
+    containerAdd combotool comboAlign
     toolbarInsert toolbar combotool (-1)
+
+    sepItem <- separatorToolItemNew
+    toolbarInsert toolbar sepItem (-1)
+    
+    Just addpropAction <- actionGroupGetAction actionGroup "addprop"
+    addpropItem <- actionCreateToolItem addpropAction
+    toolbarInsert toolbar (castToToolItem addpropItem) (-1)
 
     -- layout:
 
