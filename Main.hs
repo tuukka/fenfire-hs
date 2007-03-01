@@ -379,6 +379,7 @@ makeToolbarItems actionGroup toolbar = do
             item <- actionCreateToolItem action
             toolbarInsert toolbar (castToToolItem item) (-1)
 
+handleException :: Control.Exception.Exception -> IO ()
 handleException e = do
     dialog <- makeMessageDialog "Exception in event" (show e)
     dialogRun dialog
@@ -696,6 +697,7 @@ makeMessageDialog primary secondary = do
                   escapeMarkup primary++"</span>\n\n"++escapeMarkup secondary
     set label' [ labelUseMarkup := True
                , labelWrap := True
+               , labelSelectable := True
                , miscYalign := 0.0
                ]
     hBox <- hBoxNew False 0
