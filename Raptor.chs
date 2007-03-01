@@ -211,6 +211,7 @@ filenameToTriples filename baseURI = do
       parsertype = case suffix of "turtle" -> "turtle"
                                   "ttl"    -> "turtle"
                                   "rdf"    -> "rdfxml"
+                                  "rdfxml" -> "rdfxml"
                                   "nt"     -> "ntriples"
                                   _        -> "ntriples"
 
