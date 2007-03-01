@@ -13,7 +13,7 @@ TRHSX?=trhsx
 PREPROCESSED=$(patsubst %.fhs,%.hs,$(wildcard *.fhs)) \
              $(patsubst %.chs,%.hs,$(wildcard *.chs))
 SOURCES=*.hs *.chs *.fhs $(PREPROCESSED)
-TARGETS=functortest vobtest fenfire darcs2rdf
+TARGETS=functortest vobtest fenfire darcs2rdf irc2rdf
 
 all: build
 
@@ -29,13 +29,14 @@ non-profilable:
 	rm -f $(TARGETS)
 	$(MAKE) all
 
-functortest vobtest fenfire darcs2rdf: build
+functortest vobtest fenfire darcs2rdf irc2rdf: build
 
 run-functortest: functortest
 run-vobtest: vobtest
 run-fenfire: ARGS=test.nt
 run-fenfire: fenfire
 run-darcs2rdf: darcs2rdf
+run-irc2rdf: irc2rdf
 run-%: %
 	./dist/build/$</$< $(ARGS)
 

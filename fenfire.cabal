@@ -53,3 +53,11 @@ GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations 
                 -main-is Darcs2RDF.main
+
+Executable:     irc2rdf
+Main-Is:        Irc2RDF.hs
+Other-Modules:  Irc2RDF
+GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
+                -fno-warn-unused-imports -fno-warn-missing-signatures
+                -fno-warn-orphans -fno-warn-deprecations 
+                -main-is Irc2RDF.main
