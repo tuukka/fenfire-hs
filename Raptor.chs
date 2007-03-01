@@ -23,7 +23,7 @@ module Raptor where
 import Foreign (Ptr, FunPtr, Storable(pokeByteOff, peekByteOff), allocaBytes,
                 nullPtr, castPtr, freeHaskellFunPtr)
 import Foreign.C (CString, castCharToCChar, CFile,
-                  CSize, CInt, CUChar, CChar)
+                  CSize, CInt, CUInt, CUChar, CChar)
 
 import System.Posix.IO (stdOutput)
 import System.Posix.Types (Fd)
@@ -66,7 +66,15 @@ unStatement (Statement ptr) = ptr
 unNamespace :: Namespace -> Ptr Namespace
 unNamespace (Namespace ptr) = ptr
 
+{#pointer *raptor_locator as Locator newtype#}
+
+unLocator :: Locator -> Ptr Locator
+unLocator (Locator ptr) = ptr
+
 {#pointer *parser as Parser newtype#}
+
+unParser :: Parser -> Ptr Parser
+unParser (Parser ptr) = ptr
 
 {#pointer *serializer as Serializer newtype#}
 
@@ -144,21 +152,20 @@ withObject = withIdentifier {# set statement->object #}
 
 type StatementHandler a = Ptr a -> Statement -> IO ()
 foreign import ccall "wrapper"
-   mkHandler :: (StatementHandler a) -> IO (FunPtr (StatementHandler a))
+   mkStatementHandler :: (StatementHandler a) -> IO (FunPtr (StatementHandler a))
 
 type NamespaceHandler a = Ptr a -> Namespace -> IO ()
 foreign import ccall "wrapper"
    mkNamespaceHandler :: (NamespaceHandler a) -> IO (FunPtr (NamespaceHandler a))
 
+type MessageHandler a = Ptr a -> Locator -> CString -> IO ()
+foreign import ccall "wrapper"
+   mkMessageHandler :: (MessageHandler a) -> IO (FunPtr (MessageHandler a))
+
 foreign import ccall "raptor.h raptor_init" initRaptor :: IO ()
-foreign import ccall "raptor.h raptor_new_parser" new_parser :: Ptr CChar -> IO (Ptr Parser)
-foreign import ccall "raptor.h raptor_set_statement_handler" set_statement_handler :: Ptr Parser -> Ptr a -> FunPtr (StatementHandler a) -> IO () 
-foreign import ccall "raptor.h raptor_set_namespace_handler" set_namespace_handler :: Ptr Parser -> Ptr a -> FunPtr (NamespaceHandler a) -> IO () 
 foreign import ccall "raptor.h raptor_uri_filename_to_uri_string" uri_filename_to_uri_string :: CString -> IO CString
 foreign import ccall "raptor.h raptor_new_uri" new_uri :: Ptr CChar -> IO (Ptr URI)
 foreign import ccall "raptor.h raptor_uri_copy" uri_copy :: Ptr URI -> IO (Ptr URI)
-foreign import ccall "raptor.h raptor_parse_file" parse_file :: Ptr Parser -> Ptr URI -> Ptr URI -> IO ()
-foreign import ccall "raptor.h raptor_parse_uri" parse_uri :: Ptr Parser -> Ptr URI -> Ptr URI -> IO ()
 
 foreign import ccall "raptor.h raptor_print_statement_as_ntriples" print_statement_as_ntriples :: Statement -> Ptr CFile -> IO ()
 
@@ -221,7 +228,7 @@ filenameToTriples filename baseURI = do
   uri <- new_uri uri_str
   base_uri <- maybe (uri_copy uri) (\s -> withUTFString s new_uri) baseURI
 
-  result <- parse parse_file parsertype uri base_uri
+  result <- parse {# call parse_file #} parsertype uri base_uri
 
   {# call free_uri #} uri
   {# call free_uri #} base_uri
@@ -237,7 +244,7 @@ uriToTriples uri baseURI = do
   uri' <- withUTFString uri new_uri
   base_uri <- maybe (uri_copy uri') (\s -> withUTFString s new_uri) baseURI
     
-  result <- parse parse_uri "guess" uri' base_uri
+  result <- parse {# call parse_uri #} "guess" uri' base_uri
 
   {# call free_uri #} uri'
   {# call free_uri #} base_uri
@@ -245,15 +252,16 @@ uriToTriples uri baseURI = do
   {# call finish #}
   return result
 
-parse :: (Ptr Parser -> Ptr URI -> Ptr URI -> IO ()) -> String ->
+parse :: (Parser -> Ptr URI -> Ptr URI -> IO CInt) -> String ->
          Ptr URI -> Ptr URI -> IO ([Triple], [(String, String)])
 parse fn parsertype uri base_uri = do
   triples <- newIORef []
   namespaces <- newIORef []
 
-  rdf_parser <- withUTFString parsertype new_parser 
-  when (rdf_parser == nullPtr) $ fail "parser is null"
-  handler <- mkHandler $ \_user_data triple -> do
+  rdf_parser <- withUTFString parsertype {# call new_parser #}
+  when (unParser rdf_parser == nullPtr) $ fail "parser is null"
+
+  stHandler <- mkStatementHandler $ \_user_data triple -> do
     s <- getSubject triple
     p <- getPredicate triple
     o <- getObject triple
@@ -263,12 +271,32 @@ parse fn parsertype uri base_uri = do
     (prefix, uri') <- getNamespace ns
     modifyIORef namespaces ((prefix, uri'):)
 
-  set_statement_handler rdf_parser nullPtr handler
-  set_namespace_handler rdf_parser nullPtr nsHandler
+  let msgHandler intro = mkMessageHandler $ \_user_data locator msg -> do
+        size <- {# call format_locator #} nullPtr 0 locator
+        when (size > 0) $ allocaBytes (cIntConv size) $ \ptr -> do
+          size' <- {# call format_locator #} ptr (cIntConv size) locator
+          when (size' == 0) $ peekUTFString ptr >>= putStr
+        putStr intro
+        peekUTFString msg >>= putStrLn
+
+  fatalHandler   <- msgHandler " parser fatal error - "
+  errorHandler   <- msgHandler " parser error - "
+  warningHandler <- msgHandler " parser warning - "
+
+  {# call set_statement_handler #} rdf_parser nullPtr stHandler
+  {# call set_namespace_handler #} rdf_parser nullPtr nsHandler
+  {# call set_fatal_error_handler #} rdf_parser nullPtr fatalHandler
+  {# call set_error_handler #} rdf_parser nullPtr errorHandler
+  {# call set_warning_handler #} rdf_parser nullPtr warningHandler
+
   fn rdf_parser uri base_uri
 
-  {# call free_parser #} (Parser rdf_parser)
-  freeHaskellFunPtr handler
+  {# call free_parser #} rdf_parser
+  freeHaskellFunPtr stHandler
+  freeHaskellFunPtr nsHandler
+  freeHaskellFunPtr fatalHandler
+  freeHaskellFunPtr errorHandler
+  freeHaskellFunPtr warningHandler
   
   t <- readIORef triples; n <- readIORef namespaces
   return (t, n)
@@ -285,10 +313,10 @@ filenameToStdout filename = do
   outfile <- withUTFString "w" $ fdopen stdOutput
 
   initRaptor
-  rdf_parser <- withUTFString "guess" new_parser 
-  when (rdf_parser == nullPtr) $ fail "parser is null"
-  mkHandler (print_triple outfile) >>= set_statement_handler rdf_parser nullPtr
+  rdf_parser <- withUTFString "guess" {# call new_parser #}
+  when (unParser rdf_parser == nullPtr) $ fail "parser is null"
+  mkStatementHandler (print_triple outfile) >>= {# call set_statement_handler #} rdf_parser nullPtr
   uri <- withUTFString filename uri_filename_to_uri_string >>= new_uri
   base_uri <- uri_copy uri
-  parse_file rdf_parser uri base_uri
+  {# call parse_file #} rdf_parser uri base_uri
   return ()
