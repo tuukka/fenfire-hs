@@ -22,7 +22,7 @@ module Raptor where
 
 import Foreign (Ptr, FunPtr, Storable(pokeByteOff, peekByteOff), allocaBytes,
                 nullPtr, castPtr, freeHaskellFunPtr)
-import Foreign.C (CString, castCharToCChar, withCString, peekCString, CFile,
+import Foreign.C (CString, castCharToCChar, CFile,
                   CSize, CInt, CUChar, CChar)
 
 import System.Posix.IO (stdOutput)
@@ -32,6 +32,8 @@ import System.Environment (getArgs)
 import Control.Monad (when)
 import Data.IORef (IORef, modifyIORef, readIORef, newIORef)
 import Control.Exception (bracket)
+
+import System.Glib.UTFString (withUTFString, peekUTFString)
 
 #include <raptor.h>
 
@@ -83,11 +85,11 @@ mkIdentifier value format = do
   f (castPtr value') (cToEnum format')
     where f v IDENTIFIER_TYPE_RESOURCE = do
                               cstr <- {#call uri_as_string#} (castPtr v) 
-                              str <- peekCString (castPtr cstr) 
+                              str <- peekUTFString (castPtr cstr) 
                               return $ Uri str
           f v IDENTIFIER_TYPE_PREDICATE = f v IDENTIFIER_TYPE_RESOURCE
-          f v IDENTIFIER_TYPE_LITERAL = peekCString v >>= return . Literal
-          f v IDENTIFIER_TYPE_ANONYMOUS = peekCString v >>= return . Blank
+          f v IDENTIFIER_TYPE_LITERAL = peekUTFString v >>= return . Literal
+          f v IDENTIFIER_TYPE_ANONYMOUS = peekUTFString v >>= return . Blank
           f _ i = error $ "Raptor.mkIdentifier: Deprecated type: " ++ show i
 
 getSubject :: Statement -> IO Identifier
@@ -105,14 +107,14 @@ getObject (Statement s) = mkIdentifier ({#get statement->object#} s)
 getNamespace :: Namespace -> IO (String, String)
 getNamespace ns = do
     prefixC <- {#call raptor_namespace_get_prefix#} ns
-    prefixS <- peekCString (castPtr prefixC)
+    prefixS <- peekUTFString (castPtr prefixC)
     uri <- {#call raptor_namespace_get_uri#} ns
     uriC <- {#call uri_as_string#} (castPtr uri)
-    uriS <- peekCString (castPtr uriC)
+    uriS <- peekUTFString (castPtr uriC)
     return (prefixS, uriS)
 
 withURI :: String -> (Ptr URI -> IO a) -> IO a
-withURI string = bracket (withCString string $ {# call new_uri #} . castPtr)
+withURI string = bracket (withUTFString string $ {# call new_uri #} . castPtr)
                          {# call free_uri #}
 
 withIdentifier :: (Ptr Statement -> Ptr () -> IO ()) ->
@@ -125,7 +127,7 @@ withIdentifier setValue setFormat (Statement t) (Uri s) io = do
         io
 withIdentifier setValue setFormat (Statement t) (Literal s) io = do
     setFormat t (cFromEnum IDENTIFIER_TYPE_LITERAL)
-    withCString s $ \str -> do
+    withUTFString s $ \str -> do
         setValue t (castPtr str)
         io
 withIdentifier _ _ _ i _ =
@@ -172,13 +174,13 @@ triplesToFilename :: [Triple] -> [(String, String)] -> String -> IO ()
 triplesToFilename triples namespaces filename = do 
   initRaptor
 
-  serializer <- withCString "turtle" {# call new_serializer #}
+  serializer <- withUTFString "turtle" {# call new_serializer #}
   when (unSerializer serializer == nullPtr) $ fail "serializer is null"
   
-  withCString filename $ {# call serialize_start_to_filename #} serializer
+  withUTFString filename $ {# call serialize_start_to_filename #} serializer
   
   flip mapM_ namespaces $ \(prefixS, uriS) -> do
-      withCString prefixS $ \prefixC -> withCString uriS $ \uriC -> do
+      withUTFString prefixS $ \prefixC -> withUTFString uriS $ \uriC -> do
           uri <- new_uri uriC
           {# call raptor_serialize_set_namespace #} serializer uri $ castPtr prefixC
           {# call free_uri #} uri
@@ -196,8 +198,8 @@ triplesToFilename triples namespaces filename = do
   
 filenameToURI :: String -> IO String
 filenameToURI filename = do
-  uri_str <- withCString filename uri_filename_to_uri_string
-  r <- peekCString uri_str
+  uri_str <- withUTFString filename uri_filename_to_uri_string
+  r <- peekUTFString uri_str
   {# call free_memory #} (castPtr uri_str)
   return r  
 
@@ -214,9 +216,9 @@ filenameToTriples filename baseURI = do
 
   initRaptor
 
-  uri_str <- withCString filename uri_filename_to_uri_string
+  uri_str <- withUTFString filename uri_filename_to_uri_string
   uri <- new_uri uri_str
-  base_uri <- maybe (uri_copy uri) (\s -> withCString s new_uri) baseURI
+  base_uri <- maybe (uri_copy uri) (\s -> withUTFString s new_uri) baseURI
 
   result <- parse parse_file parsertype uri base_uri
 
@@ -231,8 +233,8 @@ uriToTriples :: String -> Maybe String -> IO ([Triple], [(String, String)])
 uriToTriples uri baseURI = do
   initRaptor
 
-  uri' <- withCString uri new_uri
-  base_uri <- maybe (uri_copy uri') (\s -> withCString s new_uri) baseURI
+  uri' <- withUTFString uri new_uri
+  base_uri <- maybe (uri_copy uri') (\s -> withUTFString s new_uri) baseURI
     
   result <- parse parse_uri "guess" uri' base_uri
 
@@ -248,7 +250,7 @@ parse fn parsertype uri base_uri = do
   triples <- newIORef []
   namespaces <- newIORef []
 
-  rdf_parser <- withCString parsertype new_parser 
+  rdf_parser <- withUTFString parsertype new_parser 
   when (rdf_parser == nullPtr) $ fail "parser is null"
   handler <- mkHandler $ \_user_data triple -> do
     s <- getSubject triple
@@ -279,13 +281,13 @@ print_triple outfile _user_data s = do print_statement_as_ntriples s outfile
 
 filenameToStdout :: String -> IO ()
 filenameToStdout filename = do
-  outfile <- withCString "w" $ fdopen stdOutput
+  outfile <- withUTFString "w" $ fdopen stdOutput
 
   initRaptor
-  rdf_parser <- withCString "guess" new_parser 
+  rdf_parser <- withUTFString "guess" new_parser 
   when (rdf_parser == nullPtr) $ fail "parser is null"
   mkHandler (print_triple outfile) >>= set_statement_handler rdf_parser nullPtr
-  uri <- withCString filename uri_filename_to_uri_string >>= new_uri
+  uri <- withUTFString filename uri_filename_to_uri_string >>= new_uri
   base_uri <- uri_copy uri
   parse_file rdf_parser uri base_uri
   return ()
