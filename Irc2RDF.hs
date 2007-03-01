@@ -42,16 +42,25 @@ parse' acc   (x:xs) = parse' (x:acc) xs
 
 triples root (time,offset) (Just prefix) ["PRIVMSG","#fenfire",msg] =
     "<irc://freenode/%23fenfire> <"++isContainerOf++"> <"++uri++">.\n"++
-    "<"++uri++"> <"++created++"> "++show (day++"T"++second++"Z")++".\n"++
+    "<irc://freenode/%23fenfire> <"++rdftype++"> <"++forum++">.\n"++
+    "<"++uri++"> <"++created++"> "++
+        show (day++"T"++second++"Z")++"^^<"++date++">.\n"++
     "<"++uri++"> <"++hasCreator++"> <"++creator++">.\n"++
     "<"++uri++"> <"++hasContent++"> "++show msg++".\n"++
     "<"++uri++"> <"++label++"> "++show ("<"++nick++"> "++msg)++".\n"++
-    "<"++creator++"> <"++label++"> "++show nick++".\n"
+    "<"++uri++"> <"++rdftype++"> <"++post++">.\n"++
+    "<"++creator++"> <"++label++"> "++show nick++".\n"++
+    "<"++creator++"> <"++rdftype++"> <"++user++">.\n"
     where label = "http://www.w3.org/2000/01/rdf-schema#label"
+          rdftype = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
           created = "http://purl.org/dc/terms/created"
           isContainerOf = "http://rdfs.org/sioc/ns#is_container_of"
           hasCreator = "http://rdfs.org/sioc/ns#has_creator"
           hasContent = "http://rdfs.org/sioc/ns#has_content"
+          date = "http://www.w3.org/2001/XMLSchema#date"
+          forum = "http://rdfs.org/sioc/ns#Forum"
+          post = "http://rdfs.org/sioc/ns#Post"
+          user = "http://rdfs.org/sioc/ns#User"
           uri = root ++ day ++ "#" ++ second ++ maybe "" (('.':) . show) offset
           nick = takeWhile (/='!') prefix
           creator = "irc://freenode/"++nick++",isuser"
