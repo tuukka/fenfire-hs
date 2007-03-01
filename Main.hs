@@ -34,8 +34,10 @@ import Control.Monad
 import Control.Monad.State
 
 import Data.IORef
+import Data.Maybe (fromJust)
 import qualified Data.List as List
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 
 import GtkFixes
 import Graphics.UI.Gtk hiding (Color, get, disconnect, fill,
@@ -52,6 +54,18 @@ import qualified Network.URI
 
 import System.Directory (canonicalizePath)
 import System.Environment (getArgs, getProgName)
+
+interpretNode :: (?graph :: Graph) => String -> Node
+interpretNode str | "<" `List.isPrefixOf` str && ">" `List.isSuffixOf` str = 
+                        URI $ tail $ init str
+                  | isQname
+                  , Just base <- Map.lookup ns (graphNamespaces ?graph) = 
+                        URI $ base ++ local
+                  | isQname = error $ "No such namespace: \""++ns++"\""
+                  | otherwise = URI str
+    where local = drop 1 $ dropWhile (/= ':') str
+          ns = takeWhile (/= ':') str
+          isQname = ns /= "" && (not $ any (`elem` local) [':', '/', '@'])
 
 openFile :: (?vs :: ViewSettings) => FilePath -> 
             IO (Maybe (Graph, FilePath))
@@ -226,19 +240,22 @@ handleAction action = do
         "chgview" -> do put $ state { fsView = (fsView state + 1) `mod` 
                                                (length ?views) }
                         setInterp True
-        "addprop" -> do let uri = case node of URI x -> x
+        "addprop" -> do let uri = case node of URI _ -> showNode 
+                                                   (graphNamespaces graph) node
                                                _     -> ""
                         confirmString "Add property" uri $ \uri' ->
                             when (uri' /= "") $ do
-                                let prop' = URI uri'
+                                let prop' = interpretNode uri'
                                     props = fsProperties state
                                 put $ state { fsProperty = prop',
                                     fsProperties = Set.insert prop' props }
         "resetprop" -> when (fsProperty state /= rdfs_seeAlso) $
                            put $ state { fsProperty = rdfs_seeAlso }
         "changeURI" -> case node of
-                           URI uri -> confirmString "New URI" uri $ \uri' ->
-                              put $ stateReplaceNode (URI uri) (URI uri') state
+                           URI _ -> confirmString "New URI" (showNode 
+                               (graphNamespaces graph) node) $ \uri' ->
+                                   put $ stateReplaceNode node
+                                       (interpretNode uri') state
                            _       -> unhandledEvent
         "undo" | (graph',path'):undos <- fsUndo state -> do
                    put state {fsGraph=graph', fsPath=path', 
