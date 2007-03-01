@@ -327,10 +327,12 @@ noAnim scene = const (scene, False)
     
 
 vobCanvas :: Ord b => IORef a -> View a b -> Handler Event a -> 
-                      Handler c a -> (a -> a -> IO ()) -> Color -> TimeDiff ->
+                      Handler c a -> (a -> a -> IO ()) -> 
+                      (Control.Exception.Exception -> IO ()) -> 
+                      Color -> TimeDiff ->
                       IO (DrawingArea, Bool -> IO (), c -> IO Bool)
 vobCanvas stateRef view eventHandler actionHandler stateChanged 
-          bgColor animTime = do
+          handleException bgColor animTime = do
     canvas <- drawingAreaNew
     
     widgetSetCanFocus canvas True
@@ -380,6 +382,8 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
                     putStr ("Exception in event: ") >> print e
                     writeIORef stateRef state
                     stateChanged state state -- XXX how to write this?
+
+                    handleException e
                     return True )
 
         handleEvent = handle eventHandler

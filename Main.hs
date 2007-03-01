@@ -379,6 +379,11 @@ makeToolbarItems actionGroup toolbar = do
             item <- actionCreateToolItem action
             toolbarInsert toolbar (castToToolItem item) (-1)
 
+handleException e = do
+    dialog <- makeMessageDialog "Exception in event" (show e)
+    dialogRun dialog
+    widgetHide dialog
+
 
 main :: IO ()
 main = do
@@ -488,7 +493,7 @@ makeWindow window canvasBgColor view stateRef = do
     
     (canvas, updateCanvas, canvasAction) <- 
         vobCanvas stateRef view handleEvent handleAction
-                  stateChanged (fromGtkColor canvasBgColor) 0.5
+                  stateChanged handleException (fromGtkColor canvasBgColor) 0.5
 
     onFocusIn canvas $ \_event -> do 
         modifyIORef stateRef $ \s -> s { fsHasFocus = True }
@@ -677,3 +682,33 @@ makeConfirmRevertDialog = do
         [(stockCancel, ResponseCancel),
          (stockRevertToSaved,ResponseClose)]
         ResponseCancel
+
+makeMessageDialog primary secondary = do
+    dialog <- dialogNew
+    set dialog [ windowTitle := primary
+               , windowModal := True
+               , containerBorderWidth := 6
+               , dialogHasSeparator := False
+               ]
+    image <- imageNewFromStock stockDialogError iconSizeDialog
+    set image [ miscYalign := 0.0 ]
+    label' <- labelNew $ Just $ "<span weight=\"bold\" size=\"larger\">"++
+                  escapeMarkup primary++"</span>\n\n"++escapeMarkup secondary
+    set label' [ labelUseMarkup := True
+               , labelWrap := True
+               , miscYalign := 0.0
+               ]
+    hBox <- hBoxNew False 0
+    set hBox [ boxSpacing := 12
+             , containerBorderWidth := 6
+             ]
+    boxPackStart hBox image PackNatural 0
+    boxPackStart hBox label' PackNatural 0
+
+    vBox <- dialogGetUpper dialog
+    set vBox [ boxSpacing := 12 ]
+    boxPackStart vBox hBox PackNatural 0
+
+    dialogAddButton dialog stockOk ResponseAccept
+    widgetShowAll hBox
+    return dialog
