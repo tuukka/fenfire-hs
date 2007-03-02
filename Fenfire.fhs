@@ -166,6 +166,7 @@ connect dir state =
     let ?graph = foldr (\n -> insert $ triple dir (fsNode state, prop, n))
                        (fsGraph state) nodes in
     modifyGraph ?graph (Path (fsNode state) [Conn prop dir (head nodes)]) state
+        { fsMark = Set.empty }
 
 disconnect :: (?vs :: ViewSettings) => Dir -> Endo FenState
 disconnect dir state = let ?graph = fsGraph state in
