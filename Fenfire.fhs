@@ -76,7 +76,8 @@ toPath' rot@(Rotation node _) =
 connsCache :: Cache.Cache (StableName Graph, (Node, Dir)) [Path]
 connsCache = Cache.newCache 10000
 
-dc_date = URI "dc:date"
+dc_date = URI "http://purl.org/dc/elements/1.1/date"
+dcterms_created = URI "http://purl.org/dc/terms/created"
 
 conns :: (?vs :: ViewSettings, ?graph :: Graph) => Node -> Dir -> [Path]
 conns node dir = Cache.cached (Cache.byAddress ?graph, (node,dir))
@@ -85,8 +86,10 @@ conns node dir = Cache.cached (Cache.byAddress ?graph, (node,dir))
     sorted = List.sortBy cmp' list
     list = [(p,n) | (p,s) <- Map.toList $ getConns ?graph node dir,
                     not (p `elem` hiddenProps ?vs), n <- Set.toList s]
-    cmp n1 n2 | p n1 && p n2 = compare (f n1) (f n2) where
-        p n = hasConn ?graph n dc_date Pos; f n = getOne ?graph n dc_date Pos
+    cmp n1 n2 | d1 <- f n1, d2 <- f n2 = compare d1 d2 where
+        f n = msum [g dc_date n, g dcterms_created n]
+        g prop n = if hasConn ?graph n prop Pos 
+                       then Just $ getOne ?graph n prop Pos else Nothing
     cmp n1 n2 = compare (getText n1) (getText n2)
     cmp' (p1,n1) (p2,n2) = catOrds (cmp p1 p2) (cmp n1 n2)
     catOrds EQ o = o; catOrds o _ = o
