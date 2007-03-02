@@ -18,7 +18,10 @@ TARGETS=functortest vobtest fenfire darcs2rdf irc2rdf
 all: build
 
 build:
-	runghc Setup.hs build
+	runhaskell Setup.hs build
+
+install: 
+	runhaskell Setup.hs install
 
 profilable:
 	rm -f $(TARGETS)
