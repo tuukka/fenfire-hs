@@ -86,7 +86,7 @@ conns node dir = Cache.cached (Cache.byAddress ?graph, (node,dir))
     sorted = List.sortBy cmp' list
     list = [(p,n) | (p,s) <- Map.toList $ getConns ?graph node dir,
                     not (p `elem` hiddenProps ?vs), n <- Set.toList s]
-    cmp n1 n2 | d1 <- f n1, d2 <- f n2 = compare d1 d2 where
+    cmp n1 n2 | Just d1 <- f n1, Just d2 <- f n2 = compare d1 d2 where
         f n = msum [g dc_date n, g dcterms_created n]
         g prop n = if hasConn ?graph n prop Pos 
                        then Just $ getOne ?graph n prop Pos else Nothing
