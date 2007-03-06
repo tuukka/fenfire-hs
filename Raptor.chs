@@ -112,13 +112,16 @@ getObject :: Statement -> IO Identifier
 getObject (Statement s) = mkIdentifier ({#get statement->object#} s)
                                        ({#get statement->object_type#} s)
                                        
-getNamespace :: Namespace -> IO (String, String)
+getNamespace :: Namespace -> IO (Maybe String, Maybe String)
 getNamespace ns = do
     prefixC <- {#call raptor_namespace_get_prefix#} ns
-    prefixS <- peekUTFString (castPtr prefixC)
+    prefixS <- if prefixC == nullPtr
+                   then return Nothing
+                   else fmap Just $ peekUTFString (castPtr prefixC)
     uri <- {#call raptor_namespace_get_uri#} ns
     uriC <- {#call uri_as_string#} (castPtr uri)
-    uriS <- peekUTFString (castPtr uriC)
+    uriS <- if uriC == nullPtr then return Nothing
+                               else fmap Just $ peekUTFString (castPtr uriC)
     return (prefixS, uriS)
 
 withURI :: String -> (Ptr URI -> IO a) -> IO a
@@ -269,7 +272,9 @@ parse fn parsertype uri base_uri = do
 
   nsHandler <- mkNamespaceHandler $ \_user_data ns -> do
     (prefix, uri') <- getNamespace ns
-    modifyIORef namespaces ((prefix, uri'):)
+    case (prefix, uri') of 
+        (Just prefix',Just uri'') -> modifyIORef namespaces ((prefix', uri''):)
+        _                         -> return ()
 
   let msgHandler intro = mkMessageHandler $ \_user_data locator msg -> do
         size <- {# call format_locator #} nullPtr 0 locator
