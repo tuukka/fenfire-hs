@@ -24,10 +24,14 @@ import System.Environment (getArgs)
 import System.IO (hFlush, stdout)
 import System.IO.Unsafe (unsafeInterleaveIO)
 
-main = do [root] <- getArgs
+import Data.Char (toUpper, toLower)
+
+main = do [root,filepath] <- getArgs
+          'h':'t':'t':'p':':':'/':'/':_ <- return root
           irc <- getContents
           timestamps <- getTimeStamps
-          mapM_ (uncurry $ handle root) $ zip (lines irc) (uniquify timestamps)
+          mapM_ (uncurry $ handle root filepath) $ zip (lines irc) 
+                                                       (uniquify timestamps)
 
 getTimeStamps = do ~(TOD secs _picos) <- unsafeInterleaveIO getClockTime
                    xs <- unsafeInterleaveIO getTimeStamps
@@ -42,11 +46,14 @@ uniquify' prev (x:xs) | fst prev == x = next prev:uniquify' (next prev) xs
     where next (i,offset) = (i, Just $ maybe (2::Integer) (+1) offset)
           first i         = (i, Nothing)
 
-handle root line (clockTime,offset) = do 
-                                putStr $ irc2rdf root (clockTime,offset) line
-                                hFlush stdout
+handle :: String -> FilePath -> String -> (ClockTime, Maybe Integer) -> IO ()
+handle root filepath line (clockTime,offset) = do 
+    let (file,output) = irc2rdf root filepath (clockTime,offset) line
+    maybe (return ()) ((flip appendFile) output) file
 
-irc2rdf root time = uncurry (triples root time) . parse
+irc2rdf :: String -> FilePath -> (ClockTime, Maybe Integer) -> String ->
+           (Maybe FilePath,String)
+irc2rdf root filepath time = uncurry (triples root filepath time) . parse
 
 parse (':':rest) = (Just $ takeWhile (/=' ') rest,
                     parse' "" (tail $ dropWhile (/=' ') rest))
@@ -58,9 +65,20 @@ parse'  "" (':':xs) = [reverse . dropWhile (=='\r') $ reverse xs]
 parse' acc (' ':xs) = reverse acc : parse' "" xs
 parse' acc   (x:xs) = parse' (x:acc) xs
 
-triples root (time,offset) (Just prefix) ["PRIVMSG","#fenfire",msg] =
-    "<irc://freenode/%23fenfire> <"++isContainerOf++"> <"++uri++">.\n"++
-    "<irc://freenode/%23fenfire> <"++rdftype++"> <"++forum++">.\n"++
+triples :: String -> FilePath -> (ClockTime, Maybe Integer) -> 
+           Maybe String -> [String] -> (Maybe FilePath, String)
+triples root filepath (time,offset) (Just prefix) [cmd,target,msg] 
+    | map toUpper cmd == "PRIVMSG", 
+      '#':channel <- map toLower target, channel `elem` ["fenfire","swig"]
+    = 
+    let file = channel ++ "-" ++ day
+        uri = root ++ file ++ "#" ++ second ++ maybe "" (('.':) . show) offset
+    in
+    (
+    Just (filepath++file)
+    ,
+    "<irc://freenode/%23"++channel++"> <"++isContainerOf++"> <"++uri++">.\n"++
+    "<irc://freenode/%23"++channel++"> <"++rdftype++"> <"++forum++">.\n"++
     "<"++uri++"> <"++created++"> "++
         show (day++"T"++second++"Z")++"^^<"++date++">.\n"++
     "<"++uri++"> <"++hasCreator++"> <"++creator++">.\n"++
@@ -69,6 +87,7 @@ triples root (time,offset) (Just prefix) ["PRIVMSG","#fenfire",msg] =
     "<"++uri++"> <"++rdftype++"> <"++post++">.\n"++
     "<"++creator++"> <"++label++"> "++show nick++".\n"++
     "<"++creator++"> <"++rdftype++"> <"++user++">.\n"
+    )
     where label = "http://www.w3.org/2000/01/rdf-schema#label"
           rdftype = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
           created = "http://purl.org/dc/terms/created"
@@ -79,7 +98,6 @@ triples root (time,offset) (Just prefix) ["PRIVMSG","#fenfire",msg] =
           forum = "http://rdfs.org/sioc/ns#Forum"
           post = "http://rdfs.org/sioc/ns#Post"
           user = "http://rdfs.org/sioc/ns#User"
-          uri = root ++ day ++ "#" ++ second ++ maybe "" (('.':) . show) offset
           nick = takeWhile (/='!') prefix
           creator = "irc://freenode/"++nick++",isuser"
           (CalendarTime y moe d h m s _ps _wd _yd _tzn _tz _isDST) 
@@ -88,4 +106,4 @@ triples root (time,offset) (Just prefix) ["PRIVMSG","#fenfire",msg] =
           p n i = take (n-length (show i)) (repeat '0') ++ show i
           day    = p 4 y ++ '-':p 2 mo ++ '-':p 2 d
           second = p 2 h ++ ':':p 2  m ++ ':':p 2 s
-triples _ _ _ _ = ""
+triples _ _ _ _ _ = (Nothing, "")
