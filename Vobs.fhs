@@ -210,6 +210,12 @@ multiline useTextWidth widthInChars s = unsafePerformIO $ do
     return $ renderable (realToFrac w, realToFrac h) $ showLayout layout
 
                           
+image :: Ord k => FilePath -> Vob k
+image file = unsafePerformIO $ C.withImageSurfaceFromPNG file $ \surface -> do
+    w <- C.renderWith surface $ C.imageSurfaceGetWidth surface
+    h <- C.renderWith surface $ C.imageSurfaceGetHeight surface
+    return $ renderable (realToFrac w, realToFrac h) $ withSurface #surface $ fill extents
+
 fadedColor :: Ord k => Endo (Cx k Color)
 fadedColor c = liftM3 interpolate (asks rcFade) (asks rcFadeColor) c
 

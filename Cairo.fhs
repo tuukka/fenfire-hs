@@ -106,8 +106,11 @@ paint = cxRender $ pure C.paint
 clip :: Cairo cx r => cx Path -> Endo r
 clip p = cxWrap $ \ren -> ffor p $ \p' -> do
     C.save; renderPath p'; C.clip; ren; C.restore
-    
-    
+
+withSurface :: Cairo cx r => cx C.Surface -> Endo r    
+withSurface s = cxWrap $ \ren -> ffor s $ \s' -> do
+    C.save; C.setSourceSurface s' 0 0; ren; C.restore
+
 withColor :: Cairo cx r => cx Color -> Endo r
 withColor c = cxWrap $ \ren -> ffor c $ \(Color r g b a) -> do
     C.save; C.setSourceRGBA r g b a; ren; C.restore
