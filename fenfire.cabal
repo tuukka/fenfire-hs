@@ -61,3 +61,11 @@ GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -fno-warn-deprecations 
                 -main-is Irc2RDF.main
+
+Executable:     latex2png
+Main-Is:        Latex2Png.hs
+Other-Modules:  Latex2Png
+GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
+                -fno-warn-unused-imports -fno-warn-missing-signatures
+                -fno-warn-orphans -fno-warn-deprecations 
+                -main-is Latex2Png.main
