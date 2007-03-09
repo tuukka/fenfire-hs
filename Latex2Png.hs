@@ -21,9 +21,9 @@ module Latex2Png where
 
 import System.Cmd (rawSystem)
 import System.Environment (getArgs)
-import System.Directory (getTemporaryDirectory, setCurrentDirectory, 
-    createDirectory, getDirectoryContents, removeFile, removeDirectory, 
-    doesFileExist)
+import System.Directory (getTemporaryDirectory, getCurrentDirectory, 
+    setCurrentDirectory, createDirectory, getDirectoryContents, removeFile, 
+    removeDirectory, doesFileExist)
 import System.IO (openTempFile, openFile, hPutStr, hClose, IOMode(..))
 import System.Exit (ExitCode(..))
 
@@ -38,9 +38,9 @@ latex content = unlines [
     "\\end{document}"
     ]
 
-main = do
-    [code,outfile] <- getArgs
-    handle <- openFile outfile WriteMode
+withLatexPng :: String -> (Maybe FilePath -> IO a) -> IO a
+withLatexPng code block = do
+    oldCurrentDirectory <- getCurrentDirectory
     tmp <- getTemporaryDirectory
     let dir = tmp ++ "/latex2png" -- FIXME / and predictable name
     createDirectory dir
@@ -49,18 +49,32 @@ main = do
     let latexFile = "latex2png-temp"
     writeFile (latexFile++".tex") $ latex code
     -- FIXME set environment variables necessary for security, use rlimit
-    ExitSuccess <- rawSystem "latex" ["--interaction=nonstopmode", latexFile++".tex"]
-    ExitSuccess <- rawSystem "dvipng" ["-bgTransparent", "-Ttight", "", "--noghostscript", "-l1", latexFile++".dvi"]
+    ret1 <- rawSystem "latex" ["--interaction=nonstopmode", latexFile++".tex"]
     
-    png <- readFile $ latexFile++"1.png"
+    ret2 <- rawSystem "dvipng" ["-bgTransparent", "-Ttight", "", "--noghostscript", "-l1", latexFile++".dvi"]
+
+    let resultname = latexFile++"1.png"
+
+    haveResult <- doesFileExist resultname
+    let resultfile = if haveResult then Just resultname else Nothing
+    result <- block $ resultfile
 
     setCurrentDirectory tmp
     files <- getDirectoryContents dir
     flip mapM_ files $ \filename -> do 
         let file = dir ++ "/" ++ filename -- FIXME /
-        exists <- doesFileExist file
+        exists <- doesFileExist file -- XXX to ignore . and ..
         when exists $ removeFile $ file
     removeDirectory dir
+
+    setCurrentDirectory oldCurrentDirectory
+    return result
+
+main = do
+    [code,outfile] <- getArgs
+    handle <- openFile outfile WriteMode
+
+    png <- withLatexPng code $ maybe (return "") readFile
 
     hPutStr handle png
     hClose handle

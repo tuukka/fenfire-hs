@@ -708,8 +708,8 @@ makeMessageDialog primary secondary = do
                , containerBorderWidth := 6
                , dialogHasSeparator := False
                ]
-    image <- imageNewFromStock stockDialogError iconSizeDialog
-    set image [ miscYalign := 0.0 ]
+    image' <- imageNewFromStock stockDialogError iconSizeDialog
+    set image' [ miscYalign := 0.0 ]
     label' <- labelNew $ Just $ "<span weight=\"bold\" size=\"larger\">"++
                   escapeMarkup primary++"</span>\n\n"++escapeMarkup secondary
     set label' [ labelUseMarkup := True
@@ -721,7 +721,7 @@ makeMessageDialog primary secondary = do
     set hBox [ boxSpacing := 12
              , containerBorderWidth := 6
              ]
-    boxPackStart hBox image PackNatural 0
+    boxPackStart hBox image' PackNatural 0
     boxPackStart hBox label' PackNatural 0
 
     vBox <- dialogGetUpper dialog
