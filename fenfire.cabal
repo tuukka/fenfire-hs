@@ -11,8 +11,8 @@ Description:    Fenfire is a graph-based notetaking system. (We're
 Category:       User Interfaces
 Stability:      alpha
 Homepage:       http://fenfire.org/
-Build-Depends:  base, HaXml, gtk, mtl, unix, cairo, harp, template-haskell,
-                glib, network
+Build-Depends:  base, HaXml, gtk > 0.9.10, mtl, unix, cairo, harp, 
+                template-haskell, glib, network
 Data-Files:     data/logo.svg data/icon16.png
 
 Executable:     fenfire
@@ -21,7 +21,7 @@ Other-Modules:  Fenfire, Vobs, RDF, Cache, Cairo, Utils, Raptor, FunctorSugar,
                 GtkFixes, VanishingView, Main
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations -main-is Main.main
+                -fno-warn-orphans -main-is Main.main
 Extra-Libraries: raptor
 
 Executable:     functortest
@@ -29,43 +29,40 @@ Main-Is:        FunctorTest.hs
 Other-Modules:  FunctorTest, FunctorSugar
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations 
-                -main-is FunctorTest.main
+                -fno-warn-orphans -main-is FunctorTest.main
 
 Executable:     vobtest
 Main-Is:        VobTest.hs
 Other-Modules:  VobTest, Vobs, Cairo, Utils, FunctorSugar
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations -main-is VobTest.main
+                -fno-warn-orphans -main-is VobTest.main
 
 Executable:     frptest
 Main-Is:        FRP.hs
 Other-Modules:  FRP, Utils, FunctorSugar
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations -main-is FRP.main
+                -fno-warn-orphans -main-is FRP.main
 
 Executable:     darcs2rdf
 Main-Is:        Darcs2RDF.hs
 Other-Modules:  Darcs2RDF, FunctorSugar
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations 
-                -main-is Darcs2RDF.main
+                -fno-warn-orphans -main-is Darcs2RDF.main
 
 Executable:     irc2rdf
 Main-Is:        Irc2RDF.hs
 Other-Modules:  Irc2RDF
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations 
-                -main-is Irc2RDF.main
+                -fno-warn-orphans -main-is Irc2RDF.main
 
 Executable:     latex2png
 Main-Is:        Latex2Png.hs
 Other-Modules:  Latex2Png
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -fno-warn-deprecations 
-                -main-is Latex2Png.main
+                -fno-warn-orphans -main-is Latex2Png.main
+

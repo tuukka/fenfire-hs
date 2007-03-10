@@ -374,7 +374,7 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
     
     animRef <- newIORef (mempty, Map.empty, noAnim Map.empty)
     
-    let getWH = do (cw, ch) <- drawingAreaGetSize canvas
+    let getWH = do (cw, ch) <- widgetGetSize canvas
                    return (fromIntegral cw, fromIntegral ch)
                    
         getVob = do state <- readIORef stateRef
@@ -442,7 +442,7 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
         return True
     
     onExpose canvas $ \(Expose {}) -> do
-        drawable <- drawingAreaGetDrawWindow canvas
+        drawable <- widgetGetDrawWindow canvas
         
         (vob, _, anim) <- readIORef animRef;  time <- getTime
         let (scene, rerender) = anim time

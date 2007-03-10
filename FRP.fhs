@@ -74,7 +74,7 @@ main = do
         let (ren, sf') = runSF sf (time' - time) (Input x y)
         writeIORef ref (time', sf')
 
-        drawable <- drawingAreaGetDrawWindow canvas
+        drawable <- widgetGetDrawWindow canvas
         renderWithDrawable drawable ren
         
         widgetQueueDraw canvas
