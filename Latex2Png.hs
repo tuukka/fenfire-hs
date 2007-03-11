@@ -29,12 +29,19 @@ import System.Exit (ExitCode(..))
 
 import Control.Monad (when)
 
+import System.Glib.UTFString (newUTFString, readCString)
+import System.IO.Unsafe (unsafePerformIO)
+
+-- XXX real toUTF isn't exported from System.Glib.UTFString
+toUTF :: String -> String
+toUTF s = unsafePerformIO $ newUTFString s >>= readCString
+
 latex content = unlines [
     "\\documentclass[12pt]{article}",
     "\\pagestyle{empty}",
     "\\usepackage[utf8]{inputenc}",
     "\\begin{document}",
-    content,
+    toUTF content,
     "\\end{document}"
     ]
 
