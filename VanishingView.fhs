@@ -21,7 +21,7 @@ module VanishingView where
 import Utils
 import Cairo hiding (Path, rotate)
 import Vobs
-import RDF
+import Data.RDF
 import Fenfire
 
 import Control.Monad

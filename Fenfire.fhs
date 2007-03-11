@@ -23,9 +23,9 @@ import qualified Cache
 import Cairo hiding (rotate, Path)
 import Vobs
 import Utils
-import qualified Raptor
+import qualified Data.RDF.Raptor as Raptor
 import URN5
-import RDF
+import Data.RDF
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set

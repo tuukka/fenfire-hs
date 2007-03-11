@@ -23,7 +23,7 @@ Other-Modules:  Fenfire, Vobs, Data.RDF, Cache, Cairo, Utils, Data.RDF.Raptor, F
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -main-is Main.main
-Extra-Libraries: Data.RDF.Raptor
+Extra-Libraries: raptor
 
 Executable:     functortest
 Main-Is:        FunctorTest.hs
