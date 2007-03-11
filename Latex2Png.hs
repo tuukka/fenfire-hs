@@ -49,9 +49,9 @@ withLatexPng code block = do
     let latexFile = "latex2png-temp"
     writeFile (latexFile++".tex") $ latex code
     -- FIXME set environment variables necessary for security, use rlimit
-    ret1 <- rawSystem "latex" ["--interaction=nonstopmode", latexFile++".tex"]
+    rawSystem "latex" ["--interaction=nonstopmode", latexFile++".tex"]
     
-    ret2 <- rawSystem "dvipng" ["-bgTransparent", "-Ttight", "", "--noghostscript", "-l1", latexFile++".dvi"]
+    rawSystem "dvipng" ["-bgTransparent", "-Ttight", "", "--noghostscript", "-l1", latexFile++".dvi"]
 
     let resultname = latexFile++"1.png"
 
