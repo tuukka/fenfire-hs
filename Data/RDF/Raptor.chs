@@ -1,6 +1,6 @@
 -- We want the C compiler to always check that types match:
 {-# OPTIONS_GHC -fvia-C #-}
-module Raptor where
+module Data.RDF.Raptor where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.

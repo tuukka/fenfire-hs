@@ -466,7 +466,7 @@ makeWindow window canvasBgColor view stateRef = do
     -- main window:
 
     let ?pw = window in mdo
-    logo <- getDataFileName "data/icon16.png"
+    logo <- getDataFileName "data-files/icon16.png"
     Control.Exception.catch (windowSetIconFromFile window logo)
           (\e -> putStr ("Opening "++logo++" failed: ") >> print e)
     windowSetTitle window "Fenfire"
@@ -648,7 +648,7 @@ makeWindow window canvasBgColor view stateRef = do
 makeAboutDialog :: (?pw :: Window) => IO AboutDialog
 makeAboutDialog = do
     dialog <- aboutDialogNew
-    logoFilename <- getDataFileName "data/logo.svg"
+    logoFilename <- getDataFileName "data-files/logo.svg"
     pixbuf <- Control.Exception.catch (pixbufNewFromFile logoFilename)
                   (\e -> return $ Left (undefined, show e))
     logo <- case pixbuf of Left (_,msg)  -> do 
