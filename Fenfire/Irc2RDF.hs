@@ -67,12 +67,12 @@ turtle_escaped c ('\r':xs) = '\\': 'r':turtle_escaped c xs
 turtle_escaped c ('\t':xs) = '\\': 't':turtle_escaped c xs
 turtle_escaped c (   x:xs) =         x:turtle_escaped c xs
 
-main = do [root,filepath] <- getArgs
+main = do [root,filepath,extension] <- getArgs
           'h':'t':'t':'p':':':'/':'/':_ <- return root
           irc <- getContents
           timestamps <- getTimeStamps
-          mapM_ (uncurry $ handle root filepath) $ zip (map fromUTF$lines irc)
-                                                       (uniquify timestamps)
+          mapM_ (uncurry $ handle root filepath extension) 
+                $ zip (map fromUTF$lines irc) (uniquify timestamps)
 
 getTimeStamps = do ~(TOD secs _picos) <- unsafeInterleaveIO getClockTime
                    xs <- unsafeInterleaveIO getTimeStamps
@@ -87,10 +87,11 @@ uniquify' prev (x:xs) | fst prev == x = next prev:uniquify' (next prev) xs
     where next (i,offset) = (i, Just $ maybe (2::Integer) (+1) offset)
           first i         = (i, Nothing)
 
-handle :: String -> FilePath -> String -> (ClockTime, Maybe Integer) -> IO ()
-handle root filepath line (clockTime,offset) = do 
+handle :: String -> FilePath -> String -> 
+          String -> (ClockTime, Maybe Integer) -> IO ()
+handle root filepath extension line (clockTime,offset) = do 
     let (file,output) = irc2rdf root filepath (clockTime,offset) line
-    maybe (return ()) ((flip appendFile) (toUTF output)) file
+    maybe (return ()) ((flip appendFile) (toUTF output).(++extension)) file
 
 irc2rdf :: String -> FilePath -> (ClockTime, Maybe Integer) -> String ->
            (Maybe FilePath,String)
