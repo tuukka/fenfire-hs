@@ -170,6 +170,7 @@ handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
         x | x == "Down"  || x == "comma" -> handleAction "down"
         x | x == "Left"  || x == "j"     -> handleAction "left"
         x | x == "Right" || x == "l"     -> handleAction "right"
+        "g" -> handleAction "goto"
         "v" -> handleAction "chgview"
         "p" -> handleAction "resetprop"
         "O" -> handleAction "open"
@@ -256,7 +257,10 @@ handleAction action = do
                                (graphNamespaces graph) node) $ \uri' ->
                                    put $ stateReplaceNode node
                                        (interpretNode uri') state
-                           _       -> unhandledEvent
+                           _     -> unhandledEvent
+        "goto" -> confirmString "Go to node"
+                      (showNode (graphNamespaces graph) node) $ \s ->
+                          putRotation (Rotation (interpretNode s) 0)
         "undo" | (graph',path'):undos <- fsUndo state -> do
                    put state {fsGraph=graph', fsPath=path', 
                               fsUndo=undos, fsRedo=(graph,path):fsRedo state}
