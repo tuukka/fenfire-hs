@@ -19,12 +19,12 @@ module Fenfire where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import qualified Cache
-import Cairo hiding (rotate, Path)
-import Vobs
-import Utils
+import qualified Fenfire.Cache as Cache
+import Fenfire.Cairo hiding (rotate, Path)
+import Fenfire.Vobs
+import Fenfire.Utils
 import qualified Data.RDF.Raptor as Raptor
-import URN5
+import Fenfire.URN5
 import Data.RDF
 
 import qualified Data.Map as Map

@@ -1,4 +1,4 @@
-module Main where
+module Fenfire.Main where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.
@@ -18,13 +18,13 @@ module Main where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Utils
-import Cairo hiding (Path, rotate)
-import Vobs
+import Fenfire.Utils
+import Fenfire.Cairo hiding (Path, rotate)
+import Fenfire.Vobs
 import qualified Data.RDF.Raptor as Raptor
-import URN5
+import Fenfire.URN5
 import Data.RDF
-import VanishingView
+import Fenfire.VanishingView
 import Fenfire
 
 import Paths_fenfire (getDataFileName)
@@ -39,7 +39,7 @@ import qualified Data.List as List
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 
-import GtkFixes
+import Fenfire.GtkFixes
 import Graphics.UI.Gtk hiding (Color, get, disconnect, fill,
 -- GtkFixes overrides:
                                actionNew,

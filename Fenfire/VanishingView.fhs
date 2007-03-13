@@ -1,4 +1,4 @@
-module VanishingView where
+module Fenfire.VanishingView where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.
@@ -18,9 +18,9 @@ module VanishingView where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Utils
-import Cairo hiding (Path, rotate)
-import Vobs
+import Fenfire.Utils
+import Fenfire.Cairo hiding (Path, rotate)
+import Fenfire.Vobs
 import Data.RDF
 import Fenfire
 

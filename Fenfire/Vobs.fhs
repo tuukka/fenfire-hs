@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fallow-overlapping-instances #-}
-module Vobs where
+module Fenfire.Vobs where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.
@@ -19,12 +19,12 @@ module Vobs where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Utils
+import Fenfire.Utils
 
-import Cairo
+import Fenfire.Cairo
 
-import Latex2Png
-import Cache
+import Fenfire.Latex2Png
+import qualified Fenfire.Cache as Cache
 
 import Data.IORef
 import System.IO.Unsafe (unsafePerformIO)

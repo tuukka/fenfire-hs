@@ -1,5 +1,5 @@
 
-module Latex2Png where
+module Fenfire.Latex2Png where
 
 -- Copyright (c) 2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.

@@ -1,4 +1,4 @@
-module URN5 where
+module Fenfire.URN5 where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.

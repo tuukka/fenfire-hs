@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fffi #-}
-module Irc2RDF where
+module Fenfire.Irc2RDF where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.

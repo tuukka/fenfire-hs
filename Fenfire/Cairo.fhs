@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -fallow-undecidable-instances -fallow-incoherent-instances #-}
 -- More, implied by the previous on GHC 6.6 but needed for earlier:
 {-# OPTIONS_GHC -fallow-overlapping-instances #-}
-module Cairo where
+module Fenfire.Cairo where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.
@@ -22,7 +22,7 @@ module Cairo where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Utils
+import Fenfire.Utils
 
 import Control.Applicative
 import Control.Monad

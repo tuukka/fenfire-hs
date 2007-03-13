@@ -50,8 +50,11 @@ run-project: fenfire ../fenfire-project/project.turtle darcs.nt
 darcs.nt: darcs2rdf _darcs/inventory
 	darcs changes --xml | ./dist/build/darcs2rdf/darcs2rdf "http://antti-juhani.kaijanaho.fi/darcs/fenfire-hs/" > darcs.nt
 
+configure:
+	runhaskell Setup.hs configure --user --prefix ~/inst
+
 clean:
-	rm -f $(PREPROCESSED) *.p_hi *.hi *.i *.chi Raptor.h Raptor_stub.* *.p_o *.o $(TARGETS)
+	runhaskell Setup.hs clean
 
 # __attribute__ needs to be a no-op until c2hs learns to parse them in raptor.h
 %.hs: %.chs

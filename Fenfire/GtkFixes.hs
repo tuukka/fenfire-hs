@@ -1,4 +1,4 @@
-module GtkFixes where
+module Fenfire.GtkFixes where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.

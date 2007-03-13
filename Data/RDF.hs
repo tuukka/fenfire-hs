@@ -19,8 +19,8 @@ module Data.RDF where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Cache
-import Utils
+import Fenfire.Cache
+import Fenfire.Utils
 
 import Data.Map (Map)
 import qualified Data.Map as Map

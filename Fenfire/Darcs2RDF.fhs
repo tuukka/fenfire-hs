@@ -1,6 +1,6 @@
 -- HaRP pattern translator produces following warnings:
 {-# OPTIONS_GHC -fno-warn-name-shadowing -fno-warn-incomplete-patterns #-}
-module Darcs2RDF where
+module Fenfire.Darcs2RDF where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.

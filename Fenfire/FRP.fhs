@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fallow-undecidable-instances -fallow-incoherent-instances #-}
-module FRP where
+module Fenfire.FRP where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.
@@ -19,7 +19,7 @@ module FRP where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Utils
+import Fenfire.Utils
 
 import Control.Applicative
 

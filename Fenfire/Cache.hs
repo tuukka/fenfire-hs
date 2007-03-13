@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -fglasgow-exts #-}
 
-module Cache where
+module Fenfire.Cache where
 
 -- Copyright (c) 2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.
@@ -20,7 +20,7 @@ module Cache where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Utils
+import Fenfire.Utils
 
 import Data.Bits
 import Data.HashTable (HashTable)
