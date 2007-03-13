@@ -115,7 +115,9 @@ setText :: Node -> String -> Endo Graph
 setText n t = update (n, rdfs_label, PlainLiteral t)
 
 nodeView :: (?graph :: Graph) => Node -> Vob Node
-nodeView n = useFgColor $ latex $ getTextOrURI n
+nodeView n = useFgColor $ case getTextOrURI n of
+    'T':'e':'X':':':s -> latex s
+    s                 -> multiline False 20 s
     
 propView :: (?graph :: Graph) => Node -> Vob Node
 propView n = (useFadeColor $ fill extents)
