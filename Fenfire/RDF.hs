@@ -22,6 +22,9 @@ module Fenfire.RDF where
 import Fenfire.Cache
 import Fenfire.Utils
 
+import Control.Monad.Writer (MonadWriter, tell, forM_)
+
+import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe, isJust)
@@ -197,3 +200,33 @@ triple Neg (o,p,s) = (s,p,o)
 mul :: Num a => Dir -> a -> a
 mul Pos = id
 mul Neg = negate
+
+
+
+--------------------------------------------------------------------------
+-- Writing Turtle
+--------------------------------------------------------------------------
+
+writeTurtle :: MonadWriter String m => String -> Graph -> m ()
+writeTurtle nl graph = do let graph' = listToGraph $ graphToList graph
+                              nss = graphNamespaces graph
+                          writeTurtleNamespaces nl nss
+                          writeTurtleStmts nl nss $ getPos graph'
+                       
+writeTurtleNamespaces nl nss = forM_ (Map.toAscList nss) $ \(prefix,iri) -> do
+    tell "@prefix "; tell prefix; tell ": <"; tell iri; tell ">."; tell nl
+    
+writeTurtleStmts nl nss stmts = forM_ (Map.toAscList stmts) $ \(s,pos) -> do
+    tell nl; writeTurtleNode nss s; tell nl
+    sequence_ $ intersperse (tell ";" >> tell nl) $
+        map (writeTurtlePred nl nss) $ Map.toAscList pos
+    tell "."; tell nl
+    
+writeTurtlePred nl nss (p, os) = do
+    tell "  "; writeTurtleNode nss p; tell nl
+    sequence_ $ intersperse (tell "," >> tell nl) $
+        map (writeTurtleObj nss) $ Set.toAscList os
+    
+writeTurtleObj nss o = do tell "    "; writeTurtleNode nss o
+
+writeTurtleNode nss node = tell $ showNode nss node
