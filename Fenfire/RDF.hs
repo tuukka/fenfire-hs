@@ -28,6 +28,7 @@ import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe, isJust)
+import qualified Numeric
 import Data.Set (Set)
 import qualified Data.Set as Set
 
@@ -118,11 +119,24 @@ showNode ns (IRI uri) = f (Map.toAscList ns) where
     f ((short, long):xs) | take (length long) uri == long =
                                short ++ ":" ++ drop (length long) uri
                          | otherwise = f xs
-    f [] = "<" ++ uri ++ ">"
+    f [] = "<" ++ turtle_escaped '>' uri ++ ">"
 showNode _  (BNode graph id') = "bnode[" ++ id' ++ " @ " ++ graph ++ "]"
-showNode _  (Literal lit Plain) = show lit
-showNode _  (Literal lit (Lang lang)) = show lit ++ "@" ++ lang
-showNode _  (Literal lit (Type type')) = show lit ++ "^^<" ++ type' ++ ">"
+showNode ns (Literal lit tag) = "\"" ++ turtle_escaped '"' lit ++ "\"" ++
+    case tag of Plain -> ""; Lang lang  -> "@" ++ lang;
+                             Type type' -> "^^" ++ showNode ns (IRI type')
+
+turtle_escaped :: Char -> String -> String
+turtle_escaped _        [] = []
+turtle_escaped c ('\\':xs) = '\\':'\\':turtle_escaped c xs
+turtle_escaped c    (x:xs) | c == x 
+                           = '\\':   c:turtle_escaped c xs
+turtle_escaped c ('\n':xs) = '\\': 'n':turtle_escaped c xs
+turtle_escaped c ('\r':xs) = '\\': 'r':turtle_escaped c xs
+turtle_escaped c ('\t':xs) = '\\': 't':turtle_escaped c xs
+turtle_escaped c    (x:xs) | i <- fromEnum x, i < 0x20 || i == 0x5C 
+                           = '\\':'u':((if i<16 then ('0':) else id) $
+                                       Numeric.showHex i (turtle_escaped c xs))
+turtle_escaped c (   x:xs) =         x:turtle_escaped c xs
 
 subject :: Triple -> Node
 subject (s,_,_) = s
