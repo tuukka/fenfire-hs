@@ -23,9 +23,9 @@ import qualified Fenfire.Cache as Cache
 import Fenfire.Cairo hiding (rotate, Path)
 import Fenfire.Vobs
 import Fenfire.Utils
-import qualified Data.RDF.Raptor as Raptor
+import qualified Fenfire.Raptor as Raptor
 import Fenfire.URN5
-import Data.RDF
+import Fenfire.RDF
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -76,8 +76,8 @@ toPath' rot@(Rotation node _) =
 connsCache :: Cache.Cache (StableName Graph, (Node, Dir)) [Path]
 connsCache = Cache.newCache 10000
 
-dc_date = URI "http://purl.org/dc/elements/1.1/date"
-dcterms_created = URI "http://purl.org/dc/terms/created"
+dc_date = IRI "http://purl.org/dc/elements/1.1/date"
+dcterms_created = IRI "http://purl.org/dc/terms/created"
 
 conns :: (?vs :: ViewSettings, ?graph :: Graph) => Node -> Dir -> [Path]
 conns node dir = Cache.cached (Cache.byAddress ?graph, (node,dir))
@@ -105,23 +105,22 @@ move rot dir = do path <- toPath rot dir
                   return $ fromPath (rev path)
 
 getText :: (?graph :: Graph) => Node -> Maybe String
-getText n = fmap f $ getOne ?graph n rdfs_label Pos where 
-    f (PlainLiteral s) = s; f _ = error "getText argh"
+getText n = fmap nodeStr $ getOne ?graph n rdfs_label Pos
     
-getTextOrURI :: (?graph :: Graph) => Node -> String
-getTextOrURI n = fromMaybe (showNode (graphNamespaces ?graph) n) (getText n)
+getTextOrIRI :: (?graph :: Graph) => Node -> String
+getTextOrIRI n = fromMaybe (showNode (graphNamespaces ?graph) n) (getText n)
                     
 setText :: Node -> String -> Endo Graph
-setText n t = update (n, rdfs_label, PlainLiteral t)
+setText n t = update (n, rdfs_label, Literal t Plain)
 
 nodeView :: (?graph :: Graph) => Node -> Vob Node
-nodeView n = useFgColor $ case getTextOrURI n of
+nodeView n = useFgColor $ case getTextOrIRI n of
     'T':'e':'X':':':s -> latex s
     s                 -> multiline False 20 s
     
 propView :: (?graph :: Graph) => Node -> Vob Node
 propView n = (useFadeColor $ fill extents)
-           & (pad 5 $ useFgColor $ label $ getTextOrURI n)
+           & (pad 5 $ useFgColor $ label $ getTextOrIRI n)
 
 
 
@@ -133,9 +132,9 @@ presentationView state = let ?graph = fsGraph state in result where
     children = map getPos (conns node Pos)
     selected = fmap (getSide Pos) (toPath (fsRotation state) Pos)
     f sc n = keyVob n $ useFgColor $ pad 5 $ scaleVob sc $
-                 multiline True 70 $ getTextOrURI n
+                 multiline True 70 $ getTextOrIRI n
     cursor = flip (maybe mempty) selected $ \n -> 
-                 showAtKey n $ keyVob (PlainLiteral "CURSOR") $ rectBox mempty
+                 showAtKey n $ keyVob (Literal "CURSOR" Plain) $ rectBox mempty
     space = changeSize (const (0, 20)) mempty
     vob = pad 30 $ vbox $ List.intersperse space $ f 3 node : map (f 2) children
 
@@ -159,9 +158,9 @@ newNode :: (?vs :: ViewSettings, ?uriMaker :: URIMaker) =>
            Dir -> EndoM IO FenState
 newNode dir state@(FenState { fsGraph = graph, fsProperty = prop,
                               fsPath = Path node _ }) = do
-    node' <- liftM URI newURI
+    node' <- liftM IRI newURI
     let graph' = insert (triple dir (node, prop, node'))
-               $ insert (node', rdfs_label, PlainLiteral "") graph
+               $ insert (node', rdfs_label, Literal "" Plain) graph
      in return $ modifyGraph graph' (Path node' [Conn prop (rev dir) node]) state
     
 connect :: (?vs :: ViewSettings) => Dir -> Endo FenState
@@ -195,8 +194,8 @@ toggleMark n mark | n `Set.member` mark = Set.delete n mark
 
 newGraph :: (?uriMaker :: URIMaker) => IO (Graph, Path)
 newGraph = do
-    home <- liftM URI newURI
-    let graph = listToGraph [(home, rdfs_label, PlainLiteral "")]
+    home <- liftM IRI newURI
+    let graph = listToGraph [(home, rdfs_label, Literal "" Plain)]
     return (graph, Path home [])
     
 findStartPath :: (?vs :: ViewSettings) => Node -> Graph -> Path
@@ -212,12 +211,12 @@ findStartPath self g = let ?graph = g in result where
     getRot  (s,p,o) = Path s [Conn p Pos o]
     getRot' (s,p,o) = Path o [Conn p Neg s]
     
-    ffv_startNode = URI "http://fenfire.org/rdf-v/2003/05/ff#startNode"
-    foaf_primaryTopic = URI "http://xmlns.com/foaf/0.1/primaryTopic"
+    ffv_startNode = IRI "http://fenfire.org/rdf-v/2003/05/ff#startNode"
+    foaf_primaryTopic = IRI "http://xmlns.com/foaf/0.1/primaryTopic"
     
 containsInfoTriples :: (?vs :: ViewSettings) => Node -> Graph -> [Triple]
 containsInfoTriples s g = [(s, p, o) | o <- os, o /= s] where
-    p = URI "ex:containsInformationAbout"
+    p = IRI "ex:containsInformationAbout"
     triples = graphToList g
     [subjects, objects] = for [subject, object] $ \f -> map f triples
     os = Set.toAscList $ foldr Set.delete (Set.fromList subjects) objects
@@ -227,8 +226,8 @@ loadGraph fileName = do
     --file <- readFile fileName
     --graph <- fromNTriples file >>= return . reverse-}
     let convert (s,p,o) = (f s, f p, f o)
-        f (Raptor.Uri s) = URI s
-        f (Raptor.Literal s) = PlainLiteral s
+        f (Raptor.Uri s) = IRI s
+        f (Raptor.Literal s) = Literal s Plain
         f (Raptor.Blank s) = BNode fileName s
     (raptorTriples, namespaces) <- if List.isPrefixOf "http:" fileName
         then Raptor.uriToTriples fileName Nothing
@@ -242,10 +241,10 @@ saveGraph graph fileName = do
     uri <- liftM (fromJust . Network.URI.parseURI)
                  (Raptor.filenameToURI fileName)
     let convert (s,p,o) = (f s, f p, f o)
-        f (URI s) = Raptor.Uri $ fromMaybe s $ do
+        f (IRI s) = Raptor.Uri $ fromMaybe s $ do
                         u <- Network.URI.parseURI s
                         return $ show $ Network.URI.relativeFrom u uri
-        f (PlainLiteral s) = Raptor.Literal s
+        f (Literal s _) = Raptor.Literal s
         f (BNode g s) = if g == fileName then Raptor.Blank s
                         else error "XXX Cannot save bnode from different graph"
         triples = graphToList graph
@@ -258,7 +257,7 @@ newState graph path fp focus =
     FenState graph path Set.empty fp False focus 0 rdfs_seeAlso ps [] []
     where ps = Set.insert rdfs_seeAlso $ Set.fromList $
                    map predicate $ filter f $ graphToList graph
-          f (_, _, URI _) = True
+          f (_, _, IRI _) = True
           f _             = False
 
 stateReplaceNode :: Node -> Node -> Endo FenState

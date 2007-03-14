@@ -21,9 +21,9 @@ module Fenfire.Main where
 import Fenfire.Utils
 import Fenfire.Cairo hiding (Path, rotate)
 import Fenfire.Vobs
-import qualified Data.RDF.Raptor as Raptor
+import qualified Fenfire.Raptor as Raptor
 import Fenfire.URN5
-import Data.RDF
+import Fenfire.RDF
 import Fenfire.VanishingView
 import Fenfire
 
@@ -57,12 +57,12 @@ import System.Environment (getArgs, getProgName)
 
 interpretNode :: (?graph :: Graph) => String -> Node
 interpretNode str | "<" `List.isPrefixOf` str && ">" `List.isSuffixOf` str = 
-                        URI $ tail $ init str
+                        IRI $ tail $ init str
                   | isQname
                   , Just base <- Map.lookup ns (graphNamespaces ?graph) = 
-                        URI $ base ++ local
+                        IRI $ base ++ local
                   | isQname = error $ "No such namespace: \""++ns++"\""
-                  | otherwise = URI str
+                  | otherwise = IRI str
     where local = drop 1 $ dropWhile (/= ':') str
           ns = takeWhile (/= ':') str
           isQname = ns /= "" && (not $ any (`elem` local) [':', '/', '@'])
@@ -208,14 +208,14 @@ handleAction action = do
         "open"  -> confirmSave modified $ do 
             result <- liftIO $ openFile filepath
             maybeDo result $ \(g',fp') -> do
-                uri <- liftM URI $ liftIO $ Raptor.filenameToURI fp'
+                uri <- liftM IRI $ liftIO $ Raptor.filenameToURI fp'
                 let ts = containsInfoTriples uri g'
                     g'' = foldr insertVirtual g' ts
                 put $ newState g'' (findStartPath uri g'') fp' focus
-        "loadURI" -> case node of 
-                         URI uri -> do 
+        "loadIRI" -> case node of 
+                         IRI uri -> do 
                              g <- liftIO $ loadGraph uri
-                             let ts = containsInfoTriples (URI uri) g
+                             let ts = containsInfoTriples (IRI uri) g
                                  g' = foldr insertVirtual 
                                             (mergeGraphs graph g) ts
                                  s' = state {fsGraph=g',
@@ -225,7 +225,7 @@ handleAction action = do
                          _ -> unhandledEvent
         "revert" | filepath /= "" -> confirmRevert modified $ do
             g' <- liftIO $ loadGraph filepath
-            gNode <- liftM URI $ liftIO $ Raptor.filenameToURI filepath
+            gNode <- liftM IRI $ liftIO $ Raptor.filenameToURI filepath
             let g'' = foldr insertVirtual g' $ containsInfoTriples gNode g'
             put $ newState g'' (findStartPath gNode g'') filepath focus
         "save" | filepath /= "" -> do 
@@ -241,7 +241,7 @@ handleAction action = do
         "chgview" -> do put $ state { fsView = (fsView state + 1) `mod` 
                                                (length ?views) }
                         setInterp True
-        "addprop" -> do let uri = case node of URI _ -> showNode 
+        "addprop" -> do let uri = case node of IRI _ -> showNode 
                                                    (graphNamespaces graph) node
                                                _     -> ""
                         confirmString "Add property" uri $ \uri' ->
@@ -252,8 +252,8 @@ handleAction action = do
                                     fsProperties = Set.insert prop' props }
         "resetprop" -> when (fsProperty state /= rdfs_seeAlso) $
                            put $ state { fsProperty = rdfs_seeAlso }
-        "changeURI" -> case node of
-                           URI _ -> confirmString "New URI" (showNode 
+        "changeIRI" -> case node of
+                           IRI _ -> confirmString "New IRI" (showNode 
                                (graphNamespaces graph) node) $ \uri' ->
                                    put $ stateReplaceNode node
                                        (interpretNode uri') state
@@ -290,7 +290,7 @@ makeActions actionGroup accelGroup = do
             , ( "revert" , Nothing, stockRevertToSaved , Nothing              )
             , ( "quit"   , Nothing, stockQuit          , Nothing              )
             , ( "about"  , Nothing, stockAbout         , Nothing              )
-            , ( "loadURI", Just "_Load node's URI",
+            , ( "loadIRI", Just "_Load node's IRI",
                                     stockGoForward     , Just "<Ctl>L"        )
             , ( "undo"   , Nothing, stockUndo          , Just "<Ctl>Z"        )
             , ( "redo"   , Nothing, stockRedo          , Just "<Ctl><Shift>Z" )
@@ -324,7 +324,7 @@ updatePropMenu propmenu actionGroup stateRef updateCanvas = do
     menu <- menuNew
     forM (Set.toAscList $ fsProperties state) $ \prop -> do
         item <- let ?graph = fsGraph state
-                 in menuItemNewWithLabel $ getTextOrURI prop
+                 in menuItemNewWithLabel $ getTextOrIRI prop
         onActivateLeaf item $ do 
             modifyIORef stateRef $ \state' -> state' {fsProperty=prop}
             updateCanvas False
@@ -358,7 +358,7 @@ makeBindings actionGroup bindings = do
                stockStrikethrough , Just "<Alt>BackSpace" )
             , ("addprop", Just "_Add property"              ,
                stockAdd           , Just "<Ctl>P"         )
-            , ("changeURI", Just "Change node's _URI"       ,
+            , ("changeIRI", Just "Change node's _IRI"       ,
                stockRefresh       , Just "u"              )
             ]
     forM bindingentries $ \(name,label',stock,accel) -> do 
@@ -367,7 +367,7 @@ makeBindings actionGroup bindings = do
         actionSetAccelGroup action bindings
 
 makeMenus actionGroup root propmenu = addAll root menu where
-    menu = [m "_File" [a "new", a "open", a "loadURI", sep,
+    menu = [m "_File" [a "new", a "open", a "loadIRI", sep,
                        a "save", a "saveas", a "revert", sep,
                        a "quit"],
             m "_Edit" [a "undo", a "redo", sep,
@@ -375,7 +375,7 @@ makeMenus actionGroup root propmenu = addAll root menu where
                        a "noder", a "nodel", sep,
                        a "breakr", a "breakl", sep,
                        a "mark", a "connr", a "connl", sep, 
-                       a "changeURI", a "rmlit"],
+                       a "changeIRI", a "rmlit"],
             m "_View" (map (a . fst) ?views),
             m "_Help" [a "about"]]
     addAll parent items = mapM_ (menuShellAppend parent) =<< sequence items
@@ -454,9 +454,9 @@ main = do
             uri <- Raptor.filenameToURI fileName
             uris <- mapM Raptor.filenameToURI fileNames
             let ts = concatMap (uncurry containsInfoTriples) $
-                         (URI uri, g') : zip (map URI uris) gs
+                         (IRI uri, g') : zip (map IRI uris) gs
                 graph = foldr insertVirtual (foldl mergeGraphs g' gs) ts
-            newIORef $ newState graph (findStartPath (URI uri) graph) fileName False
+            newIORef $ newState graph (findStartPath (IRI uri) graph) fileName False
 
     -- start:
 
@@ -504,7 +504,7 @@ makeWindow window canvasBgColor view stateRef = do
             New.listStoreClear propList
             forM_ (Set.toAscList $ fsProperties state) $ \prop -> 
                 let ?graph = g in 
-                        New.listStoreAppend propList (prop, getTextOrURI prop)
+                        New.listStoreAppend propList (prop, getTextOrIRI prop)
             let activeIndex = List.elemIndex (fsProperty state) 
                                   (Set.toAscList $ fsProperties state)
             maybe (return ()) (New.comboBoxSetActive combo) activeIndex

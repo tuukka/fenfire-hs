@@ -13,12 +13,12 @@ Stability:      alpha
 Homepage:       http://fenfire.org/
 Build-Depends:  base, HaXml, gtk > 0.9.10, mtl, unix, cairo, harp, 
                 template-haskell, glib, network
-Exposed-Modules: Data.RDF, Data.RDF.Raptor
+Exposed-Modules: Fenfire.RDF, Fenfire.Raptor, Fenfire.Utils, Fenfire.Cache
 Data-Files:     data-files/logo.svg data-files/icon16.png
 
 Executable:     fenfire
 Main-Is:        Fenfire/Main.hs
-Other-Modules:  Fenfire, Fenfire.Vobs, Data.RDF, Fenfire.Cache, Fenfire.Cairo, Fenfire.Utils, Data.RDF.Raptor, FunctorSugar,
+Other-Modules:  Fenfire, Fenfire.Vobs, Fenfire.RDF, Fenfire.Cache, Fenfire.Cairo, Fenfire.Utils, Fenfire.Raptor, FunctorSugar,
                 Fenfire.GtkFixes, Fenfire.VanishingView, Fenfire.Main
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures

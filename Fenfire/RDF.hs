@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fglasgow-exts #-}
-module Data.RDF where
+module Fenfire.RDF where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.
@@ -28,9 +28,13 @@ import Data.Maybe (fromMaybe, isJust)
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-data Node = URI String | BNode String String | PlainLiteral String
-                          deriving (Eq, Ord)
-data Dir  = Pos | Neg     deriving (Eq, Ord, Show)
+
+data Node = IRI { nodeStr :: String }
+          | BNode { bnodeGraph :: String, nodeStr :: String } 
+          | Literal { nodeStr :: String, literalTag :: LiteralTag }
+                                                    deriving (Eq, Ord)
+data LiteralTag = Plain | Lang String | Type String deriving (Eq, Ord, Show)
+data Dir  = Pos | Neg                               deriving (Eq, Ord, Show)
 
 instance Show Node where
     show = showNode defaultNamespaces
@@ -90,28 +94,32 @@ instance Reversible Path where
         f (Conn p d n') (Path n cs) = Path n' (Conn p (rev d) n : cs)
     
 instance Hashable Node where
-    hash (URI s) = hash s
-    hash (PlainLiteral s) = hash s
+    hash (IRI s) = hash s
     hash (BNode g s) = hash (g,s)
+    hash (Literal s Plain) = hash s
+    hash (Literal s (Lang l)) = hash (s,l)
+    hash (Literal s (Type t)) = hash (s,t)
     
 instance Hashable Dir where
     hash Pos = 0
     hash Neg = 1
 
 rdfs         =     "http://www.w3.org/2000/01/rdf-schema#"
-rdfs_label   = URI "http://www.w3.org/2000/01/rdf-schema#label"
-rdfs_seeAlso = URI "http://www.w3.org/2000/01/rdf-schema#seeAlso"
+rdfs_label   = IRI "http://www.w3.org/2000/01/rdf-schema#label"
+rdfs_seeAlso = IRI "http://www.w3.org/2000/01/rdf-schema#seeAlso"
 
 defaultNamespaces = Map.fromList [("rdfs", rdfs)]
 
 showNode :: Namespaces -> Node -> String
-showNode ns (URI uri) = f (Map.toAscList ns) where
+showNode ns (IRI uri) = f (Map.toAscList ns) where
     f ((short, long):xs) | take (length long) uri == long =
                                short ++ ":" ++ drop (length long) uri
                          | otherwise = f xs
     f [] = "<" ++ uri ++ ">"
-showNode _  (PlainLiteral lit) = show lit
 showNode _  (BNode graph id') = "bnode[" ++ id' ++ " @ " ++ graph ++ "]"
+showNode _  (Literal lit Plain) = show lit
+showNode _  (Literal lit (Lang lang)) = show lit ++ "@" ++ lang
+showNode _  (Literal lit (Type type')) = show lit ++ "^^<" ++ type' ++ ">"
 
 subject :: Triple -> Node
 subject (s,_,_) = s
