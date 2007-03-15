@@ -136,7 +136,10 @@ presentationView state = let ?graph = fsGraph state in result where
     cursor = flip (maybe mempty) selected $ \n -> 
                  showAtKey n $ keyVob (Literal "CURSOR" Plain) $ rectBox mempty
     space = changeSize (const (0, 20)) mempty
-    vob = pad 30 $ vbox $ List.intersperse space $ f 3 node : map (f 2) children
+    vobs = List.intersperse space $ f 3 node : map (f 2) children
+    index = fromMaybe 0 $ selected >>= \n -> List.elemIndex n children
+    y = sum [defaultHeight (vobs !! i) | i <- [0 .. 2 * index - 1]]
+    vob = pad 30 $ translate #0 #(-y) $ vbox $ vobs
 
 
 
