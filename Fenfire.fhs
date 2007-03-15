@@ -31,7 +31,8 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.List as List
 import Data.Set (Set)
-import Data.Maybe (fromMaybe, fromJust, isJust, isNothing, catMaybes)
+import Data.Maybe (fromMaybe, fromJust, isJust, isNothing, catMaybes, 
+                   listToMaybe)
 import Data.Monoid(Monoid(mempty, mconcat))
 
 import Control.Applicative
@@ -142,6 +143,10 @@ presentationView state = let ?graph = fsGraph state in result where
     vob = pad 30 $ translate #0 #(-y) $ vbox $ vobs
 
 
+tryRotate :: (?vs :: ViewSettings, ?graph :: Graph) =>
+          Rotation -> Int -> Maybe Rotation
+tryRotate rot dir = listToMaybe $ catMaybes 
+    [rotate rot dir' | dir' <- reverse $ map (signum dir*) [1..abs dir]]
 
 tryMove :: (?vs :: ViewSettings, ?graph :: Graph) =>
            Rotation -> Dir -> Maybe Rotation

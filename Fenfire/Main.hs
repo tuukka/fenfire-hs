@@ -170,6 +170,8 @@ handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
         x | x == "Down"  || x == "comma" -> handleAction "down"
         x | x == "Left"  || x == "j"     -> handleAction "left"
         x | x == "Right" || x == "l"     -> handleAction "right"
+        x | x == "Page_Up" -> handleAction "pageup"
+        x | x == "Page_Down" -> handleAction "pagedown"
         "g" -> handleAction "goto"
         "v" -> handleAction "chgview"
         "p" -> handleAction "resetprop"
@@ -195,7 +197,8 @@ handleAction action = do
         n f x = do state' <- liftIO (f x state); put state'; setInterp True
         o f x = do put (f x state); setInterp True
     case action of
-        "up"    -> b rotate (-1)    ; "down"  -> b rotate 1
+        "up"    -> b tryRotate (-1) ; "down"  -> b tryRotate 1
+        "pageup"-> b tryRotate (-10); "pagedown" -> b tryRotate 10
         "left"  -> b tryMove Neg    ; "right" -> b tryMove Pos
         "nodel" -> n newNode Neg    ; "noder" -> n newNode Pos
         "connl" -> o connect Neg    ; "connr" -> o connect Pos
