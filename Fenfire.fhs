@@ -57,7 +57,8 @@ fsRotation = fromPath . fsPath
                            
 type Views = [(String, View FenState Node)]
 
-data Rotation = Rotation Node Int         deriving (Eq, Show)
+data Rotation = Rotation { rotationNode :: Node, rotationOffs :: Int }
+        deriving (Eq, Show)
 
 fromPath :: (?vs :: ViewSettings, ?graph :: Graph) => Path -> Rotation
 fromPath path@(Path node (Conn _ dir _ : _)) = fromMaybe (Rotation node 0) $ do
@@ -129,8 +130,9 @@ presentationView :: (?vs :: ViewSettings) => View FenState Node
 presentationView state = let ?graph = fsGraph state in result where
     result :: (?graph :: Graph) => Vob Node
     result = cursor & vob where
-    node = fsNode state
-    children = map getPos (conns node Pos)
+    Rotation node r0 = fsRotation state
+    children = map rotationNode $
+                   catMaybes [move (Rotation node (r0+i)) Pos | i <- [-12..20]]
     selected = fmap (getSide Pos) (toPath (fsRotation state) Pos)
     f sc n = keyVob n $ useFgColor $ pad 5 $ scaleVob sc $
                  multiline True 70 $ getTextOrIRI n
