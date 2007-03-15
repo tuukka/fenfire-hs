@@ -1,6 +1,14 @@
 {-# OPTIONS_GHC -fffi #-}
 module Fenfire.Irc2RDF where
 
+-- Irc2RDF: An IRC to SIOC RDF converter
+-- Standalone compiling: 
+--     ghc --make -o Irc2RDF -main-is Fenfire.Irc2RDF.main Irc2RDF.hs
+-- Usage with IRC protocol lines in real-time from stdin: 
+--     Irc2RDF http://base-uri/ file-path/ .file-extension
+-- Usage with IRC protocol lines with prepended timestamps from stdin:
+--     Irc2RDF -t http://base-uri/ file-path/ .file-extension
+
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.
 -- 
@@ -19,15 +27,18 @@ module Fenfire.Irc2RDF where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import System.Time (getClockTime, toUTCTime, CalendarTime(..), ClockTime(..))
-import System.Environment (getArgs)
+import System.Time (getClockTime, toUTCTime, CalendarTime(..), ClockTime(..), 
+                    toClockTime)
+import System.Environment (getArgs, getProgName)
 import System.IO (hFlush, stdout)
 import System.IO.Unsafe (unsafeInterleaveIO)
 
 import Data.Char (toUpper, toLower)
 import Data.Char (ord)
 import Data.Bits ((.&.))
+import Data.List (isPrefixOf)
 
+import Control.Monad (when)
 import qualified Control.Exception
 
 import System.Glib.UTFString (newUTFString, readCString, 
@@ -45,8 +56,9 @@ toUTF s = unsafePerformIO $ newUTFString s >>= readCString
 fromUTF :: String -> String
 fromUTF s = unsafePerformIO $ Control.Exception.catch 
     (withCString s $ \cstr -> peekUTFString cstr >>= \s' -> 
-     if (valid cstr (-1) nullPtr) then return s' -- force any exceptions
-                           else return s )
+     if (valid cstr (-1) nullPtr && all isUnicode s') -- force any exceptions
+         then return s'  -- it really was utf-8
+         else return s ) -- it really wasn't utf-8
     (\_e -> return s)                 -- if any, keep the local encoding
 
 -- from gutf8.c used in g_utf8_validate
@@ -67,17 +79,47 @@ turtle_escaped c ('\r':xs) = '\\': 'r':turtle_escaped c xs
 turtle_escaped c ('\t':xs) = '\\': 't':turtle_escaped c xs
 turtle_escaped c (   x:xs) =         x:turtle_escaped c xs
 
-main = do [root,filepath,extension] <- getArgs
-          'h':'t':'t':'p':':':'/':'/':_ <- return root
-          irc <- getContents
-          timestamps <- getTimeStamps
+main = do (root,filepath,extension,parseTimeStamps) <- do
+              args <- getArgs
+              case args of 
+                  [root,filepath,extension] ->
+                      return (root,filepath,extension,False)
+                  ["-t",root,filepath,extension] -> 
+                      return (root,filepath,extension,True)
+                  _ -> getProgName >>= 
+                      error . (++": [-t] root filepath extension")
+          when (not $ "http://" `isPrefixOf` root)
+               $ error "The root doesn't start with http://"
+          (irclines,timestamps) <- case parseTimeStamps of
+                  False -> do
+                      irc <- getContents
+                      timestamps <- getTimeStamps
+                      return (lines irc,timestamps)
+                  True -> do
+                      irc <- getContents >>= return . lines
+                      let (firsts, rests) = unzip $ map (span (/= ' ')) irc
+                      return (map (drop 1) rests, map parseTime firsts)
+
           mapM_ (uncurry $ handle root filepath extension) 
-                $ zip (map fromUTF$lines irc) (uniquify timestamps)
+                $ zip (map fromUTF irclines) (uniquify timestamps)
 
 getTimeStamps = do ~(TOD secs _picos) <- unsafeInterleaveIO getClockTime
                    xs <- unsafeInterleaveIO getTimeStamps
                    return (TOD secs 0:xs)
 
+parseTime :: String -> ClockTime
+parseTime str =  toClockTime $ CalendarTime 
+                     (read year) (toEnum $ read month-1) (read day)
+                     (read hour) (read minute) (read second) 
+                     0 (toEnum 0) 0 "" ((read tzh*60+read tzm)*60) False 
+    where (year,   rest0) = span (/= '-') str
+          (month,  rest1) = span (/= '-') $ drop 1 rest0
+          (day,    rest2) = span (/= 'T') $ drop 1 rest1
+          (hour,   rest3) = span (/= ':') $ drop 1 rest2
+          (minute, rest4) = span (/= ':') $ drop 1 rest3
+          (second, rest5) = span (/= '+') $ drop 1 rest4
+          (tzh,    tzm  ) = splitAt 2     $ drop 1 rest5
+                  
 uniquify     [] = []
 uniquify (x:xs) = (x,Nothing):uniquify' (x,Nothing) xs
 
