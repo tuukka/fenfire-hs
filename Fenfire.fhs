@@ -148,7 +148,7 @@ presentationView state = let ?graph = fsGraph state in result where
 tryRotate :: (?vs :: ViewSettings, ?graph :: Graph) =>
           Rotation -> Int -> Maybe Rotation
 tryRotate rot dir = listToMaybe $ catMaybes 
-    [rotate rot dir' | dir' <- reverse $ map (signum dir*) [1..abs dir]]
+    [rotate rot dir' | dir' <- reverse $ map (signum dir *) [1..abs dir]]
 
 tryMove :: (?vs :: ViewSettings, ?graph :: Graph) =>
            Rotation -> Dir -> Maybe Rotation

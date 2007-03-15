@@ -128,6 +128,26 @@ confirmSave True action = do
                          when (saved) action
                      _              -> return ()
 
+confirmFix :: (?vs :: ViewSettings, ?pw :: Window,
+                ?views :: Views, ?uriMaker :: URIMaker) => 
+               String -> Bool -> HandlerAction FenState -> 
+               HandlerAction FenState -> HandlerAction FenState
+confirmFix _ False _ action = action
+confirmFix title True fixaction action = do
+    response <- liftIO $ do
+        dialog <- makeDialog title
+            [(stockCancel, ResponseCancel),
+             (stockNo,     ResponseReject),
+             (stockYes,    ResponseAccept)]
+            ResponseAccept
+
+        response' <- dialogRun dialog
+        widgetHide dialog
+        return response'
+    case response of ResponseReject -> action
+                     ResponseAccept -> action >> fixaction
+                     _              -> return ()
+
 confirmRevert :: (?vs :: ViewSettings, ?pw :: Window) => 
                Bool -> HandlerAction FenState -> 
                HandlerAction FenState
@@ -262,8 +282,14 @@ handleAction action = do
                                        (interpretNode uri') state
                            _     -> unhandledEvent
         "goto" -> confirmString "Go to node"
-                      (showNode (graphNamespaces graph) node) $ \s ->
-                          putRotation (Rotation (interpretNode s) 0)
+                      (showNode (graphNamespaces graph) node) $ \s -> do
+                          let node' = interpretNode s
+                              rot' = Rotation node' 0
+                              noinfo = all Map.null [getConns graph node' dir 
+                                                         | dir <- [Pos,Neg]] 
+                          confirmFix "Load info about node"
+                              noinfo (handleAction "loadIRI")
+                              $ putRotation rot'
         "undo" | (graph',path'):undos <- fsUndo state -> do
                    put state {fsGraph=graph', fsPath=path', 
                               fsUndo=undos, fsRedo=(graph,path):fsRedo state}
