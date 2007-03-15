@@ -389,6 +389,8 @@ makeBindings actionGroup bindings = do
                stockAdd           , Just "<Ctl>P"         )
             , ("changeIRI", Just "Change node's _IRI"       ,
                stockRefresh       , Just "u"              )
+            , ( "goto"  , Just "_Go to IRI"                 ,
+               stockJumpTo        , Just "g"              )
             ]
     forM bindingentries $ \(name,label',stock,accel) -> do 
         action <- actionNew name label' Nothing (Just stock)
@@ -396,7 +398,7 @@ makeBindings actionGroup bindings = do
         actionSetAccelGroup action bindings
 
 makeMenus actionGroup root propmenu = addAll root menu where
-    menu = [m "_File" [a "new", a "open", a "loadIRI", sep,
+    menu = [m "_File" [a "new", a "open", a "goto", a "loadIRI", sep,
                        a "save", a "saveas", a "revert", sep,
                        a "quit"],
             m "_Edit" [a "undo", a "redo", sep,
