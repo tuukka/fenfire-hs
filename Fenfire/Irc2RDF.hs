@@ -1,13 +1,13 @@
-{-# OPTIONS_GHC -fffi #-}
+{-# OPTIONS_GHC -fglasgow-exts -fffi #-}
 module Fenfire.Irc2RDF where
 
 -- Irc2RDF: An IRC to SIOC RDF converter
 -- Standalone compiling: 
 --     ghc --make -o Irc2RDF -main-is Fenfire.Irc2RDF.main Irc2RDF.hs
 -- Usage with IRC protocol lines in real-time from stdin: 
---     Irc2RDF http://base-uri/ file-path/ .file-extension
+--     Irc2RDF http://base-uri/ file-path/ .file-extension "channel1 channel2"
 -- Usage with IRC protocol lines with prepended timestamps from stdin:
---     Irc2RDF -t http://base-uri/ file-path/ .file-extension
+--     Irc2RDF -t http://base-uri/ file-path/ .file-extension "chan1 chan2"
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.
@@ -79,15 +79,15 @@ turtle_escaped c ('\r':xs) = '\\': 'r':turtle_escaped c xs
 turtle_escaped c ('\t':xs) = '\\': 't':turtle_escaped c xs
 turtle_escaped c (   x:xs) =         x:turtle_escaped c xs
 
-main = do (root,filepath,extension,parseTimeStamps) <- do
+main = do (root,filepath,extension,channels,parseTimeStamps) <- do
               args <- getArgs
               case args of 
-                  [root,filepath,extension] ->
-                      return (root,filepath,extension,False)
-                  ["-t",root,filepath,extension] -> 
-                      return (root,filepath,extension,True)
+                  [root,filepath,extension,channels] ->
+                      return (root,filepath,extension,channels,False)
+                  ["-t",root,filepath,extension,channels] -> 
+                      return (root,filepath,extension,channels,True)
                   _ -> getProgName >>= 
-                      error . (++": [-t] root filepath extension")
+                      error . (++": [-t] root filepath extension channels")
           when (not $ "http://" `isPrefixOf` root)
                $ error "The root doesn't start with http://"
           (irclines,timestamps) <- case parseTimeStamps of
@@ -100,7 +100,7 @@ main = do (root,filepath,extension,parseTimeStamps) <- do
                       let (firsts, rests) = unzip $ map (span (/= ' ')) irc
                       return (map (drop 1) rests, map parseTime firsts)
 
-          mapM_ (uncurry $ handle root filepath extension) 
+          mapM_ (uncurry $ handle (words channels) root filepath extension) 
                 $ zip (map fromUTF irclines) (uniquify timestamps)
 
 getTimeStamps = do ~(TOD secs _picos) <- unsafeInterleaveIO getClockTime
@@ -129,15 +129,16 @@ uniquify' prev (x:xs) | fst prev == x = next prev:uniquify' (next prev) xs
     where next (i,offset) = (i, Just $ maybe (2::Integer) (+1) offset)
           first i         = (i, Nothing)
 
-handle :: String -> FilePath -> String -> 
+handle :: [String] -> String -> FilePath -> String -> 
           String -> (ClockTime, Maybe Integer) -> IO ()
-handle root filepath extension line (clockTime,offset) = do 
-    let (file,output) = irc2rdf root filepath (clockTime,offset) line
+handle channels root filepath extension line (clockTime,offset) = do 
+    let (file,output) = irc2rdf channels root filepath (clockTime,offset) line
     maybe (return ()) ((flip appendFile) (toUTF output).(++extension)) file
 
-irc2rdf :: String -> FilePath -> (ClockTime, Maybe Integer) -> String ->
-           (Maybe FilePath,String)
-irc2rdf root filepath time = uncurry (triples root filepath time) . parse
+irc2rdf :: [String] -> String -> FilePath -> (ClockTime, Maybe Integer) -> 
+           String -> (Maybe FilePath,String)
+irc2rdf channels root filepath time = 
+    uncurry (triples channels root filepath time) . parse
 
 parse (':':rest) = (Just $ takeWhile (/=' ') rest,
                     parse' "" (tail $ dropWhile (/=' ') rest))
@@ -149,12 +150,11 @@ parse'  "" (':':xs) = [reverse . dropWhile (=='\r') $ reverse xs]
 parse' acc (' ':xs) = reverse acc : parse' "" xs
 parse' acc   (x:xs) = parse' (x:acc) xs
 
-triples :: String -> FilePath -> (ClockTime, Maybe Integer) -> 
+triples :: [String] -> String -> FilePath -> (ClockTime, Maybe Integer) -> 
            Maybe String -> [String] -> (Maybe FilePath, String)
-triples root filepath (time,offset) (Just prefix) [cmd,target,msg] 
+triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg] 
     | map toUpper cmd == "PRIVMSG", 
-      '#':channel <- map toLower target, channel `elem` ["fenfire","sioc",
-                                                         "swig","haskell"]
+      '#':channel <- map toLower target, channel `elem` channels
     = 
     let file = channel ++ "-" ++ day
         uri = root ++ file ++ "#" ++ second ++ maybe "" (('.':) . show) offset
@@ -192,4 +192,4 @@ triples root filepath (time,offset) (Just prefix) [cmd,target,msg]
           p n i = take (n-length (show i)) (repeat '0') ++ show i
           day    = p 4 y ++ '-':p 2 mo ++ '-':p 2 d
           second = p 2 h ++ ':':p 2  m ++ ':':p 2 s
-triples _ _ _ _ _ = (Nothing, "")
+triples _ _ _ _ _ _ = (Nothing, "")
