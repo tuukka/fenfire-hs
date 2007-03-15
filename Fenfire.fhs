@@ -138,7 +138,7 @@ presentationView state = let ?graph = fsGraph state in result where
     space = changeSize (const (0, 20)) mempty
     vobs = List.intersperse space $ f 3 node : map (f 2) children
     index = fromMaybe 0 $ selected >>= \n -> List.elemIndex n children
-    y = sum [defaultHeight (vobs !! i) | i <- [0 .. 2 * index - 1]]
+    y = sum $ map defaultHeight $ take (2 * index) vobs
     vob = pad 30 $ translate #0 #(-y) $ vbox $ vobs
 
 
