@@ -21,17 +21,19 @@ module Fenfire.RDF where
 
 import Fenfire.Cache
 import Fenfire.Utils
+import qualified Fenfire.Raptor as Raptor
 
 import Control.Monad.Writer (MonadWriter, tell, forM_)
 
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (fromMaybe, fromJust, isJust)
 import qualified Numeric
 import Data.Set (Set)
 import qualified Data.Set as Set
 
+import Network.URI
 
 data Node = IRI { nodeStr :: String }
           | BNode { bnodeGraph :: String, nodeStr :: String } 
@@ -215,6 +217,33 @@ mul :: Num a => Dir -> a -> a
 mul Pos = id
 mul Neg = negate
 
+
+
+--------------------------------------------------------------------------
+-- Raptor interface
+--------------------------------------------------------------------------
+
+raptorToGraph :: [Raptor.Triple] -> [(String, String)] -> String -> Graph
+raptorToGraph raptorTriples namespaces graphURI =
+        foldr (uncurry addNamespace) (listToGraph triples) namespaces where
+    triples = map convert raptorTriples
+    convert (s,p,o) = (f s, f p, f o)
+    f (Raptor.Uri s) = IRI s
+    f (Raptor.Literal s) = Literal s Plain
+    f (Raptor.Blank s) = BNode graphURI s
+    
+graphToRaptor :: Graph -> String -> ([Raptor.Triple], [(String, String)])
+graphToRaptor graph graphURI = (map convert triples, namespaces) where
+    graphURI' = fromJust $ Network.URI.parseURI graphURI
+    convert (s,p,o) = (f s, f p, f o)
+    f (IRI s) = Raptor.Uri $ fromMaybe s $ do
+                    u <- Network.URI.parseURI s
+                    return $ show $ Network.URI.relativeFrom u graphURI'
+    f (Literal s _) = Raptor.Literal s
+    f (BNode g s) = if g == graphURI then Raptor.Blank s
+                    else error "XXX Cannot save bnode from different graph"
+    triples = graphToList graph
+    namespaces = Map.toAscList $ graphNamespaces graph
 
 
 --------------------------------------------------------------------------

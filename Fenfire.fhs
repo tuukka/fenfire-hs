@@ -235,31 +235,18 @@ loadGraph :: FilePath -> IO Graph
 loadGraph fileName = do
     --file <- readFile fileName
     --graph <- fromNTriples file >>= return . reverse-}
-    let convert (s,p,o) = (f s, f p, f o)
-        f (Raptor.Uri s) = IRI s
-        f (Raptor.Literal s) = Literal s Plain
-        f (Raptor.Blank s) = BNode fileName s
+    uri <- Raptor.filenameToURI fileName
     (raptorTriples, namespaces) <- if List.isPrefixOf "http:" fileName
         then Raptor.uriToTriples fileName Nothing
         else Raptor.filenameToTriples fileName Nothing
-    triples <- return $ map convert raptorTriples
-    return $ foldr (uncurry addNamespace) (listToGraph triples) namespaces
+    return $ raptorToGraph raptorTriples namespaces uri
 
 saveGraph :: Graph -> FilePath -> IO ()
 saveGraph graph fileName = do
     --writeFile fileName $ toNTriples $ reverse graph
-    uri <- liftM (fromJust . Network.URI.parseURI)
-                 (Raptor.filenameToURI fileName)
-    let convert (s,p,o) = (f s, f p, f o)
-        f (IRI s) = Raptor.Uri $ fromMaybe s $ do
-                        u <- Network.URI.parseURI s
-                        return $ show $ Network.URI.relativeFrom u uri
-        f (Literal s _) = Raptor.Literal s
-        f (BNode g s) = if g == fileName then Raptor.Blank s
-                        else error "XXX Cannot save bnode from different graph"
-        triples = graphToList graph
-        namespaces = Map.toAscList $ graphNamespaces graph
-    Raptor.triplesToFilename (map convert triples) namespaces fileName
+    uri <- Raptor.filenameToURI fileName
+    let (raptorTriples, namespaces) = graphToRaptor graph uri
+    Raptor.triplesToFilename raptorTriples namespaces fileName
     putStrLn $ "Saved: " ++ fileName
 
 newState :: Graph -> Path -> FilePath -> Bool -> FenState
