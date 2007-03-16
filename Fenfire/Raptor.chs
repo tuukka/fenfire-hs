@@ -1,6 +1,7 @@
 -- We want the C compiler to always check that types match:
 {-# OPTIONS_GHC -fvia-C #-}
 {-# OPTIONS_GHC -fffi -I. #-}
+{-# OPTIONS_GHC -fglasgow-exts #-}
 module Fenfire.Raptor where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
@@ -21,10 +22,10 @@ module Fenfire.Raptor where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Foreign (Ptr, FunPtr, Storable(pokeByteOff, peekByteOff), allocaBytes,
-                nullPtr, castPtr, freeHaskellFunPtr)
+import Foreign (Ptr, FunPtr, IntPtr, Storable(pokeByteOff, peekByteOff), 
+                allocaBytes, nullPtr, castPtr, freeHaskellFunPtr, malloc, peek)
 import Foreign.C (CString, castCharToCChar, CFile,
-                  CSize, CInt, CUInt, CUChar, CChar)
+                  CSize, CInt, CUInt, CUChar, CChar, peekCStringLen)
 
 import System.Posix.IO (stdOutput)
 import System.Posix.Types (Fd)
@@ -34,7 +35,7 @@ import Control.Monad (when)
 import Data.IORef (IORef, modifyIORef, readIORef, newIORef)
 import Control.Exception (bracket)
 
-import System.Glib.UTFString (withUTFString, peekUTFString)
+import System.Glib.UTFString (withUTFString, withUTFStringLen, peekUTFString)
 
 #include <raptor.h>
 
@@ -207,6 +208,50 @@ triplesToFilename triples namespaces filename = do
   {# call free_serializer #} serializer
   {# call finish #}
   
+-- | Serialize the given triples into memory
+--
+triplesToString :: [Triple] -> [(String, String)] -> String -> IO String
+triplesToString triples namespaces baseURI = do 
+  initRaptor
+
+  serializer <- withUTFString "turtle" {# call new_serializer #}
+  when (unSerializer serializer == nullPtr) $ fail "serializer is null"
+  
+  result_str :: Ptr (Ptr ()) <- malloc
+  result_len :: Ptr CUInt    <- malloc
+  
+  base_uri <- withUTFString baseURI new_uri
+
+  {# call serialize_start_to_string #} serializer base_uri result_str result_len
+  
+  flip mapM_ namespaces $ \(prefixS, uriS) -> do
+      withUTFString prefixS $ \prefixC -> withUTFString uriS $ \uriC -> do
+          uri <- new_uri uriC
+          {# call raptor_serialize_set_namespace #} serializer uri $ castPtr prefixC
+          {# call free_uri #} uri
+
+  allocaBytes {# sizeof statement #} $ \ptr -> do
+    let t = Statement ptr
+    flip mapM_ triples $ \(s,p,o) -> do
+      c_memset ptr 0 {# sizeof statement #}
+      withSubject t s $ withPredicate t p $ withObject t o $ do
+        {# call serialize_statement #} serializer t
+        return ()
+  {# call serialize_end #} serializer
+  {# call free_serializer #} serializer
+  
+  result_str' <- fmap castPtr $ peek result_str
+  result_len' <- fmap fromIntegral $ peek result_len
+  result <- peekCStringLen (result_str', result_len')
+
+  {# call free_uri #} base_uri
+  {# call free_memory #} (castPtr result_str')
+  {# call free_memory #} (castPtr result_str)
+  {# call free_memory #} (castPtr result_len)
+  {# call finish #}
+  
+  return result
+
 filenameToURI :: String -> IO String
 filenameToURI filename = do
   uri_str <- withUTFString filename uri_filename_to_uri_string
@@ -232,7 +277,7 @@ filenameToTriples filename baseURI = do
   uri <- new_uri uri_str
   base_uri <- maybe (uri_copy uri) (\s -> withUTFString s new_uri) baseURI
 
-  result <- parse {# call parse_file #} parsertype uri base_uri
+  result <- parse (\p -> {# call parse_file #} p uri base_uri) parsertype
 
   {# call free_uri #} uri
   {# call free_uri #} base_uri
@@ -248,17 +293,29 @@ uriToTriples uri baseURI = do
   uri' <- withUTFString uri new_uri
   base_uri <- maybe (uri_copy uri') (\s -> withUTFString s new_uri) baseURI
     
-  result <- parse {# call parse_uri #} "guess" uri' base_uri
+  result <- parse (\p -> {# call parse_uri #} p uri' base_uri) "guess"
 
   {# call free_uri #} uri'
   {# call free_uri #} base_uri
   
   {# call finish #}
   return result
+  
+stringToTriples :: String -> String -> IO ([Triple], [(String, String)])
+stringToTriples str baseURI = do
+  initRaptor
 
-parse :: (Parser -> Ptr URI -> Ptr URI -> IO CInt) -> String ->
-         Ptr URI -> Ptr URI -> IO ([Triple], [(String, String)])
-parse fn parsertype uri base_uri = do
+  base_uri <- withUTFString baseURI new_uri    
+  result <- withUTFStringLen str $ \(cstr, len) -> do
+      parse (\p -> {# call parse_chunk #} p (castPtr cstr) (fromIntegral len) 1) "guess"
+
+  {# call free_uri #} base_uri
+  
+  {# call finish #}
+  return result
+
+parse :: (Parser -> IO CInt) -> String -> IO ([Triple], [(String, String)])
+parse fn parsertype = do
   triples <- newIORef []
   namespaces <- newIORef []
 
@@ -295,7 +352,7 @@ parse fn parsertype uri base_uri = do
   {# call set_error_handler #} rdf_parser nullPtr errorHandler
   {# call set_warning_handler #} rdf_parser nullPtr warningHandler
 
-  fn rdf_parser uri base_uri
+  fn rdf_parser
 
   {# call free_parser #} rdf_parser
   freeHaskellFunPtr stHandler
