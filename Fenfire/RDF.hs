@@ -67,7 +67,7 @@ instance CoinClass (Coin a) a where
 type Triple     = (Node, Node, Node)
 type Namespaces = Map String String
 data Graph      = Graph {
-    graphNamespaces :: Namespaces,
+    graphNamespaces :: Namespaces, graphURI :: String,
     graphSides :: Coin (Map Node (Map Node (Set Node))),
     graphRealTriples :: Set Triple } deriving (Show, Eq)
     
@@ -176,7 +176,7 @@ getConns :: Graph -> Node -> Dir -> Map Node (Set Node)
 getConns g node dir = Map.findWithDefault Map.empty node $ getSide dir g
 
 emptyGraph :: Graph
-emptyGraph = Graph defaultNamespaces (Map.empty, Map.empty) Set.empty
+emptyGraph = Graph defaultNamespaces "" (Map.empty, Map.empty) Set.empty
 
 listToGraph :: [Triple] -> Graph
 listToGraph = foldr insert emptyGraph
@@ -186,6 +186,9 @@ graphToList = Set.toAscList . graphRealTriples
 
 mergeGraphs :: Op Graph
 mergeGraphs real virtual = foldr insertVirtual real (graphToList virtual)
+
+setGraphURI :: String -> Endo Graph
+setGraphURI uri g = g { graphURI = uri }
 
 insert :: Triple -> Endo Graph
 insert t graph@(Graph { graphRealTriples=ts }) =
@@ -197,8 +200,8 @@ insertVirtual (s,p,o) graph@(Graph { graphSides = (neg, pos) }) =
     ins a b c = Map.alter (Just . Map.alter (Just . Set.insert c . fromMaybe Set.empty) b . fromMaybe Map.empty) a   -- Gack!!! Need to make more readable
     
 delete :: Triple -> Endo Graph
-delete (s,p,o) (Graph ns (neg, pos) triples) = 
-    Graph ns (del o p s neg, del s p o pos) $ 
+delete (s,p,o) (Graph ns uri (neg, pos) triples) = 
+    Graph ns uri (del o p s neg, del s p o pos) $ 
         Set.delete (s,p,o) triples where
     del a b c = Map.adjust (Map.adjust (Set.delete c) b) a
     
@@ -233,6 +236,13 @@ mul Neg = negate
 --------------------------------------------------------------------------
 -- FromRDF and ToRDF
 --------------------------------------------------------------------------
+
+updateRDF :: (FromRDF a, ToRDF a) => Endo a -> Node -> Endo Graph
+updateRDF f node graph = graph' where
+    (x, ts) = runFromRDF $ readRDF graph node
+    (_, ts') = runToRDF (graphURI graph) $ toRDF (f x)
+    graph' = flip (foldr insert) (Set.toAscList ts') $
+             foldr delete graph (Set.toAscList ts)
 
 type FromRdfM = Writer (Set Triple)
 
@@ -277,8 +287,7 @@ instance FromRDF a => FromRDF [a] where
 instance ToRDF a => ToRDF [a] where
     toRDF []     = return rdf_nil
     toRDF (x:xs) = do l <- newBNode; first <- toRDF x; next <- toRDF xs
-                      tellTs [ (l, rdf_type, rdf_List)
-                             , (l, rdf_first, first)
+                      tellTs [ (l, rdf_first, first)
                              , (l, rdf_next, next) ]
                       return l
                       
@@ -295,23 +304,23 @@ instance ToRDF String where
 --------------------------------------------------------------------------
 
 raptorToGraph :: [Raptor.Triple] -> [(String, String)] -> String -> Graph
-raptorToGraph raptorTriples namespaces graphURI =
+raptorToGraph raptorTriples namespaces graphURI' = setGraphURI graphURI' $
         foldr (uncurry addNamespace) (listToGraph triples) namespaces where
     triples = map convert raptorTriples
     convert (s,p,o) = (f s, f p, f o)
     f (Raptor.Uri s) = IRI s
     f (Raptor.Literal s) = Literal s Plain
-    f (Raptor.Blank s) = BNode graphURI s
+    f (Raptor.Blank s) = BNode graphURI' s
     
-graphToRaptor :: Graph -> String -> ([Raptor.Triple], [(String, String)])
-graphToRaptor graph graphURI = (map convert triples, namespaces) where
-    graphURI' = fromJust $ Network.URI.parseURI graphURI
+graphToRaptor :: Graph -> ([Raptor.Triple], [(String, String)])
+graphToRaptor graph = (map convert triples, namespaces) where
+    graphURI' = fromJust $ Network.URI.parseURI (graphURI graph)
     convert (s,p,o) = (f s, f p, f o)
     f (IRI s) = Raptor.Uri $ fromMaybe s $ do
                     u <- Network.URI.parseURI s
                     return $ show $ Network.URI.relativeFrom u graphURI'
     f (Literal s _) = Raptor.Literal s
-    f (BNode g s) = if g == graphURI then Raptor.Blank s
+    f (BNode g s) = if g == (graphURI graph) then Raptor.Blank s
                     else error "XXX Cannot save bnode from different graph"
     triples = graphToList graph
     namespaces = Map.toAscList $ graphNamespaces graph

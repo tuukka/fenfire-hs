@@ -244,8 +244,7 @@ loadGraph fileName = do
 saveGraph :: Graph -> FilePath -> IO ()
 saveGraph graph fileName = do
     --writeFile fileName $ toNTriples $ reverse graph
-    uri <- Raptor.filenameToURI fileName
-    let (raptorTriples, namespaces) = graphToRaptor graph uri
+    let (raptorTriples, namespaces) = graphToRaptor graph
     Raptor.triplesToFilename raptorTriples namespaces fileName
     putStrLn $ "Saved: " ++ fileName
 

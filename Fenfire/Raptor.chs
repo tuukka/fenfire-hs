@@ -26,6 +26,8 @@ import Foreign (Ptr, FunPtr, IntPtr, Storable(pokeByteOff, peekByteOff),
                 allocaBytes, nullPtr, castPtr, freeHaskellFunPtr, malloc, peek)
 import Foreign.C (CString, castCharToCChar, CFile,
                   CSize, CInt, CUInt, CUChar, CChar, peekCStringLen)
+                  
+import Data.ByteString (ByteString, useAsCStringLen, copyCStringLen)
 
 import System.Posix.IO (stdOutput)
 import System.Posix.Types (Fd)
@@ -143,8 +145,11 @@ withIdentifier setValue setFormat (Statement t) (Literal s) io = do
     withUTFString s $ \str -> do
         setValue t (castPtr str)
         io
-withIdentifier _ _ _ i _ =
-    error $ "Raptor.setIdentifier: unimplemented: " ++ show i
+withIdentifier setValue setFormat (Statement t) (Blank nodeID) io = do
+    setFormat t (cFromEnum IDENTIFIER_TYPE_ANONYMOUS)
+    withUTFString nodeID $ \str -> do
+        setValue t (castPtr str)
+        io
 
 withSubject = withIdentifier {# set statement->subject #}
                              {# set statement->subject_type #} 
@@ -210,8 +215,8 @@ triplesToFilename triples namespaces filename = do
   
 -- | Serialize the given triples into memory
 --
-triplesToString :: [Triple] -> [(String, String)] -> String -> IO String
-triplesToString triples namespaces baseURI = do 
+triplesToBytes :: [Triple] -> [(String, String)] -> String -> IO ByteString
+triplesToBytes triples namespaces baseURI = do 
   initRaptor
 
   serializer <- withUTFString "turtle" {# call new_serializer #}
@@ -242,7 +247,7 @@ triplesToString triples namespaces baseURI = do
   
   result_str' <- fmap castPtr $ peek result_str
   result_len' <- fmap fromIntegral $ peek result_len
-  result <- peekCStringLen (result_str', result_len')
+  result <- copyCStringLen (result_str', result_len')
 
   {# call free_uri #} base_uri
   {# call free_memory #} (castPtr result_str')
@@ -301,13 +306,15 @@ uriToTriples uri baseURI = do
   {# call finish #}
   return result
   
-stringToTriples :: String -> String -> IO ([Triple], [(String, String)])
-stringToTriples str baseURI = do
+bytesToTriples :: String -> ByteString -> String -> IO ([Triple], [(String, String)])
+bytesToTriples format bytes baseURI = do
   initRaptor
 
   base_uri <- withUTFString baseURI new_uri    
-  result <- withUTFStringLen str $ \(cstr, len) -> do
-      parse (\p -> {# call parse_chunk #} p (castPtr cstr) (fromIntegral len) 1) "guess"
+  result <- useAsCStringLen bytes $ \(cstr, len) ->
+      parse (\p -> do 
+          {# call start_parse #} p base_uri
+          {# call parse_chunk #} p (castPtr cstr) (fromIntegral len) 1) format
 
   {# call free_uri #} base_uri
   
