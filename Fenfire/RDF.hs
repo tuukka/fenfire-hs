@@ -110,11 +110,18 @@ instance Hashable Dir where
     hash Pos = 0
     hash Neg = 1
 
+rdf          =     "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+rdf_type     = IRI "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+rdf_List     = IRI "http://www.w3.org/1999/02/22-rdf-syntax-ns#List"
+rdf_first    = IRI "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
+rdf_next     = IRI "http://www.w3.org/1999/02/22-rdf-syntax-ns#next"
+rdf_nil      = IRI "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
+
 rdfs         =     "http://www.w3.org/2000/01/rdf-schema#"
 rdfs_label   = IRI "http://www.w3.org/2000/01/rdf-schema#label"
 rdfs_seeAlso = IRI "http://www.w3.org/2000/01/rdf-schema#seeAlso"
 
-defaultNamespaces = Map.fromList [("rdfs", rdfs)]
+defaultNamespaces = Map.fromList [("rdf", rdf), ("rdfs", rdfs)]
 
 showNode :: Namespaces -> Node -> String
 showNode ns (IRI uri) = f (Map.toAscList ns) where
@@ -151,7 +158,8 @@ object (_,_,o) = o
 
 hasConn :: Graph -> Node -> Node -> Dir -> Bool
 hasConn g node prop dir = isJust $ do m <- Map.lookup node (getSide dir g)
-                                      Map.lookup prop m
+                                      s <- Map.lookup prop m
+                                      if Set.null s then Nothing else Just ()
 
 getOne :: Graph -> Node -> Node -> Dir -> Maybe Node
 getOne g node prop dir = if null nodes then Nothing else Just $ head nodes
@@ -218,6 +226,42 @@ mul Pos = id
 mul Neg = negate
 
 
+
+--------------------------------------------------------------------------
+-- Common structures
+--------------------------------------------------------------------------
+
+createBNode :: String -> Graph -> Node
+-- Finds a bnode id that currently has no connections in the graph.
+createBNode gid g = head $ filter test $ nodes where
+    nodes = for [1..] $ \(i :: Integer) -> BNode gid $ show i
+    test n = testMap (getConns g n Neg) && testMap (getConns g n Pos)
+    testMap m = all (Set.null . snd) (Map.toAscList m)
+
+readRDFList :: Node -> Graph -> [Node]
+readRDFList l g | l == rdf_nil = []
+                | otherwise    = (fromJust $ getOne g l rdf_first Pos)
+                   : readRDFList (fromJust $ getOne g l rdf_next Pos) g
+                   
+createRDFList :: [Node] -> String -> Graph -> (Node, Graph)
+createRDFList []     _   g = (rdf_nil, g)
+createRDFList (x:xs) gid g =
+    let (l', g') = createRDFList xs gid g
+        l = createBNode gid g'
+     in (l, foldr insert g' [(l, rdf_first, x), (l, rdf_next, l')])
+
+deleteRDFList :: Node -> Endo Graph
+deleteRDFList l g | l == rdf_nil = g
+                  | otherwise    =
+    deleteRDFList l' $ delete (l, rdf_type, rdf_List) $
+        deleteAll l rdf_first $ deleteAll l rdf_next g where
+        l' = fromJust $ getOne g l rdf_next Pos
+        
+updateRDFList :: Node -> Node -> [Node] -> String -> Endo Graph
+updateRDFList s p l gid g = update (s,p,o) g' where
+    olds = Set.toAscList $ getAll g s p Pos
+    (o,g') = createRDFList l gid $ foldr deleteRDFList g olds
+    
 
 --------------------------------------------------------------------------
 -- Raptor interface
