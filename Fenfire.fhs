@@ -208,13 +208,17 @@ newGraph = do
     let graph = listToGraph [(home, rdfs_label, Literal "" Plain)]
     return (graph, Path home [])
     
-findStartPath :: (?vs :: ViewSettings) => Node -> Graph -> Path
-findStartPath self g = let ?graph = g in result where
+findStartPath :: (?vs :: ViewSettings) => Maybe String -> Graph -> Path
+findStartPath (Just uri) g = let ?graph = g in toPath' $ Rotation (IRI uri) 0
+findStartPath Nothing g = let ?graph = g in result where
     result :: (?graph :: Graph) => Path
-    result = head $ catMaybes $ startNode:topic:triples where
+    result = head $ catMaybes $ startNode:topic:document:triples where
+
+    self = IRI $ graphURI g
 
     startNode = fmap getRot' $ getTriple self ffv_startNode
     topic = fmap getRot' $ getTriple self foaf_primaryTopic
+    document = toPath (Rotation self 0) Pos
     triples = map (Just . getRot) $ graphToList g
     
     getTriple s p = fmap (\o -> (s,p,o)) $ getOne g s p Pos
@@ -224,22 +228,24 @@ findStartPath self g = let ?graph = g in result where
     ffv_startNode = IRI "http://fenfire.org/rdf-v/2003/05/ff#startNode"
     foaf_primaryTopic = IRI "http://xmlns.com/foaf/0.1/primaryTopic"
     
-containsInfoTriples :: (?vs :: ViewSettings) => Node -> Graph -> [Triple]
-containsInfoTriples s g = [(s, p, o) | o <- os, o /= s] where
+containsInfoTriples :: (?vs :: ViewSettings) => Graph -> [Triple]
+containsInfoTriples g = [(s, p, o) | o <- os, o /= s] where
+    s = IRI $ graphURI g
     p = IRI "ex:containsInformationAbout"
     triples = graphToList g
     [subjects, objects] = for [subject, object] $ \f -> map f triples
     os = Set.toAscList $ foldr Set.delete (Set.fromList subjects) objects
 
 loadGraph :: FilePath -> IO Graph
-loadGraph fileName = do
-    --file <- readFile fileName
-    --graph <- fromNTriples file >>= return . reverse-}
-    uri <- Raptor.filenameToURI fileName
-    (raptorTriples, namespaces) <- if List.isPrefixOf "http:" fileName
-        then Raptor.uriToTriples fileName Nothing
-        else Raptor.filenameToTriples fileName Nothing
-    return $ raptorToGraph raptorTriples namespaces uri
+loadGraph fileName = 
+    if List.isPrefixOf "http:" fileName
+        then    loadGraph' Raptor.uriToTriples fileName
+        else do uri <- Raptor.filenameToURI fileName
+                loadGraph' Raptor.filenameToTriples uri
+
+loadGraph' load' uri = do
+    (raptorTriples, namespaces) <- load' uri Nothing
+    return $ raptorToGraph raptorTriples namespaces (takeWhile (/= '#') uri)
 
 saveGraph :: Graph -> FilePath -> IO ()
 saveGraph graph fileName = do

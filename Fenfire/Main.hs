@@ -231,14 +231,13 @@ handleAction action = do
         "open"  -> confirmSave modified $ do 
             result <- liftIO $ openFile filepath
             maybeDo result $ \(g',fp') -> do
-                uri <- liftM IRI $ liftIO $ Raptor.filenameToURI fp'
-                let ts = containsInfoTriples uri g'
+                let ts = containsInfoTriples g'
                     g'' = foldr insertVirtual g' ts
-                put $ newState g'' (findStartPath uri g'') fp' focus
+                put $ newState g'' (findStartPath Nothing g'') fp' focus
         "loadIRI" -> case node of 
                          IRI uri -> do 
                              g <- liftIO $ loadGraph uri
-                             let ts = containsInfoTriples (IRI uri) g
+                             let ts = containsInfoTriples g
                                  g' = foldr insertVirtual 
                                             (mergeGraphs graph g) ts
                                  s' = state {fsGraph=g',
@@ -248,9 +247,8 @@ handleAction action = do
                          _ -> unhandledEvent
         "revert" | filepath /= "" -> confirmRevert modified $ do
             g' <- liftIO $ loadGraph filepath
-            gNode <- liftM IRI $ liftIO $ Raptor.filenameToURI filepath
-            let g'' = foldr insertVirtual g' $ containsInfoTriples gNode g'
-            put $ newState g'' (findStartPath gNode g'') filepath focus
+            let g'' = foldr insertVirtual g' $ containsInfoTriples g'
+            put $ newState g'' (findStartPath Nothing g'') filepath focus
         "save" | filepath /= "" -> do 
                      liftIO $ saveGraph graph filepath
                      modify $ \s -> s { fsGraphModified = False }
@@ -482,12 +480,12 @@ main = do
             fileName:fileNames <- mapM f xs
             g' <- loadGraph fileName
             gs <- mapM loadGraph fileNames
-            uri <- Raptor.filenameToURI fileName
-            uris <- mapM Raptor.filenameToURI fileNames
-            let ts = concatMap (uncurry containsInfoTriples) $
-                         (IRI uri, g') : zip (map IRI uris) gs
+            let h x | List.isPrefixOf "http:" x = return x
+                    | otherwise = Raptor.filenameToURI x
+            uri <- h fileName
+            let ts = concatMap containsInfoTriples (g':gs)
                 graph = foldr insertVirtual (foldl mergeGraphs g' gs) ts
-            newIORef $ newState graph (findStartPath (IRI uri) graph) fileName False
+            newIORef $ newState graph (findStartPath (Just uri) graph) fileName False
 
     -- start:
 
