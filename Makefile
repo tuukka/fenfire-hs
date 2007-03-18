@@ -46,6 +46,9 @@ run-irc2rdf: irc2rdf
 run-latex2png: latex2png
 run-%: %
 	./dist/build/$</$< $(ARGS)
+	
+run-ghci: build install
+	ghci -lraptor
 
 run-project: fenfire ../fenfire-project/project.turtle darcs.nt
 	./dist/build/fenfire/fenfire ../fenfire-project/project.turtle darcs.nt $(ARGS)

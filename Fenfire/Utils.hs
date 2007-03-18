@@ -28,6 +28,8 @@ import Control.Monad.State
 import Control.Monad.Trans
 import Control.Monad.Writer (WriterT(..), MonadWriter(..), execWriterT)
 
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Monoid(..))
 
@@ -54,6 +56,10 @@ infixl 9 !?
 l !? i | i < 0         = Nothing
        | i >= length l = Nothing
        | otherwise     = Just (l !! i)
+       
+       
+updateWithDefault :: Ord k => a -> (a -> a) -> k -> Map k a -> Map k a
+updateWithDefault x f = Map.alter (Just . f . fromMaybe x)
 
 
 maybeReturn :: MonadPlus m => Maybe a -> m a
