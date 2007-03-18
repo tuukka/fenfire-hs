@@ -301,6 +301,12 @@ instance FromRDF String where
     
 instance ToRDF String where
     toRDF s = return (Literal s Plain)
+    
+instance FromRDF Node where
+    fromRDF _ n = n
+    
+instance ToRDF Node where
+    toRDF n = return n
 
 
 --------------------------------------------------------------------------
