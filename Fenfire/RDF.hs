@@ -188,11 +188,32 @@ graphToList = Set.toAscList . graphRealTriples
 mergeGraphs :: Op Graph
 mergeGraphs real virtual = foldr insertVirtual real (graphToList virtual)
 
+relativizeURI :: String -> Endo String
+relativizeURI baseURI s = fromMaybe s $ do
+    u <- Network.URI.parseURIReference s; bu <- Network.URI.parseURI baseURI
+    return $ show $ Network.URI.relativeFrom u bu
+    
+absolutizeURI :: String -> Endo String
+absolutizeURI baseURI s = fromMaybe s $ do
+    u <- Network.URI.parseURIReference s; bu <- Network.URI.parseURI baseURI
+    u' <- Network.URI.relativeTo u bu; return $ show u'
+    
+relativizeNode :: String -> Endo Node
+relativizeNode baseURI (IRI s) = IRI $ relativizeURI baseURI s
+relativizeNode baseURI (BNode gid s) = BNode (relativizeURI baseURI gid) s
+relativizeNode _ node = node
+
+absolutizeNode :: String -> Endo Node
+absolutizeNode baseURI (IRI s) = IRI $ absolutizeURI baseURI s
+absolutizeNode baseURI (BNode gid s) = BNode (absolutizeURI baseURI gid) s
+absolutizeNode _ node = node
+
+changeBaseURI :: String -> String -> Endo Node
+changeBaseURI oldBase newBase = absolutizeNode newBase . relativizeNode oldBase
+
 setGraphURI :: String -> Endo Graph
-setGraphURI uri g = everywhere (mkT f) $ g { graphURI = uri } where
-    f :: Endo Node
-    f (BNode gid n) | gid == graphURI g = BNode uri n
-    f n = n
+setGraphURI uri g = everywhere (mkT $ changeBaseURI (graphURI g) uri) $ 
+                    g { graphURI = uri }
 
 insert :: Triple -> Endo Graph
 insert t graph@(Graph { graphRealTriples=ts }) =
