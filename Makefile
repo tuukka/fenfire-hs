@@ -2,6 +2,9 @@
 GHC?=ghc
 GHCFLAGS=-fglasgow-exts -hide-package haskell98 -Wall -fno-warn-unused-imports -fno-warn-missing-signatures -fno-warn-orphans -fno-warn-deprecations
 
+PREFIX=~/inst
+CONFIGURE_OPTS=--user --prefix $(PREFIX)
+
 #GHCFLAGS+=-O -fexcess-precision -optc-ffast-math -optc-O3 
 #crash: -optc-march=pentium4 -optc-mfpmath=sse
 
@@ -17,7 +20,7 @@ TARGETS=functortest vobtest fenfire darcs2rdf irc2rdf latex2png
 
 all: build
 
-build:
+build: .setup-config
 	runhaskell Setup.hs build
 
 install: 
@@ -50,8 +53,11 @@ run-project: fenfire ../fenfire-project/project.turtle darcs.nt
 darcs.nt: darcs2rdf _darcs/inventory
 	darcs changes --xml | ./dist/build/darcs2rdf/darcs2rdf "http://antti-juhani.kaijanaho.fi/darcs/fenfire-hs/" > darcs.nt
 
+.setup-config:
+	runhaskell Setup.hs configure $(CONFIGURE_OPTS)
+
 configure:
-	runhaskell Setup.hs configure --user --prefix ~/inst
+	runhaskell Setup.hs configure $(CONFIGURE_OPTS)
 
 clean:
 	runhaskell Setup.hs clean
