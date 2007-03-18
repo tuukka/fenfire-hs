@@ -255,11 +255,11 @@ containsInfoTriples g = [(s, p, o) | o <- os, o /= s] where
 loadGraph :: FilePath -> IO Graph
 loadGraph fileName = 
     if List.isPrefixOf "http:" fileName
-        then    loadGraph' Raptor.uriToTriples fileName
+        then    loadGraph' (Raptor.uriToTriples fileName) fileName
         else do uri <- Raptor.filenameToURI fileName
-                loadGraph' Raptor.filenameToTriples uri
+                loadGraph' (Raptor.filenameToTriples fileName) uri
     where loadGraph' load' uri = do
-              (triples, namespaces) <- load' uri Nothing
+              (triples, namespaces) <- load' Nothing
               return $ raptorToGraph triples namespaces (takeWhile (/='#') uri)
 
 saveGraph :: Graph -> FilePath -> IO ()
