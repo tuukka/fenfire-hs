@@ -28,6 +28,7 @@ import Control.Monad.Writer (Writer, WriterT, MonadWriter, tell, forM_,
 import Control.Monad.Reader (Reader, ask, runReader)
 import Control.Monad.State (State, get, put, modify, runState)
 
+import Data.Generics
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -41,12 +42,12 @@ import Network.URI
 data Node = IRI { nodeStr :: String }
           | BNode { bnodeGraph :: String, nodeStr :: String } 
           | Literal { nodeStr :: String, literalTag :: LiteralTag }
-                                                    deriving (Eq, Ord)
-data LiteralTag = Plain | Lang String | Type String deriving (Eq, Ord, Show)
+                                                    deriving (Eq, Ord, Show, Read, Typeable, Data)
+data LiteralTag = Plain | Lang String | Type String deriving (Eq, Ord, Show, Read, Typeable, Data)
 data Dir  = Pos | Neg                               deriving (Eq, Ord, Show)
 
-instance Show Node where
-    show = showNode defaultNamespaces
+{-instance Show Node where
+    show = showNode defaultNamespaces-}
     
 
 -- This is unfortunately something of a pun because I can't find a good
@@ -69,7 +70,7 @@ type Namespaces = Map String String
 data Graph      = Graph {
     graphNamespaces :: Namespaces, graphURI :: String,
     graphSides :: Coin (Map Node (Map Node (Set Node))),
-    graphRealTriples :: Set Triple } deriving (Show, Eq)
+    graphRealTriples :: Set Triple } deriving (Show, Read, Eq, Data, Typeable)
     
 data Conn = Conn { connProp :: Node, connDir :: Dir, connTarget :: Node }
             deriving (Eq, Ord, Show)
@@ -188,7 +189,10 @@ mergeGraphs :: Op Graph
 mergeGraphs real virtual = foldr insertVirtual real (graphToList virtual)
 
 setGraphURI :: String -> Endo Graph
-setGraphURI uri g = g { graphURI = uri }
+setGraphURI uri g = everywhere (mkT f) $ g { graphURI = uri } where
+    f :: Endo Node
+    f (BNode gid n) | gid == graphURI g = BNode uri n
+    f n = n
 
 insert :: Triple -> Endo Graph
 insert t graph@(Graph { graphRealTriples=ts }) =
