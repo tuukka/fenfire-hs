@@ -258,10 +258,9 @@ loadGraph fileName =
         then    loadGraph' Raptor.uriToTriples fileName
         else do uri <- Raptor.filenameToURI fileName
                 loadGraph' Raptor.filenameToTriples uri
-
-loadGraph' load' uri = do
-    (raptorTriples, namespaces) <- load' uri Nothing
-    return $ raptorToGraph raptorTriples namespaces (takeWhile (/= '#') uri)
+    where loadGraph' load' uri = do
+              (triples, namespaces) <- load' uri Nothing
+              return $ raptorToGraph triples namespaces (takeWhile (/='#') uri)
 
 saveGraph :: Graph -> FilePath -> IO ()
 saveGraph graph fileName = do
