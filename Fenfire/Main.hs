@@ -192,6 +192,8 @@ handleEvent (Key { eventModifier=_mods, eventKeyName=key }) = do
         x | x == "Right" || x == "l"     -> handleAction "right"
         x | x == "Page_Up" -> handleAction "pageup"
         x | x == "Page_Down" -> handleAction "pagedown"
+        x | x == "Home" -> handleAction "propup"
+        x | x == "End" -> handleAction "propdown"
         "g" -> handleAction "goto"
         "v" -> handleAction "chgview"
         "p" -> handleAction "resetprop"
@@ -219,6 +221,7 @@ handleAction action = do
     case action of
         "up"    -> b tryRotate (-1) ; "down"  -> b tryRotate 1
         "pageup"-> b tryRotate (-10); "pagedown" -> b tryRotate 10
+        "propup"-> b findChange (-1); "propdown" -> b findChange 1
         "left"  -> b tryMove Neg    ; "right" -> b tryMove Pos
         "nodel" -> n newNode Neg    ; "noder" -> n newNode Pos
         "connl" -> o connect Neg    ; "connr" -> o connect Pos

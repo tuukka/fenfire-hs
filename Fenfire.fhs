@@ -146,7 +146,7 @@ presentationView state = let ?graph = fsGraph state in result where
 
 
 tryRotate :: (?vs :: ViewSettings, ?graph :: Graph) =>
-          Rotation -> Int -> Maybe Rotation
+             Rotation -> Int -> Maybe Rotation
 tryRotate rot dir = listToMaybe $ catMaybes 
     [rotate rot dir' | dir' <- reverse $ map (signum dir *) [1..abs dir]]
 
@@ -159,6 +159,22 @@ tryMove rot@(Rotation n r) dir = maybe rot' Just (move rot dir) where
             | otherwise = 0 - min (len `div` 2) (maxCenter ?vs)
     len = (length $ conns n dir)
     
+findChange :: (?vs :: ViewSettings, ?graph :: Graph) =>
+              Rotation -> Int -> Maybe Rotation
+findChange rot@(Rotation n r) dir = fmap (Rotation n . (r+)) change where
+    change = listToMaybe $ List.sortBy (\x y -> abs x `compare` abs y)
+                 $ catMaybes [findChange' Neg, findChange' Pos]
+    findChange' dir' = fmap (subtract r) r' where
+        len = length $ conns n dir'
+        index = r + min (len `div` 2) (maxCenter ?vs)
+        later = if dir > 0 then           drop (index+1) $ conns n dir'
+                           else reverse $ take  index    $ conns n dir'
+        pathToProp (Path _ [Conn prop _ _]) = prop
+        pathToProp (Path _ _) = error "pathToProp undefined for long paths"
+        currentProperty = fmap pathToProp $ toPath rot dir'
+        (same,next) = span ((== currentProperty) . Just . pathToProp) later
+        r' = listToMaybe $ map (rotationOffs . fromPath) $ reverse same ++ next
+
 modifyGraph :: Graph -> Path -> Endo FenState
 modifyGraph graph' path' state = 
     state { fsGraph=graph', fsPath=path', fsGraphModified=True,
