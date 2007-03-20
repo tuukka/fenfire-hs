@@ -71,6 +71,10 @@ returnEach = msum . map return
 maybeDo :: Monad m => Maybe a -> (a -> m ()) -> m ()
 maybeDo m f = maybe (return ()) f m
 
+toMaybe :: Bool -> a -> Maybe a
+toMaybe False _ = Nothing
+toMaybe True x  = Just x
+
 
 getTime :: IO Time
 getTime = do (System.Time.TOD secs picosecs) <- System.Time.getClockTime

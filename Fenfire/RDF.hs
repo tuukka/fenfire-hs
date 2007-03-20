@@ -1,4 +1,5 @@
-{-# OPTIONS_GHC -fglasgow-exts -fallow-overlapping-instances #-}
+{-# OPTIONS_GHC -fglasgow-exts 
+        -fallow-overlapping-instances -fallow-undecidable-instances #-}
 module Fenfire.RDF where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
@@ -28,16 +29,18 @@ import Control.Monad.Writer (Writer, WriterT, MonadWriter, tell, forM_,
 import Control.Monad.Reader (Reader, ask, runReader)
 import Control.Monad.State (State, get, put, modify, runState)
 
-import Data.Generics
+import Data.Generics hiding ((:*:))
 import Data.List (intersperse)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe, fromJust, isJust)
+import Data.Maybe (fromMaybe, fromJust, isJust, listToMaybe)
 import qualified Numeric
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import Network.URI
+import HList
+
+import Network.URI hiding (query)
 
 data Node = IRI { nodeStr :: String }
           | BNode { bnodeGraph :: String, nodeStr :: String } 
@@ -384,3 +387,111 @@ writeTurtlePred nl nss (p, os) = do
 writeTurtleObj nss o = do tell "    "; writeTurtleNode nss o
 
 writeTurtleNode nss node = tell $ showNode nss node
+
+
+--------------------------------------------------------------------------
+-- Reimplementation, using HList; this will become the default
+-- once it's finished
+--------------------------------------------------------------------------
+
+data Any = Any deriving (Eq, Ord, Show)
+data X = X     deriving (Eq, Ord, Show)
+
+-- Examples:
+-- query (x, rdf_type, X)   :: Graph -> Set Node
+-- query (x, rdf_type, X)   :: Graph -> Maybe Node
+-- query (x, rdf_type, Any) :: Graph -> Set Triple
+-- query (x, rdf_type, Any) :: Graph -> Maybe Triple
+-- There are lots of other combinations.
+class Show pattern => Pattern pattern result where
+    query :: pattern -> Graph' -> result
+    
+type Quad = (Node, Node, Node, Node)
+
+quad2triple :: Quad -> Triple
+quad2triple (s,p,o,_) = (s,p,o)
+
+quadGraph :: Quad -> Node
+quadGraph (_,_,_,g) = g
+
+data Graph' = Graph' { defaultGraph :: String
+                   , namespaces' :: Map String String
+                   , graphViews :: Map (Node, Node, Node, Node) (Set Quad)
+                               :*: Map (Node, Node, Node, Any)  (Set Quad)
+                               :*: Map (Node, Node, Any,  Node) (Set Quad)
+                               :*: Map (Node, Node, Any,  Any)  (Set Quad)
+                               :*: Map (Node, Any,  Node, Node) (Set Quad)
+                               :*: Map (Node, Any,  Node, Any)  (Set Quad)
+                               :*: Map (Node, Any,  Any,  Node) (Set Quad)
+                               :*: Map (Node, Any,  Any,  Any)  (Set Quad)
+                               :*: Map (Any,  Node, Node, Node) (Set Quad)
+                               :*: Map (Any,  Node, Node, Any)  (Set Quad)
+                               :*: Map (Any,  Node, Any,  Node) (Set Quad)
+                               :*: Map (Any,  Node, Any,  Any)  (Set Quad)
+                               :*: Map (Any,  Any,  Node, Node) (Set Quad)
+                               :*: Map (Any,  Any,  Node, Any)  (Set Quad)
+                               :*: Map (Any,  Any,  Any,  Node) (Set Quad)
+                               :*: Map (Any,  Any,  Any,  Any)  (Set Quad)
+                               :*: HNil -- use some simple TH for this? :-)
+                   }
+
+simpleQuery pattern g = hOccursFst (graphViews g) Map.! pattern
+
+-- We need an instance for each of these because the code GHC *generates*
+-- for each of these is different, even though *we* write the same thing
+-- for each. Again, we should use Template Haskell to generate these.
+instance Pattern (Node, Node, Node, Node) (Set Quad) where query = simpleQuery
+instance Pattern (Node, Node, Node, Any)  (Set Quad) where query = simpleQuery
+instance Pattern (Node, Node, Any,  Node) (Set Quad) where query = simpleQuery
+instance Pattern (Node, Node, Any,  Any)  (Set Quad) where query = simpleQuery
+instance Pattern (Node, Any,  Node, Node) (Set Quad) where query = simpleQuery
+instance Pattern (Node, Any,  Node, Any)  (Set Quad) where query = simpleQuery
+instance Pattern (Node, Any,  Any,  Node) (Set Quad) where query = simpleQuery
+instance Pattern (Node, Any,  Any,  Any)  (Set Quad) where query = simpleQuery
+instance Pattern (Any,  Node, Node, Node) (Set Quad) where query = simpleQuery
+instance Pattern (Any,  Node, Node, Any)  (Set Quad) where query = simpleQuery
+instance Pattern (Any,  Node, Any,  Node) (Set Quad) where query = simpleQuery
+instance Pattern (Any,  Node, Any,  Any)  (Set Quad) where query = simpleQuery
+instance Pattern (Any,  Any,  Node, Node) (Set Quad) where query = simpleQuery
+instance Pattern (Any,  Any,  Node, Any)  (Set Quad) where query = simpleQuery
+instance Pattern (Any,  Any,  Any,  Node) (Set Quad) where query = simpleQuery
+instance Pattern (Any,  Any,  Any,  Any)  (Set Quad) where query = simpleQuery
+
+instance (Show p, Show o, Show g, Pattern (Any,p,o,g) (Set Quad)) => 
+         Pattern (X,p,o,g) (Set Node) where
+    query (X,p,o,g) = Set.map (subject . quad2triple) . query (Any,p,o,g)
+instance (Show s, Show o, Show g, Pattern (s,Any,o,g) (Set Quad)) => 
+         Pattern (s,X,o,g) (Set Node) where
+    query (s,X,o,g) = Set.map (predicate . quad2triple) . query (s,Any,o,g)
+instance (Show s, Show p, Show g, Pattern (s,p,Any,g) (Set Quad)) => 
+         Pattern (s,p,X,g) (Set Node) where
+    query (s,p,X,g) = Set.map (object . quad2triple) . query (s,p,Any,g)
+instance (Show s, Show p, Show o, Pattern (s,p,o,Any) (Set Quad)) => 
+         Pattern (s,p,o,X) (Set Node) where
+    query (s,p,o,X) = Set.map quadGraph . query (s,p,o,Any)
+    
+instance (Show s, Show p, Show o, Pattern (s,p,o,Any) r) => 
+         Pattern (s,p,o) r where
+    query (s,p,o) = query (s,p,o,Any)
+
+instance Pattern pat (Set Quad) => Pattern pat (Set Triple) where
+    query pat = Set.map quad2triple . query pat
+
+instance (Pattern pat (Set r), MonadPlus m) => Pattern pat (m r) where
+    query pat = returnEach . Set.toList . query pat
+
+{- less generic versions, in case the above doesn't work out for some reason:
+instance (Pattern pat (Set r), MonadPlus m) => Pattern pat (m r) where
+    query pat = Set.toList . query pat
+
+instance Pattern pat (Set r) => Pattern pat (Maybe r) where
+    query pat g = let s = query pat g in toMaybe (Set.null s) (Set.findMin s)
+-}
+    
+instance Pattern pat (Set r) => Pattern pat r where
+    query pat g = let s = query pat g in
+                  if Set.null s then error $ "Pattern not found: " ++ show pat
+                                else Set.findMin s
+
+instance Pattern pat (Set Quad) => Pattern pat Bool where
+    query pat = not . Set.null . (id :: Endo (Set Quad)) . query pat

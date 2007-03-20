@@ -30,6 +30,7 @@ Dependencies with known-to-work version numbers:
   haxml  1.13.2 (Haskell and XML)
   happy  1.15   (The Parser Generator for Haskell)
   alex   2.0.1  (A lexical analyser generator for Haskell)
+  HList  0.1    (Heterogeneous collections for Haskell)
 
 (Packages in Debian: ghc6 libghc6-gtk-dev libraptor1-dev c2hs libghc6-harp-dev 
  libghc6-haxml-dev happy alex libghc6-network-dev)
