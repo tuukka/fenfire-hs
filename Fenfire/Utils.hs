@@ -32,6 +32,8 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe)
 import Data.Monoid (Monoid(..))
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 import qualified System.Time
 
@@ -83,6 +85,11 @@ getTime = do (System.Time.TOD secs picosecs) <- System.Time.getClockTime
              
 (&) :: Monoid m => m -> m -> m
 (&) = mappend
+
+
+class Empty a where empty :: a
+instance Empty (Set a)   where empty = Set.empty
+instance Empty (Map k v) where empty = Map.empty
 
 
 funzip :: Functor f => f (a,b) -> (f a, f b)

@@ -434,8 +434,14 @@ data Graph' = Graph' { defaultGraph :: String
                                :*: Map (Any,  Any,  Any,  Any)  (Set Quad)
                                :*: HNil -- use some simple TH for this? :-)
                    }
+                   
+instance (Empty x, Empty xs) => Empty (HCons x xs) where 
+    empty = HCons empty empty
+instance Empty HNil where empty = HNil
+instance Empty Graph' where empty = Graph' "" empty empty
 
-simpleQuery pattern g = hOccursFst (graphViews g) Map.! pattern
+simpleQuery pattern g = 
+    Map.findWithDefault Set.empty pattern $ hOccursFst (graphViews g)
 
 -- We need an instance for each of these because the code GHC *generates*
 -- for each of these is different, even though *we* write the same thing
@@ -473,6 +479,11 @@ instance (Show s, Show p, Show o, Pattern (s,p,o,Any) (Set Quad)) =>
 instance (Show s, Show p, Show o, Pattern (s,p,o,Any) r) => 
          Pattern (s,p,o) r where
     query (s,p,o) = query (s,p,o,Any)
+    
+instance (Show s, Show p, Show o, Pattern (s,p,o) r, Pattern (o,p,s) r) =>
+         Pattern (s,p,Dir,o) r where
+    query (o,p,Neg,s) = query (s,p,o)
+    query (s,p,Pos,o) = query (s,p,o)
 
 instance Pattern pat (Set Quad) => Pattern pat (Set Triple) where
     query pat = Set.map quad2triple . query pat
@@ -495,3 +506,30 @@ instance Pattern pat (Set r) => Pattern pat r where
 
 instance Pattern pat (Set Quad) => Pattern pat Bool where
     query pat = not . Set.null . (id :: Endo (Set Quad)) . query pat
+    
+    
+class (Ord a, Show a) => PatternSlot a where toPatternSlot :: Node -> a
+instance PatternSlot Node where toPatternSlot = id
+instance PatternSlot Any where toPatternSlot _ = Any
+
+newtype InsertQuad = InsertQuad Quad; newtype DeleteQuad = DeleteQuad Quad
+
+instance (PatternSlot s, PatternSlot p, PatternSlot o, PatternSlot g) => 
+         Apply InsertQuad (Map (s,p,o,g) (Set Quad)) 
+                          (Map (s,p,o,g) (Set Quad)) where
+    apply (InsertQuad (s,p,o,g)) =
+      updateWithDefault Set.empty (Set.insert (s,p,o,g))
+        (toPatternSlot s, toPatternSlot p, toPatternSlot o, toPatternSlot g)
+
+instance (PatternSlot s, PatternSlot p, PatternSlot o, PatternSlot g) => 
+         Apply DeleteQuad (Map (s,p,o,g) (Set Quad)) 
+                          (Map (s,p,o,g) (Set Quad)) where
+    apply (DeleteQuad (s,p,o,g)) =
+      updateWithDefault Set.empty (Set.delete (s,p,o,g))
+        (toPatternSlot s, toPatternSlot p, toPatternSlot o, toPatternSlot g)
+
+insertQuad :: Quad -> Endo Graph'
+insertQuad q g = g { graphViews = hMap (InsertQuad q) $ graphViews g }
+
+deleteQuad :: Quad -> Endo Graph'
+deleteQuad q g = g { graphViews = hMap (DeleteQuad q) $ graphViews g }
