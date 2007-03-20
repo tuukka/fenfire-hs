@@ -234,24 +234,25 @@ handleAction action = do
         "open"  -> confirmSave modified $ do 
             result <- liftIO $ openFile filepath
             maybeDo result $ \(g',fp') -> do
-                let ts = containsInfoTriples g'
-                    g'' = foldr insertVirtual g' ts
+                let g'' = mergeGraphs g' $ containsInfoTriples g'
                 put $ newState g'' (findStartPath Nothing g'') fp' focus
         "loadIRI" -> case node of 
                          IRI uri -> do 
                              g <- liftIO $ loadGraph uri
-                             let ts = containsInfoTriples g
-                                 g' = foldr insertVirtual 
-                                            (mergeGraphs graph g) ts
+                             let graph' = delete' (Any,Any,Any,node) graph
+                                 g' = mergeGraphs (mergeGraphs graph' g) $
+                                      containsInfoTriples g
                                  s' = state {fsGraph=g',
                                              fsUndo=(graph,path):fsUndo state,
                                              fsRedo=[]}
                              put s'
                          _ -> unhandledEvent
         "revert" | filepath /= "" -> confirmRevert modified $ do
-            g' <- liftIO $ loadGraph filepath
-            let g'' = foldr insertVirtual g' $ containsInfoTriples g'
-            put $ newState g'' (findStartPath Nothing g'') filepath focus
+            g <- liftIO $ loadGraph filepath
+            let graph' = delete' (Any,Any,Any,Dft) graph
+                g' = mergeGraphs (mergeGraphs graph' g) $ 
+                     containsInfoTriples g'
+            put $ newState g' (findStartPath Nothing g') filepath focus
         "save" | filepath /= "" -> do 
                      liftIO $ saveGraph graph filepath
                      modify $ \s -> s { fsGraphModified = False }
@@ -286,8 +287,8 @@ handleAction action = do
                       (showNode (graphNamespaces graph) node) $ \s -> do
                           let node' = interpretNode s
                               rot' = Rotation node' 0
-                              noinfo = all Map.null [getConns graph node' dir 
-                                                         | dir <- [Pos,Neg]] 
+                              noinfo = not $ iquery (node',Any,Any)
+                                          || iquery (Any,Any,node')
                           confirmFix "Load info about node"
                               noinfo (handleAction "loadIRI")
                               $ putRotation rot'
@@ -309,7 +310,7 @@ handleAction action = do
         putRotation rot   = do modify $ \s -> s { fsPath = toPath' rot }
                                setInterp True
         putMark mk        = do modify $ \state -> state { fsMark=mk }
-        delLit n graph = deleteAll n rdfs_label graph
+        delLit n graph = delete' (n, rdfs_label, Any) graph
 
 makeActions actionGroup accelGroup = do
     let actionentries = 
@@ -486,8 +487,7 @@ main = do
             let h x | List.isPrefixOf "http:" x = return x
                     | otherwise = Raptor.filenameToURI x
             uri <- h fileName
-            let ts = concatMap containsInfoTriples (g':gs)
-                graph = foldr insertVirtual (foldl mergeGraphs g' gs) ts
+            let graph = foldl mergeGraphs g' (gs ++ map containsInfoTriples (g':gs))
             newIORef $ newState graph (findStartPath (Just uri) graph) fileName False
 
     -- start:

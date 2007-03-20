@@ -81,17 +81,21 @@ connsCache = Cache.newCache 10000
 dc_date = IRI "http://purl.org/dc/elements/1.1/date"
 dcterms_created = IRI "http://purl.org/dc/terms/created"
 
+iquery :: (Pattern pat r, ?graph :: Graph) => pat -> r
+iquery pat = query pat ?graph
+
 conns :: (?vs :: ViewSettings, ?graph :: Graph) => Node -> Dir -> [Path]
 conns node dir = Cache.cached (Cache.byAddress ?graph, (node,dir))
                               connsCache result where
     result = map (\(prop, node') -> Path node [Conn prop dir node']) sorted
     sorted = List.sortBy cmp' list
-    list = [(p,n) | (p,s) <- Map.toList $ getConns ?graph node dir,
-                    not (p `elem` hiddenProps ?vs), n <- Set.toList s]
+    query' (x,p,y) = case dir of Pos -> iquery (x,p,y); Neg -> iquery (y,p,x)
+    list = [(p,n) | p <- query' (node, X, Any),
+                    not (p `elem` hiddenProps ?vs), 
+                    n <- query' (node, p, X) ]
     cmp n1 n2 | Just d1 <- f n1, Just d2 <- f n2 = compare d1 d2 where
         f n = msum [g dc_date n, g dcterms_created n]
-        g prop n = if hasConn ?graph n prop Pos 
-                       then Just $ getOne ?graph n prop Pos else Nothing
+        g prop n = iquery (n, prop, X) :: Maybe Node
     cmp n1 n2 = compare (getText n1) (getText n2)
     cmp' (p1,n1) (p2,n2) = catOrds (cmp p1 p2) (cmp n1 n2)
     catOrds EQ o = o; catOrds o _ = o
@@ -107,7 +111,8 @@ move rot dir = do path <- toPath rot dir
                   return $ fromPath (rev path)
 
 getText :: (?graph :: Graph) => Node -> Maybe String
-getText n = fmap nodeStr $ getOne ?graph n rdfs_label Pos
+getText n = listToMaybe $ catMaybes $ map f $ iquery (n, rdfs_label, X) where
+    f (Literal s _) = Just s; f _ = Nothing
     
 getTextOrIRI :: (?graph :: Graph) => Node -> String
 getTextOrIRI n = fromMaybe (showNode (graphNamespaces ?graph) n) (getText n)
@@ -220,35 +225,34 @@ toggleMark n mark | n `Set.member` mark = Set.delete n mark
 
 newGraph :: (?uriMaker :: URIMaker) => IO (Graph, Path)
 newGraph = do
-    home <- liftM IRI newURI
-    let graph = listToGraph [(home, rdfs_label, Literal "" Plain)]
+    dftGraph <- liftM IRI newURI; home <- liftM IRI newURI
+    let graph = toGraph dftGraph [(home, rdfs_label, Literal "" Plain)]
     return (graph, Path home [])
     
 findStartPath :: (?vs :: ViewSettings) => Maybe String -> Graph -> Path
 findStartPath (Just uri) g = let ?graph = g in toPath' $ Rotation (IRI uri) 0
 findStartPath Nothing g = let ?graph = g in result where
     result :: (?graph :: Graph) => Path
-    result = head $ catMaybes $ startNode:topic:document:triples where
+    result = head $ catMaybes $ [startNode,topic,document] where
 
-    self = IRI $ graphURI g
+    self = defaultGraph g
 
-    startNode = fmap getRot' $ getTriple self ffv_startNode
-    topic = fmap getRot' $ getTriple self foaf_primaryTopic
-    document = toPath (Rotation self 0) Pos
-    triples = map (Just . getRot) $ graphToList g
+    startNode = fmap getRot $ getTriple self ffv_startNode
+    topic = fmap getRot $ getTriple self foaf_primaryTopic
+    document = Just (Path self [])
     
-    getTriple s p = fmap (\o -> (s,p,o)) $ getOne g s p Pos
-    getRot  (s,p,o) = Path s [Conn p Pos o]
-    getRot' (s,p,o) = Path o [Conn p Neg s]
+    getTriple s p = iquery (s,p,Any) :: Maybe Triple
+    getRot (s,p,o) = Path o [Conn p Neg s]
     
     ffv_startNode = IRI "http://fenfire.org/rdf-v/2003/05/ff#startNode"
     foaf_primaryTopic = IRI "http://xmlns.com/foaf/0.1/primaryTopic"
     
-containsInfoTriples :: (?vs :: ViewSettings) => Graph -> [Triple]
-containsInfoTriples g = [(s, p, o) | o <- os, o /= s] where
-    s = IRI $ graphURI g
+containsInfoTriples :: (?vs :: ViewSettings) => Graph -> Graph
+containsInfoTriples g = toGraph d [(s, p, o) | o <- os, o /= s] where
+    s = defaultGraph g
     p = IRI "ex:containsInformationAbout"
-    triples = graphToList g
+    d = IRI ("http://fenfire.org/2007/03/contains-info?" ++ iriStr s)
+    triples = fromDefaultGraph g :: [Triple]
     [subjects, objects] = for [subject, object] $ \f -> map f triples
     os = Set.toAscList $ foldr Set.delete (Set.fromList subjects) objects
 
@@ -272,10 +276,7 @@ saveGraph graph fileName = do
 newState :: Graph -> Path -> FilePath -> Bool -> FenState
 newState graph path fp focus = 
     FenState graph path Set.empty fp False focus 0 rdfs_seeAlso ps [] []
-    where ps = Set.insert rdfs_seeAlso $ Set.fromList $
-                   map predicate $ filter f $ graphToList graph
-          f (_, _, IRI _) = True
-          f _             = False
+    where ps = Set.insert rdfs_seeAlso $ query (Any,X,Any) graph
 
 stateReplaceNode :: Node -> Node -> Endo FenState
 stateReplaceNode m n s@(FenState { fsPath = Path node cs }) = FenState {

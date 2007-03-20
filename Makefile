@@ -48,7 +48,7 @@ run-%: %
 	./dist/build/$</$< $(ARGS)
 	
 run-ghci: build install
-	ghci -lraptor
+	ghci -lraptor -fglasgow-exts Fenfire.hs
 
 run-project: fenfire ../fenfire-project/project.turtle darcs.nt
 	./dist/build/fenfire/fenfire ../fenfire-project/project.turtle darcs.nt $(ARGS)

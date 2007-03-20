@@ -42,12 +42,13 @@ import HList
 
 import Network.URI hiding (query)
 
-data Node = IRI { nodeStr :: String }
-          | BNode { bnodeGraph :: String, nodeStr :: String } 
-          | Literal { nodeStr :: String, literalTag :: LiteralTag }
-                                                    deriving (Eq, Ord, Show, Read, Typeable, Data)
-data LiteralTag = Plain | Lang String | Type String deriving (Eq, Ord, Show, Read, Typeable, Data)
-data Dir  = Pos | Neg                               deriving (Eq, Ord, Show)
+data Node = IRI { iriStr :: String }
+          | BNode { bnodeGraph :: String, bnodeId :: String } 
+          | Literal { literalStr :: String, literalTag :: LiteralTag }
+     deriving (Eq, Ord, Show, Read, Typeable, Data)
+data LiteralTag = Plain | Lang String | Type String 
+     deriving (Eq, Ord, Show, Read, Typeable, Data)
+data Dir  = Pos | Neg  deriving (Eq, Ord, Show)
 
 {-instance Show Node where
     show = showNode defaultNamespaces-}
@@ -70,10 +71,6 @@ instance CoinClass (Coin a) a where
 
 type Triple     = (Node, Node, Node)
 type Namespaces = Map String String
-data Graph      = Graph {
-    graphNamespaces :: Namespaces, graphURI :: String,
-    graphSides :: Coin (Map Node (Map Node (Set Node))),
-    graphRealTriples :: Set Triple } deriving (Show, Read, Eq, Data, Typeable)
     
 data Conn = Conn { connProp :: Node, connDir :: Dir, connTarget :: Node }
             deriving (Eq, Ord, Show)
@@ -84,9 +81,6 @@ pathToTriples (Path _ [])                 = []
 pathToTriples (Path n (Conn p d n' : cs)) = 
     triple d (n,p,n') : pathToTriples (Path n' cs)
 
-instance CoinClass Graph (Map Node (Map Node (Set Node))) where
-    getSide dir graph = getSide dir $ graphSides graph
-    
 instance CoinClass Triple Node where
     getSide Neg = subject
     getSide Pos = object
@@ -163,33 +157,22 @@ predicate (_,p,_) = p
 object :: Triple -> Node
 object (_,_,o) = o
 
-hasConn :: Graph -> Node -> Node -> Dir -> Bool
-hasConn g node prop dir = isJust $ do m <- Map.lookup node (getSide dir g)
-                                      s <- Map.lookup prop m
-                                      if Set.null s then Nothing else Just ()
+fromGraph :: Pattern (Any,Any,Any,Any) r => Graph -> r
+fromGraph = query (Any,Any,Any,Any)
 
-getOne :: Graph -> Node -> Node -> Dir -> Maybe Node
-getOne g node prop dir = if null nodes then Nothing else Just $ head nodes
-    where nodes = Set.toList (getAll g node prop dir)
-    
-getAll :: Graph -> Node -> Node -> Dir -> Set Node
-getAll g node prop dir = 
-    Map.findWithDefault Set.empty prop $ getConns g node dir
+fromDefaultGraph :: Pattern (Any,Any,Any,Dft) r => Graph -> r
+fromDefaultGraph = query (Any,Any,Any,Dft)
 
-getConns :: Graph -> Node -> Dir -> Map Node (Set Node)
-getConns g node dir = Map.findWithDefault Map.empty node $ getSide dir g
+class ToGraph a where toGraph :: Node -> a -> Graph -- node = default graph
 
-emptyGraph :: Graph
-emptyGraph = Graph defaultNamespaces "" (Map.empty, Map.empty) Set.empty
+instance ToGraph [Triple] where toGraph d = foldr insert (emptyGraph d)
+instance ToGraph [Quad]   where toGraph d = foldr insertQuad (emptyGraph d)
+instance ToGraph [x] => ToGraph (Set x) where 
+    toGraph d = toGraph d . Set.toList
+instance ToGraph [x] => ToGraph x where toGraph d x = toGraph d [x]
 
-listToGraph :: [Triple] -> Graph
-listToGraph = foldr insert emptyGraph
-
-graphToList :: Graph -> [Triple]
-graphToList = Set.toAscList . graphRealTriples
-
-mergeGraphs :: Op Graph
-mergeGraphs real virtual = foldr insertVirtual real (graphToList virtual)
+mergeGraphs :: Op Graph -- note: default graph and namespaces come from left
+mergeGraphs g h = foldr insertQuad g (fromGraph h)
 
 relativizeURI :: String -> Endo String
 relativizeURI baseURI s = fromMaybe s $ do
@@ -215,37 +198,31 @@ changeBaseURI :: String -> String -> Endo Node
 changeBaseURI oldBase newBase = absolutizeNode newBase . relativizeNode oldBase
 
 setGraphURI :: String -> Endo Graph
-setGraphURI uri g = everywhere (mkT $ changeBaseURI (graphURI g) uri) $ 
-                    g { graphURI = uri }
+setGraphURI uri g = 
+    everywhereInGraph (changeBaseURI (iriStr $ defaultGraph g) uri) g
 
 insert :: Triple -> Endo Graph
-insert t graph@(Graph { graphRealTriples=ts }) =
-    insertVirtual t $ graph { graphRealTriples = Set.insert t ts }
+insert (s,p,o) g = insertQuad (s,p,o,defaultGraph g) g
 
-insertVirtual :: Triple -> Endo Graph
-insertVirtual (s,p,o) graph@(Graph { graphSides = (neg, pos) }) =
-    graph { graphSides = (ins o p s neg, ins s p o pos) } where
-    ins a b c = Map.alter (Just . Map.alter (Just . Set.insert c . fromMaybe Set.empty) b . fromMaybe Map.empty) a   -- Gack!!! Need to make more readable
-    
 delete :: Triple -> Endo Graph
-delete (s,p,o) (Graph ns uri (neg, pos) triples) = 
-    Graph ns uri (del o p s neg, del s p o pos) $ 
-        Set.delete (s,p,o) triples where
-    del a b c = Map.adjust (Map.adjust (Set.delete c) b) a
-    
-deleteAll :: Node -> Node -> Endo Graph
-deleteAll s p g = dels s p os g where
-    dels s' p' (o':os') g' = dels s' p' os' (delete (s',p',o') g')
-    dels _  _  []       g' = g'
-    os = Set.toList $ getAll g s p Pos
+delete (s,p,o) = delete' (s,p,o,Dft)
+
+delete' :: Pattern pat [Quad] => pat -> Endo Graph
+delete' pat g = foldr deleteQuad g (query pat g)
     
 update :: Triple -> Endo Graph
-update (s,p,o) g = insert (s,p,o) $ deleteAll s p g
+update (s,p,o) = insert (s,p,o) . delete' (s,p,Any,Dft)
+
+everywhereInGraph :: Endo Node -> Endo Graph
+everywhereInGraph f g = setNamespaces (graphNamespaces g) $
+                        toGraph (f $ defaultGraph g) $ everywhere (mkT f) $
+                        (fromGraph g :: [Quad])
 
 replaceNode :: Node -> Node -> Endo Graph
-replaceNode m n graph = Set.fold f graph (graphRealTriples graph) where
-    f (s,p,o) = insert (r s, r p, r o) . delete (s,p,o)
-    r x = if x == m then n else x
+replaceNode m n = everywhereInGraph $ \x -> if x == m then n else x
+
+setNamespaces :: Namespaces -> Endo Graph
+setNamespaces ns g = g { graphNamespaces = ns }
 
 addNamespace :: String -> String -> Endo Graph
 addNamespace prefix uri g =
@@ -268,7 +245,7 @@ mul Neg = negate
 updateRDF :: (FromRDF a, ToRDF a) => Endo a -> Node -> Endo Graph
 updateRDF f node graph = graph' where
     (x, ts) = runFromRDF $ readRDF graph node
-    (_, ts') = runToRDF (graphURI graph) $ toRDF (f x)
+    (_, ts') = runToRDF (iriStr $ defaultGraph graph) $ toRDF (f x)
     graph' = flip (foldr insert) (Set.toAscList ts') $
              foldr delete graph (Set.toAscList ts)
 
@@ -305,8 +282,8 @@ class ToRDF a where
 instance FromRDF a => FromRDF [a] where
     readRDF g l | l == rdf_nil = return []
                 | otherwise    = do
-        let first = fromJust $ getOne g l rdf_first Pos
-            rest  = fromJust $ getOne g l rdf_next Pos
+        first <- mquery (l, rdf_first, X) g
+        rest <- mquery (l, rdf_next, X) g
         tellTs [ (l, rdf_first, first), (l, rdf_next, rest) ]
         x  <- readRDF g first
         xs <- readRDF g rest
@@ -338,8 +315,9 @@ instance ToRDF Node where
 --------------------------------------------------------------------------
 
 raptorToGraph :: [Raptor.Triple] -> [(String, String)] -> String -> Graph
-raptorToGraph raptorTriples namespaces graphURI' = setGraphURI graphURI' $
-        foldr (uncurry addNamespace) (listToGraph triples) namespaces where
+raptorToGraph raptorTriples namespaces graphURI' =
+       setNamespaces (Map.fromList namespaces) (toGraph g triples) where
+    g = IRI graphURI'
     triples = map convert raptorTriples
     convert (s,p,o) = (f s, f p, f o)
     f (Raptor.Uri s) = IRI s
@@ -348,15 +326,15 @@ raptorToGraph raptorTriples namespaces graphURI' = setGraphURI graphURI' $
     
 graphToRaptor :: Graph -> ([Raptor.Triple], [(String, String)])
 graphToRaptor graph = (map convert triples, namespaces) where
-    graphURI' = fromJust $ Network.URI.parseURI (graphURI graph)
+    graphURI' = fromJust $ Network.URI.parseURI (iriStr $ defaultGraph graph)
     convert (s,p,o) = (f s, f p, f o)
     f (IRI s) = Raptor.Uri $ fromMaybe s $ do
                     u <- Network.URI.parseURI s
                     return $ show $ Network.URI.relativeFrom u graphURI'
     f (Literal s _) = Raptor.Literal s
-    f (BNode g s) = if g == (graphURI graph) then Raptor.Blank s
+    f (BNode g s) = if g == (iriStr $ defaultGraph graph) then Raptor.Blank s
                     else error "XXX Cannot save bnode from different graph"
-    triples = graphToList graph
+    triples = query (Any,Any,Any,Dft) graph :: [Triple]
     namespaces = Map.toAscList $ graphNamespaces graph
 
 
@@ -364,6 +342,7 @@ graphToRaptor graph = (map convert triples, namespaces) where
 -- Writing Turtle
 --------------------------------------------------------------------------
 
+{-
 writeTurtle :: MonadWriter String m => String -> Graph -> m ()
 writeTurtle nl graph = do let graph' = listToGraph $ graphToList graph
                               nss = graphNamespaces graph
@@ -387,6 +366,7 @@ writeTurtlePred nl nss (p, os) = do
 writeTurtleObj nss o = do tell "    "; writeTurtleNode nss o
 
 writeTurtleNode nss node = tell $ showNode nss node
+-}
 
 
 --------------------------------------------------------------------------
@@ -394,8 +374,9 @@ writeTurtleNode nss node = tell $ showNode nss node
 -- once it's finished
 --------------------------------------------------------------------------
 
-data Any = Any deriving (Eq, Ord, Show)
-data X = X     deriving (Eq, Ord, Show)
+data Any = Any   deriving (Eq, Ord, Show)
+data X = X       deriving (Eq, Ord, Show)
+data Dft = Dft deriving (Eq, Ord, Show) -- pattern matching the default graph
 
 -- Examples:
 -- query (x, rdf_type, X)   :: Graph -> Set Node
@@ -404,18 +385,27 @@ data X = X     deriving (Eq, Ord, Show)
 -- query (x, rdf_type, Any) :: Graph -> Maybe Triple
 -- There are lots of other combinations.
 class Show pattern => Pattern pattern result where
-    query :: pattern -> Graph' -> result
+    query :: pattern -> Graph -> result
     
 type Quad = (Node, Node, Node, Node)
 
 quad2triple :: Quad -> Triple
 quad2triple (s,p,o,_) = (s,p,o)
 
+quadSubject :: Quad -> Node
+quadSubject (s,_,_,_) = s
+
+quadPredicate :: Quad -> Node
+quadPredicate (_,p,_,_) = p
+
+quadObject :: Quad -> Node
+quadObject (_,_,o,_) = o
+
 quadGraph :: Quad -> Node
 quadGraph (_,_,_,g) = g
 
-data Graph' = Graph' { defaultGraph :: String
-                   , namespaces' :: Map String String
+data Graph = Graph { defaultGraph :: Node
+                   , graphNamespaces :: Namespaces
                    , graphViews :: Map (Node, Node, Node, Node) (Set Quad)
                                :*: Map (Node, Node, Node, Any)  (Set Quad)
                                :*: Map (Node, Node, Any,  Node) (Set Quad)
@@ -433,12 +423,17 @@ data Graph' = Graph' { defaultGraph :: String
                                :*: Map (Any,  Any,  Any,  Node) (Set Quad)
                                :*: Map (Any,  Any,  Any,  Any)  (Set Quad)
                                :*: HNil -- use some simple TH for this? :-)
-                   }
+                   } deriving (Eq, Typeable)
+                   
+instance Show Graph where
+    show g@(Graph d ns _) = "setNamespaces " ++ show ns ++ " (toGraph " ++
+                            show d++" "++show (fromGraph g :: [Quad])++")"
                    
 instance (Empty x, Empty xs) => Empty (HCons x xs) where 
     empty = HCons empty empty
 instance Empty HNil where empty = HNil
-instance Empty Graph' where empty = Graph' "" empty empty
+
+emptyGraph d = Graph d defaultNamespaces empty
 
 simpleQuery pattern g = 
     Map.findWithDefault Set.empty pattern $ hOccursFst (graphViews g)
@@ -476,33 +471,38 @@ instance (Show s, Show p, Show o, Pattern (s,p,o,Any) (Set Quad)) =>
          Pattern (s,p,o,X) (Set Node) where
     query (s,p,o,X) = Set.map quadGraph . query (s,p,o,Any)
     
-instance (Show s, Show p, Show o, Pattern (s,p,o,Any) r) => 
-         Pattern (s,p,o) r where
-    query (s,p,o) = query (s,p,o,Any)
+instance (Show s, Show p, Show o, Pattern (s,p,o,Node) (Set Quad)) =>
+         Pattern (s,p,o,Dft) (Set Quad) where
+    query (s,p,o,Dft) g = query (s, p, o, defaultGraph g) g
     
-instance (Show s, Show p, Show o, Pattern (s,p,o) r, Pattern (o,p,s) r) =>
-         Pattern (s,p,Dir,o) r where
-    query (o,p,Neg,s) = query (s,p,o)
-    query (s,p,Pos,o) = query (s,p,o)
+instance (Show s, Show p, Show o, Pattern (s,p,o,Any) (Set Quad)) => 
+         Pattern (s,p,o) (Set Quad) where
+    query (s,p,o) = query (s,p,o,Any)
+
+instance (Show s, Show p, Show o, Pattern (s,p,o,Any) (Set Node)) => 
+         Pattern (s,p,o) (Set Node) where
+    query (s,p,o) = query (s,p,o,Any)
+
 
 instance Pattern pat (Set Quad) => Pattern pat (Set Triple) where
     query pat = Set.map quad2triple . query pat
 
-instance (Pattern pat (Set r), MonadPlus m) => Pattern pat (m r) where
-    query pat = returnEach . Set.toList . query pat
-
-{- less generic versions, in case the above doesn't work out for some reason:
-instance (Pattern pat (Set r), MonadPlus m) => Pattern pat (m r) where
+instance Pattern pat (Set r) => Pattern pat [r] where
     query pat = Set.toList . query pat
 
-instance Pattern pat (Set r) => Pattern pat (Maybe r) where
-    query pat g = let s = query pat g in toMaybe (Set.null s) (Set.findMin s)
--}
+instance Pattern pat (Set r) => Pattern pat (Either String r) where
+    query pat g = let s = query pat g in 
+                  if Set.null s then Left $ "Pattern not found: " ++ show pat
+                                else Right $ Set.findMin s
+                                
+instance Pattern pat (Either String r) => Pattern pat (Maybe r) where
+    query = mquery
     
-instance Pattern pat (Set r) => Pattern pat r where
-    query pat g = let s = query pat g in
-                  if Set.null s then error $ "Pattern not found: " ++ show pat
-                                else Set.findMin s
+instance Pattern pat (Either String r) => Pattern pat r where
+    query pat g = either error id $ query pat g
+    
+mquery :: (Pattern pat (Either String r), Monad m) => pat -> Graph -> m r
+mquery pat g = either fail return $ query pat g
 
 instance Pattern pat (Set Quad) => Pattern pat Bool where
     query pat = not . Set.null . (id :: Endo (Set Quad)) . query pat
@@ -528,8 +528,8 @@ instance (PatternSlot s, PatternSlot p, PatternSlot o, PatternSlot g) =>
       updateWithDefault Set.empty (Set.delete (s,p,o,g))
         (toPatternSlot s, toPatternSlot p, toPatternSlot o, toPatternSlot g)
 
-insertQuad :: Quad -> Endo Graph'
+insertQuad :: Quad -> Endo Graph
 insertQuad q g = g { graphViews = hMap (InsertQuad q) $ graphViews g }
 
-deleteQuad :: Quad -> Endo Graph'
+deleteQuad :: Quad -> Endo Graph
 deleteQuad q g = g { graphViews = hMap (DeleteQuad q) $ graphViews g }
