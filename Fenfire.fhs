@@ -225,7 +225,7 @@ toggleMark n mark | n `Set.member` mark = Set.delete n mark
 
 newGraph :: (?uriMaker :: URIMaker) => IO (Graph, Path)
 newGraph = do
-    dftGraph <- liftM IRI newURI; home <- liftM IRI newURI
+    home <- liftM IRI newURI; let dftGraph = IRI "dummy:new-graph"
     let graph = toGraph dftGraph [(home, rdfs_label, Literal "" Plain)]
     return (graph, Path home [])
     
