@@ -330,7 +330,9 @@ raptorToGraph raptorTriples namespaces graphURI' =
     
 graphToRaptor :: Graph -> ([Raptor.Triple], [(String, String)])
 graphToRaptor graph = (map convert triples, namespaces) where
-    graphURI' = fromJust $ Network.URI.parseURI (iriStr $ defaultGraph graph)
+    uri       = iriStr $ defaultGraph graph
+    graphURI' = flip fromMaybe (Network.URI.parseURI uri) $ error $
+                "Fenfire.RDF.graphToRaptor: not a uri: \""++uri++"\""
     convert (s,p,o) = (f s, f p, f o)
     f (IRI s) = Raptor.Uri $ fromMaybe s $ do
                     u <- Network.URI.parseURI s
