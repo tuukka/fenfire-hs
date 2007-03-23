@@ -211,7 +211,6 @@ triplesToFilename triples namespaces filename = do
         return ()
   {# call serialize_end #} serializer
   {# call free_serializer #} serializer
-  {# call finish #}
   
 -- | Serialize the given triples into memory
 --
@@ -253,7 +252,6 @@ triplesToBytes triples namespaces baseURI = do
   {# call free_memory #} (castPtr result_str')
   {# call free_memory #} (castPtr result_str)
   {# call free_memory #} (castPtr result_len)
-  {# call finish #}
   
   return result
 
@@ -288,7 +286,6 @@ filenameToTriples filename baseURI = do
   {# call free_uri #} base_uri
   {# call free_memory #} (castPtr uri_str)
   
-  {# call finish #}
   return result
   
 uriToTriples :: String -> Maybe String -> IO ([Triple], [(String, String)])
@@ -303,7 +300,6 @@ uriToTriples uri baseURI = do
   {# call free_uri #} uri'
   {# call free_uri #} base_uri
   
-  {# call finish #}
   return result
   
 bytesToTriples :: String -> ByteString -> String -> IO ([Triple], [(String, String)])
@@ -318,7 +314,6 @@ bytesToTriples format bytes baseURI = do
 
   {# call free_uri #} base_uri
   
-  {# call finish #}
   return result
 
 parse :: (Parser -> IO CInt) -> String -> IO ([Triple], [(String, String)])
