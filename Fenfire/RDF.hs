@@ -280,22 +280,26 @@ class ToRDF a where
     toRDF :: a -> ToRdfM Node
     
 instance FromRDF a => FromRDF [a] where
-    readRDF g l | l == rdf_nil = return []
-                | otherwise    = do
+    readRDF g l = readRDFList readRDF g l
+    
+readRDFList f g l | l == rdf_nil = return []
+                  | otherwise    = do
         first <- mquery (l, rdf_first, X) g
         rest <- mquery (l, rdf_next, X) g
         tellTs [ (l, rdf_first, first), (l, rdf_next, rest) ]
-        x  <- readRDF g first
-        xs <- readRDF g rest
+        x  <- f g first
+        xs <- readRDFList f g rest
         return (x:xs)
             
 instance ToRDF a => ToRDF [a] where
-    toRDF []     = return rdf_nil
-    toRDF (x:xs) = do l <- newBNode; first <- toRDF x; next <- toRDF xs
-                      tellTs [ (l, rdf_first, first)
-                             , (l, rdf_next, next) ]
-                      return l
-                      
+    toRDF = toRDFList toRDF
+    
+toRDFList _ []     = return rdf_nil
+toRDFList f (x:xs) = do l <- newBNode; first <- f x; next <- toRDFList f xs
+                        tellTs [ (l, rdf_first, first)
+                               , (l, rdf_next, next) ]
+                        return l
+
 instance FromRDF String where
     fromRDF _ (Literal s _) = s
     fromRDF _ n = error $ "Fenfire.RDF.fromRDF(String): can only convert literals, not " ++ show n
