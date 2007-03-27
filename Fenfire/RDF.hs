@@ -374,6 +374,11 @@ writeTurtleObj nss o = do tell "    "; writeTurtleNode nss o
 writeTurtleNode nss node = tell $ showNode nss node
 -}
 
+writeTriples nss ts = concatMap (writeTriple nss) ts
+
+writeTriple nss (s,p,o) =
+    (concat $ intersperse " " $ map (showNode nss) [s,p,o]) ++ ".\n"
+
 
 --------------------------------------------------------------------------
 -- Reimplementation, using HList; this will become the default

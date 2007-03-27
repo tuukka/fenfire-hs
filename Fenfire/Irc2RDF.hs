@@ -27,6 +27,8 @@ module Fenfire.Irc2RDF where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
+import Fenfire.RDF (writeTriples, Triple, Node(..), LiteralTag(..))
+
 import System.Time (getClockTime, toUTCTime, CalendarTime(..), ClockTime(..), 
                     toClockTime)
 import System.Environment (getArgs, getProgName)
@@ -37,6 +39,7 @@ import Data.Char (toUpper, toLower)
 import Data.Char (ord)
 import Data.Bits ((.&.))
 import Data.List (isPrefixOf)
+import qualified Data.Map as Map
 
 import Control.Monad (when)
 import qualified Control.Exception
@@ -67,17 +70,6 @@ isUnicode c' = let c = ord c' in
      c .&. 0xFFFFF800 /= 0xD800 &&
      (c < 0xFDD0 || c > 0xFDEF) &&
      c .&. 0xFFFE /= 0xFFFE
-
--- XXX which unicode characters must be escaped?
-turtle_escaped :: Char -> String -> String
-turtle_escaped _        [] = []
-turtle_escaped c ('\\':xs) = '\\':'\\':turtle_escaped c xs
-turtle_escaped c    (x:xs) | c == x 
-                           = '\\':   c:turtle_escaped c xs
-turtle_escaped c ('\n':xs) = '\\': 'n':turtle_escaped c xs
-turtle_escaped c ('\r':xs) = '\\': 'r':turtle_escaped c xs
-turtle_escaped c ('\t':xs) = '\\': 't':turtle_escaped c xs
-turtle_escaped c (   x:xs) =         x:turtle_escaped c xs
 
 main = do (root,filepath,extension,channels,parseTimeStamps) <- do
               args <- getArgs
@@ -137,8 +129,8 @@ handle channels root filepath extension line (clockTime,offset) = do
 
 irc2rdf :: [String] -> String -> FilePath -> (ClockTime, Maybe Integer) -> 
            String -> (Maybe FilePath,String)
-irc2rdf channels root filepath time = 
-    uncurry (triples channels root filepath time) . parse
+irc2rdf channels root filepath time s = (fp, writeTriples Map.empty ts) where
+     (fp,ts) = uncurry (triples channels root filepath time) $ parse s
 
 parse (':':rest) = (Just $ takeWhile (/=' ') rest,
                     parse' "" (tail $ dropWhile (/=' ') rest))
@@ -151,45 +143,46 @@ parse' acc (' ':xs) = reverse acc : parse' "" xs
 parse' acc   (x:xs) = parse' (x:acc) xs
 
 triples :: [String] -> String -> FilePath -> (ClockTime, Maybe Integer) -> 
-           Maybe String -> [String] -> (Maybe FilePath, String)
+           Maybe String -> [String] -> (Maybe FilePath, [Triple])
 triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg] 
     | map toUpper cmd == "PRIVMSG", 
-      '#':channel <- map toLower target, channel `elem` channels
+      '#':channelName <- map toLower target, channelName `elem` channels
     = 
-    let file = channel ++ "-" ++ day
+    let file = channelName ++ "-" ++ day
+        channel = IRI $ "irc://freenode/%23" ++ channelName
         uri = root ++ file ++ "#" ++ second ++ maybe "" (('.':) . show) offset
+        event = IRI uri
+        timestamp = Literal (day++"T"++second++"Z") (Type xsd_date)
     in
     (
     Just (filepath++file)
     ,
-    "<irc://freenode/%23"++channel++"> <"++isContainerOf++"> <"++uri++">.\n"++
-    "<irc://freenode/%23"++channel++"> <"++rdftype++"> <"++forum++">.\n"++
-    "<"++uri++"> <"++created++"> "++
-        t (day++"T"++second++"Z")++"^^<"++date++">.\n"++
-    "<"++uri++"> <"++hasCreator++"> <"++creator++">.\n"++
-    "<"++uri++"> <"++hasContent++"> "++t msg++".\n"++
-    "<"++uri++"> <"++label++"> "++t ("<"++nick++"> "++msg)++".\n"++
-    "<"++uri++"> <"++rdftype++"> <"++post++">.\n"++
-    "<"++creator++"> <"++label++"> "++t nick++".\n"++
-    "<"++creator++"> <"++rdftype++"> <"++user++">.\n"
+    [(channel, sioc_container_of, event),
+     (channel, rdf_type, sioc_Forum),
+     (event, dcterms_created, timestamp),
+     (event, sioc_has_creator, creator),
+     (event, sioc_has_content, Literal msg Plain),
+     (event, rdfs_label, Literal ("<"++nick++"> "++msg) Plain),
+     (event, rdf_type, sioc_Post),
+     (creator, rdfs_label, Literal nick Plain),
+     (creator, rdf_type, sioc_User)]
     )
-    where t str = "\"" ++ turtle_escaped '\"' str ++ "\""
-          label = "http://www.w3.org/2000/01/rdf-schema#label"
-          rdftype = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-          created = "http://purl.org/dc/terms/created"
-          isContainerOf = "http://rdfs.org/sioc/ns#container_of"
-          hasCreator = "http://rdfs.org/sioc/ns#has_creator"
-          hasContent = "http://rdfs.org/sioc/ns#content"
-          date = "http://www.w3.org/2001/XMLSchema#dateTime"
-          forum = "http://rdfs.org/sioc/ns#Forum"
-          post = "http://rdfs.org/sioc/ns#Post"
-          user = "http://rdfs.org/sioc/ns#User"
+    where rdfs_label = IRI "http://www.w3.org/2000/01/rdf-schema#label"
+          rdf_type = IRI "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+          dcterms_created = IRI "http://purl.org/dc/terms/created"
+          sioc_container_of = IRI "http://rdfs.org/sioc/ns#container_of"
+          sioc_has_creator = IRI "http://rdfs.org/sioc/ns#has_creator"
+          sioc_has_content = IRI "http://rdfs.org/sioc/ns#content"
+          xsd_date = "http://www.w3.org/2001/XMLSchema#dateTime"
+          sioc_Forum = IRI "http://rdfs.org/sioc/ns#Forum"
+          sioc_Post = IRI "http://rdfs.org/sioc/ns#Post"
+          sioc_User = IRI "http://rdfs.org/sioc/ns#User"
           nick = takeWhile (/='!') prefix
-          creator = "irc://freenode/"++nick++",isuser"
+          creator = IRI $ "irc://freenode/"++nick++",isuser"
           (CalendarTime y moe d h m s _ps _wd _yd _tzn _tz _isDST) 
               = toUTCTime time
           mo = (fromEnum moe+1)
           p n i = take (n-length (show i)) (repeat '0') ++ show i
           day    = p 4 y ++ '-':p 2 mo ++ '-':p 2 d
           second = p 2 h ++ ':':p 2  m ++ ':':p 2 s
-triples _ _ _ _ _ _ = (Nothing, "")
+triples _ _ _ _ _ _ = (Nothing, [])
