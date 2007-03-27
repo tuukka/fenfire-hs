@@ -231,8 +231,9 @@ newGraph = do
     return (graph, Path home [])
     
 findStartPath :: (?vs :: ViewSettings) => Maybe String -> Graph -> Path
-findStartPath (Just uri) g = let ?graph = g in toPath' $ Rotation (IRI uri) 0
-findStartPath Nothing g = let ?graph = g in result where
+findStartPath (Just uri) g | defaultGraph g /= IRI uri = let ?graph = g in 
+    toPath' $ Rotation (IRI uri) 0
+findStartPath _ g = let ?graph = g in result where
     result :: (?graph :: Graph) => Path
     result = head $ catMaybes $ [startNode,topic,document] where
 
