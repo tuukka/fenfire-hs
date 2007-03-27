@@ -142,11 +142,12 @@ parse' acc   (x:xs) = parse' (x:acc) xs
 
 triples :: [String] -> String -> FilePath -> (ClockTime, Maybe Integer) -> 
            Maybe String -> [String] -> (Maybe FilePath, [Triple])
-triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg] 
+triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg0] 
     | map toUpper cmd == "PRIVMSG", 
       '#':channelName <- map toLower target, channelName `elem` channels
     = 
-    let file = channelName ++ "-" ++ day
+    let msg = case msg0 of '+':cs -> cs; '-':cs -> cs; cs -> cs
+        file = channelName ++ "-" ++ day
         channel = IRI $ "irc://freenode/%23" ++ channelName
         uri = root ++ file ++ "#" ++ second ++ maybe "" (('.':) . show) offset
         event = IRI uri
