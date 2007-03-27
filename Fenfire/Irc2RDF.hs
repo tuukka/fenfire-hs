@@ -3,7 +3,7 @@ module Fenfire.Irc2RDF where
 
 -- Irc2RDF: An IRC to SIOC RDF converter
 -- Standalone compiling: 
---     ghc --make -o Irc2RDF -main-is Fenfire.Irc2RDF.main Irc2RDF.hs
+--     ghc --make -o Irc2RDF -main-is Fenfire.Irc2RDF.main Fenfire/Irc2RDF.hs -lraptor
 -- Usage with IRC protocol lines in real-time from stdin: 
 --     Irc2RDF http://base-uri/ file-path/ .file-extension "channel1 channel2"
 -- Usage with IRC protocol lines with prepended timestamps from stdin:
@@ -35,8 +35,7 @@ import System.Environment (getArgs, getProgName)
 import System.IO (hFlush, stdout)
 import System.IO.Unsafe (unsafeInterleaveIO)
 
-import Data.Char (toUpper, toLower)
-import Data.Char (ord)
+import Data.Char (ord, toUpper, toLower, isLetter, isSpace)
 import Data.Bits ((.&.))
 import Data.List (isPrefixOf)
 import qualified Data.Map as Map
@@ -78,8 +77,7 @@ main = do (root,filepath,extension,channels,parseTimeStamps) <- do
                       return (root,filepath,extension,channels,False)
                   ["-t",root,filepath,extension,channels] -> 
                       return (root,filepath,extension,channels,True)
-                  _ -> getProgName >>= 
-                      error . (++": [-t] root filepath extension channels")
+                  _ -> error "[-t] root filepath extension channels"
           when (not $ "http://" `isPrefixOf` root)
                $ error "The root doesn't start with http://"
           (irclines,timestamps) <- case parseTimeStamps of
@@ -153,6 +151,16 @@ triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg]
         uri = root ++ file ++ "#" ++ second ++ maybe "" (('.':) . show) offset
         event = IRI uri
         timestamp = Literal (day++"T"++second++"Z") (Type xsd_date)
+          
+        item = IRI $ uri ++ "-item"
+
+        concepts (c:cs) lbl | isLetter c = concepts cs (lbl++[c])
+        concepts (':':':':cs) lbl = [(channel, ds_item, item),
+                                     (item, rdfs_label, lbl'),
+                                     (item, dc_date, timestamp),
+                                     (item, ds_occurrence, event)] where
+            lbl' = Literal (lbl ++ ": " ++ dropWhile isSpace cs) Plain
+        concepts _ _ = []
     in
     (
     Just (filepath++file)
@@ -166,9 +174,11 @@ triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg]
      (event, rdf_type, sioc_Post),
      (creator, rdfs_label, Literal nick Plain),
      (creator, rdf_type, sioc_User)]
+     ++ concepts msg ""
     )
     where rdfs_label = IRI "http://www.w3.org/2000/01/rdf-schema#label"
           rdf_type = IRI "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+          dc_date = IRI "http://purl.org/dc/elements/1.1/date"
           dcterms_created = IRI "http://purl.org/dc/terms/created"
           sioc_container_of = IRI "http://rdfs.org/sioc/ns#container_of"
           sioc_has_creator = IRI "http://rdfs.org/sioc/ns#has_creator"
@@ -177,6 +187,9 @@ triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg]
           sioc_Forum = IRI "http://rdfs.org/sioc/ns#Forum"
           sioc_Post = IRI "http://rdfs.org/sioc/ns#Post"
           sioc_User = IRI "http://rdfs.org/sioc/ns#User"
+          ds_item = IRI "http://fenfire.org/2007/03/discussion-summaries#item"
+          ds_occurrence = 
+              IRI "http://fenfire.org/2007/03/discussion-summaries#occurrence"
           nick = takeWhile (/='!') prefix
           creator = IRI $ "irc://freenode/"++nick++",isuser"
           (CalendarTime y moe d h m s _ps _wd _yd _tzn _tz _isDST) 
@@ -186,3 +199,4 @@ triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg]
           day    = p 4 y ++ '-':p 2 mo ++ '-':p 2 d
           second = p 2 h ++ ':':p 2  m ++ ':':p 2 s
 triples _ _ _ _ _ _ = (Nothing, [])
+
