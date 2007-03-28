@@ -27,7 +27,8 @@ module Fenfire.Irc2RDF where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Fenfire.RDF (writeTriples, Triple, Node(..), LiteralTag(..))
+import Fenfire.RDF (writeTriples, Triple, Node(..), LiteralTag(..), 
+                    rdf_type, rdfs_label)
 
 import System.Time (getClockTime, toUTCTime, CalendarTime(..), ClockTime(..), 
                     toClockTime)
@@ -70,6 +71,22 @@ isUnicode c' = let c = ord c' in
      (c < 0xFDD0 || c > 0xFDEF) &&
      c .&. 0xFFFE /= 0xFFFE
 
+
+-- the vocabulary
+dc_date           = IRI "http://purl.org/dc/elements/1.1/date"
+dcterms_created   = IRI "http://purl.org/dc/terms/created"
+xsd_dateTime      =     "http://www.w3.org/2001/XMLSchema#dateTime"
+sioc_container_of = IRI "http://rdfs.org/sioc/ns#container_of"
+sioc_has_creator  = IRI "http://rdfs.org/sioc/ns#has_creator"
+sioc_content      = IRI "http://rdfs.org/sioc/ns#content"
+sioc_Forum        = IRI "http://rdfs.org/sioc/ns#Forum"
+sioc_Post         = IRI "http://rdfs.org/sioc/ns#Post"
+sioc_User         = IRI "http://rdfs.org/sioc/ns#User"
+ds_item           = IRI "http://fenfire.org/2007/03/discussion-summaries#item"
+ds_occurrence     = 
+    IRI "http://fenfire.org/2007/03/discussion-summaries#occurrence"
+
+-- command line parsing and event dispatching
 main = do (root,filepath,extension,channels,parseTimeStamps) <- do
               args <- getArgs
               case args of 
@@ -93,10 +110,12 @@ main = do (root,filepath,extension,channels,parseTimeStamps) <- do
           mapM_ (uncurry $ handle (words channels) root filepath extension) 
                 $ zip (map fromUTF irclines) (uniquify timestamps)
 
+-- a lazy stream of timestamps based on evaluation time
 getTimeStamps = do ~(TOD secs _picos) <- unsafeInterleaveIO getClockTime
                    xs <- unsafeInterleaveIO getTimeStamps
                    return (TOD secs 0:xs)
 
+-- parser for timestamp input format yyyy-mm-ddThh:mm:ss+zhzm
 parseTime :: String -> ClockTime
 parseTime str =  toClockTime $ CalendarTime 
                      (read year) (toEnum $ read month-1) (read day)
@@ -110,6 +129,7 @@ parseTime str =  toClockTime $ CalendarTime
           (second, rest5) = span (/= '+') $ drop 1 rest4
           (tzh,    tzm  ) = splitAt 2     $ drop 1 rest5
                   
+-- differentiating consecutive equivalent elements by adding a sequence number
 uniquify     [] = []
 uniquify (x:xs) = (x,Nothing):uniquify' (x,Nothing) xs
 
@@ -119,17 +139,20 @@ uniquify' prev (x:xs) | fst prev == x = next prev:uniquify' (next prev) xs
     where next (i,offset) = (i, Just $ maybe (2::Integer) (+1) offset)
           first i         = (i, Nothing)
 
+-- event handling by writing the results into files
 handle :: [String] -> String -> FilePath -> String -> 
           String -> (ClockTime, Maybe Integer) -> IO ()
 handle channels root filepath extension line (clockTime,offset) = do 
     let (file,output) = irc2rdf channels root filepath (clockTime,offset) line
     maybe (return ()) ((flip appendFile) (toUTF output).(++extension)) file
 
+-- conversion from an irc protocol line to a fragment of turtle rdf
 irc2rdf :: [String] -> String -> FilePath -> (ClockTime, Maybe Integer) -> 
            String -> (Maybe FilePath,String)
 irc2rdf channels root filepath time s = (fp, writeTriples Map.empty ts) where
      (fp,ts) = uncurry (triples channels root filepath time) $ parse s
 
+-- parsing of a line in irc protocol syntax
 parse (':':rest) = (Just $ takeWhile (/=' ') rest,
                     parse' "" (tail $ dropWhile (/=' ') rest))
 parse      rest  = (Nothing, parse' "" rest)
@@ -140,6 +163,7 @@ parse'  "" (':':xs) = [reverse . dropWhile (=='\r') $ reverse xs]
 parse' acc (' ':xs) = reverse acc : parse' "" xs
 parse' acc   (x:xs) = parse' (x:acc) xs
 
+-- output file and a list of triples for a given irc event
 triples :: [String] -> String -> FilePath -> (ClockTime, Maybe Integer) -> 
            Maybe String -> [String] -> (Maybe FilePath, [Triple])
 triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg0] 
@@ -151,7 +175,7 @@ triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg0]
         channel = IRI $ "irc://freenode/%23" ++ channelName
         uri = root ++ file ++ "#" ++ second ++ maybe "" (('.':) . show) offset
         event = IRI uri
-        timestamp = Literal (day++"T"++second++"Z") (Type xsd_date)
+        timestamp = Literal (day++"T"++second++"Z") (Type xsd_dateTime)
           
         item = IRI $ uri ++ "-item"
 
@@ -170,27 +194,14 @@ triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg0]
      (channel, rdf_type, sioc_Forum),
      (event, dcterms_created, timestamp),
      (event, sioc_has_creator, creator),
-     (event, sioc_has_content, Literal msg Plain),
+     (event, sioc_content, Literal msg Plain),
      (event, rdfs_label, Literal ("<"++nick++"> "++msg) Plain),
      (event, rdf_type, sioc_Post),
      (creator, rdfs_label, Literal nick Plain),
      (creator, rdf_type, sioc_User)]
      ++ concepts msg ""
     )
-    where rdfs_label = IRI "http://www.w3.org/2000/01/rdf-schema#label"
-          rdf_type = IRI "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-          dc_date = IRI "http://purl.org/dc/elements/1.1/date"
-          dcterms_created = IRI "http://purl.org/dc/terms/created"
-          sioc_container_of = IRI "http://rdfs.org/sioc/ns#container_of"
-          sioc_has_creator = IRI "http://rdfs.org/sioc/ns#has_creator"
-          sioc_has_content = IRI "http://rdfs.org/sioc/ns#content"
-          xsd_date = "http://www.w3.org/2001/XMLSchema#dateTime"
-          sioc_Forum = IRI "http://rdfs.org/sioc/ns#Forum"
-          sioc_Post = IRI "http://rdfs.org/sioc/ns#Post"
-          sioc_User = IRI "http://rdfs.org/sioc/ns#User"
-          ds_item = IRI "http://fenfire.org/2007/03/discussion-summaries#item"
-          ds_occurrence = 
-              IRI "http://fenfire.org/2007/03/discussion-summaries#occurrence"
+    where 
           nick = takeWhile (/='!') prefix
           creator = IRI $ "irc://freenode/"++nick++",isuser"
           (CalendarTime y moe d h m s _ps _wd _yd _tzn _tz _isDST) 
