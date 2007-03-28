@@ -144,8 +144,10 @@ turtle_escaped c ('\n':xs) = '\\': 'n':turtle_escaped c xs
 turtle_escaped c ('\r':xs) = '\\': 'r':turtle_escaped c xs
 turtle_escaped c ('\t':xs) = '\\': 't':turtle_escaped c xs
 turtle_escaped c    (x:xs) | i <- fromEnum x, i < 0x20 || i == 0x5C 
-                           = '\\':'u':((if i<16 then ('0':) else id) $
+                           = '\\':'u':(p 4 (Numeric.showHex i "") $
                                        Numeric.showHex i (turtle_escaped c xs))
+    where p n s rest | n > length s = '0':p n ('0':s) rest
+                     | otherwise    = rest
 turtle_escaped c (   x:xs) =         x:turtle_escaped c xs
 
 subject :: Triple -> Node
