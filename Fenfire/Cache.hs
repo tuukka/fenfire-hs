@@ -20,7 +20,7 @@ module Fenfire.Cache where
 -- Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
 -- MA  02111-1307  USA
 
-import Fenfire.Utils
+import Fenfire.Utils hiding (access)
 
 import Data.Bits
 import Data.HashTable (HashTable)

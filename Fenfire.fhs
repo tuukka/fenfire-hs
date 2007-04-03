@@ -167,9 +167,9 @@ tryMove rot@(Rotation n r) dir = maybe rot' Just (move rot dir) where
     
 findChange :: (?vs :: ViewSettings, ?graph :: Graph) =>
               Rotation -> Int -> Maybe Rotation
-findChange rot@(Rotation n r) dir = fmap (Rotation n . (r+)) change where
-    change = listToMaybe $ List.sortBy (\x y -> abs x `compare` abs y)
-                 $ catMaybes [findChange' Neg, findChange' Pos]
+findChange rot@(Rotation n r) dir = fmap (Rotation n . (r+)) change_ where
+    change_ = listToMaybe $ List.sortBy (\x y -> abs x `compare` abs y)
+                  $ catMaybes [findChange' Neg, findChange' Pos]
     findChange' dir' = fmap (subtract r) r' where
         len = length $ conns n dir'
         index = r + min (len `div` 2) (maxCenter ?vs)
