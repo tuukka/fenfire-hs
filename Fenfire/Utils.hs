@@ -46,46 +46,26 @@ type Op a      = a -> a -> a
 
 
 type Changer inner outer = Endo inner -> Endo outer
-data Accessor inner outer = Accessor { access :: outer -> inner,
-                                       change :: Changer inner outer }
-                                       
-write :: Accessor inner outer -> inner -> Endo outer
-write acc x = change acc (const x)
 
-gets' :: MonadState outer m => Accessor inner outer -> m inner
-gets' = gets . access
+sets :: Changer inner outer -> inner -> Endo outer
+sets chg x = chg (const x)
 
 puts :: MonadState outer m => Changer inner outer -> inner -> m ()
-puts chg x = modify (chg $ const x)
-
-puts' :: MonadState outer m => Accessor inner outer -> inner -> m ()
-puts' = puts . change
+puts chg x = modify (sets chg x)
 
 modifies :: MonadState outer m => Changer inner outer -> Endo inner -> m ()
 modifies chg f = modify (chg f)
 
-modifies' :: MonadState outer m => Accessor inner outer -> Endo inner -> m ()
-modifies' = modifies . change
-
 type ChangerM m inner outer = EndoM m inner -> EndoM m outer
-data AccessorM m inner outer = AccessorM { maccess :: outer -> m inner,
-                                           mchange :: ChangerM m inner outer }
                                        
-mwrite :: MonadState outer m =>
-          AccessorM m inner outer -> inner -> EndoM m outer
-mwrite acc x = mchange acc (const $ return x)
+msets :: MonadState outer m => ChangerM m inner outer -> inner -> EndoM m outer
+msets chg x = chg (const $ return x)
 
 mgets :: MonadState outer m => (outer -> m inner) -> m inner
 mgets f = get >>= f
 
-mgets' :: MonadState outer m => AccessorM m inner outer -> m inner
-mgets' = mgets . maccess
-
 mputs :: MonadState outer m => ChangerM m inner outer -> inner -> m ()
-mputs chg x = mmodify (chg $ const $ return x)
-
-mputs' :: MonadState outer m => AccessorM m inner outer -> inner -> m ()
-mputs' = mputs . mchange
+mputs chg x = mmodify (msets chg x)
 
 mmodify :: MonadState state m => EndoM m state -> m ()
 mmodify f = get >>= f >>= put
@@ -93,11 +73,6 @@ mmodify f = get >>= f >>= put
 mmodifies :: MonadState outer m =>
              ChangerM m inner outer -> EndoM m inner -> m ()
 mmodifies chg f = mmodify (chg f)
-
-mmodifies' :: MonadState outer m => 
-              AccessorM m inner outer -> EndoM m inner -> m ()
-mmodifies' = mmodifies . mchange
-                                       
 
 
 
