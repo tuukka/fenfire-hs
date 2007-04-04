@@ -56,6 +56,7 @@ puts chg x = modify (sets chg x)
 modifies :: MonadState outer m => Changer inner outer -> Endo inner -> m ()
 modifies chg f = modify (chg f)
 
+
 type ChangerM m inner outer = EndoM m inner -> EndoM m outer
                                        
 msets :: MonadState outer m => ChangerM m inner outer -> inner -> EndoM m outer

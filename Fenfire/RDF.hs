@@ -511,14 +511,24 @@ instance Pattern pat (Set r) => Pattern pat (Either String r) where
 instance Pattern pat (Either String r) => Pattern pat (Maybe r) where
     query = mquery
     
-instance Pattern pat (Either String r) => Pattern pat r where
-    query pat g = either error id $ query pat g
-    
+instance Pattern pat (Set Quad) => Pattern pat Bool where
+    query pat = not . Set.null . (id :: Endo (Set Quad)) . query pat
+
 mquery :: (Pattern pat (Either String r), Monad m) => pat -> Graph -> m r
 mquery pat g = either fail return $ query pat g
 
-instance Pattern pat (Set Quad) => Pattern pat Bool where
-    query pat = not . Set.null . (id :: Endo (Set Quad)) . query pat
+query' :: Pattern pat (Either String r) => pat -> Graph -> r
+query' pat g = either error id $ query pat g
+
+iquery :: (?graph :: Graph, Pattern pat r) => pat -> r
+iquery pat = query pat ?graph
+
+imquery :: (?graph :: Graph, Pattern pat (Either String r), Monad m) => 
+           pat -> m r
+imquery pat = mquery pat ?graph
+
+iquery' :: (?graph :: Graph, Pattern pat (Either String r)) => pat -> r
+iquery' pat = query' pat ?graph
     
     
 class (Ord a, Show a) => PatternSlot a where toPatternSlot :: Node -> a
