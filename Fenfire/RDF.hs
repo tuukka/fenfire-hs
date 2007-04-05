@@ -317,6 +317,12 @@ toRDFPair :: Node -> (a -> ToRdfM Node) -> Node -> (b -> ToRdfM Node)
           -> ((a,b) -> ToRdfM Node)
 toRDFPair p1 f1 p2 f2 (x,y) =
     do n <- newBNode; addRDFPair p1 f1 p2 f2 (x,y) n; return n
+    
+fromRDFConn :: Node -> FromRdfM a -> FromRdfM a
+fromRDFConn p f g n = query (n, p, X) g >>= f g
+
+addRDFConn :: Node -> (a -> ToRdfM Node) -> a -> Node -> ToRdfM ()
+addRDFConn p f x n = do n' <- f x; tellTs [(n,p,n')]
                                  
 fromRDFConns :: Node -> FromRdfM a -> FromRdfM [a]
 fromRDFConns p f g n = mapM (f g) $ query (n, p, X) g
