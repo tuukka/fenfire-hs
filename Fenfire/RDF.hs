@@ -24,6 +24,7 @@ import Fenfire.Cache
 import Fenfire.Utils
 import qualified Fenfire.Raptor as Raptor
 
+import Control.Monad (liftM2)
 import Control.Monad.Writer (Writer, WriterT, MonadWriter, tell, forM_,
                              runWriter, runWriterT)
 import Control.Monad.Reader (Reader, ask, runReader)
@@ -253,8 +254,10 @@ updateRDF f node graph = graph' where
              foldr delete graph (Set.toAscList ts)
 -}
 
+type FromRdfM a = Graph -> Node -> Either String a
+
 class FromRDF a where
-    fromRDF :: Graph -> Node -> Either String a
+    fromRDF :: FromRdfM a
     
 type ToRdfM = State Graph
 
@@ -276,6 +279,7 @@ class ToRDF a where
 instance FromRDF a => FromRDF [a] where
     fromRDF g l = fromRDFList fromRDF g l
     
+fromRDFList :: FromRdfM a -> FromRdfM [a]
 fromRDFList f g l | l == rdf_nil = return []
                   | otherwise    = do
         first <- mquery (l, rdf_first, X) g
@@ -283,7 +287,7 @@ fromRDFList f g l | l == rdf_nil = return []
         x  <- f g first
         xs <- fromRDFList f g rest
         return (x:xs)
-            
+        
 instance ToRDF a => ToRDF [a] where
     toRDF = toRDFList toRDF
     
@@ -293,6 +297,23 @@ toRDFList f (x:xs) = do l <- newBNode; first <- f x; next <- toRDFList f xs
                                , (l, rdf_next, next) ]
                         return l
 
+fromRDFPair :: Node -> FromRdfM a -> Node -> FromRdfM b -> FromRdfM (a,b)
+fromRDFPair p1 f1 p2 f2 g n = do
+    n1 <- query (n, p1, X) g; n2 <- query (n, p2, X) g
+    v1 <- f1 g n1; v2 <- f2 g n2; return (v1,v2)
+
+toRDFPair :: Node -> (a -> ToRdfM Node) -> Node -> (b -> ToRdfM Node)
+          -> ((a,b) -> ToRdfM Node)
+toRDFPair p1 f1 p2 f2 (x,y) = do n1 <- f1 x; n2 <- f2 y; n <- newBNode
+                                 tellTs [(n,p1,n1), (n,p2,n2)]; return n
+                                 
+fromRDFConns :: Node -> FromRdfM a -> FromRdfM [a]
+fromRDFConns p f g n = mapM (f g) $ query (n, p, X) g
+
+toRDFConns :: Node -> (a -> ToRdfM Node) -> ([a] -> ToRdfM Node)
+toRDFConns p f xs = do n <- newBNode; nodes <- mapM f xs
+                       tellTs [(n,p,n') | n' <- nodes]; return n
+            
 instance FromRDF String where
     fromRDF _ (Literal s _) = return s
     fromRDF _ n = error $ "Fenfire.RDF.fromRDF(String): can only convert literals, not " ++ show n
