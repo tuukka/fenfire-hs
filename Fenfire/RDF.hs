@@ -264,11 +264,17 @@ type ToRdfM = State Graph
 runToRDF :: Node -> ToRdfM Node -> (Node, Graph)
 runToRDF graphNode m = runState m (emptyGraph graphNode)
     
+nextNode :: (String -> [Node]) -> ToRdfM Node
+nextNode f = do g <- get; return $ f' g (f $ iriStr $ defaultGraph g) where
+    f' g (n:ns) = if not $ or [query (n,Any,Any) g, query (Any,n,Any) g,
+                               query (Any,Any,n) g] then n else f' g ns
+    f' _ [] = error "Fenfire.RDF.nextNode: finite list of choices"
+
 newBNode :: ToRdfM Node
-newBNode = do g <- get; return $ f g (1::Integer) where
-    f g i = if not $ or [query (bnode,Any,Any) g, query (Any,bnode,Any) g,
-                         query (Any,Any,bnode) g] then bnode else f g (i+1)
-        where bnode = BNode (iriStr $ defaultGraph g) ("b" ++ show i)
+newBNode = nextNode $ \uri -> [BNode uri ("b" ++ show i) | i::Integer <- [1..]]
+
+newFrag :: ToRdfM Node
+newFrag = nextNode $ \uri -> [IRI (uri ++ "#" ++ show i) | i::Integer <- [1..]]
 
 tellTs :: [Triple] -> ToRdfM ()
 tellTs ts = modify (\g -> foldr insert g ts)
@@ -302,17 +308,24 @@ fromRDFPair p1 f1 p2 f2 g n = do
     n1 <- query (n, p1, X) g; n2 <- query (n, p2, X) g
     v1 <- f1 g n1; v2 <- f2 g n2; return (v1,v2)
 
+addRDFPair :: Node -> (a -> ToRdfM Node) -> Node -> (b -> ToRdfM Node)
+           -> (a,b) -> Node -> ToRdfM ()
+addRDFPair p1 f1 p2 f2 (x,y) n = do n1 <- f1 x; n2 <- f2 y
+                                    tellTs [(n,p1,n1), (n,p2,n2)]
+
 toRDFPair :: Node -> (a -> ToRdfM Node) -> Node -> (b -> ToRdfM Node)
           -> ((a,b) -> ToRdfM Node)
-toRDFPair p1 f1 p2 f2 (x,y) = do n1 <- f1 x; n2 <- f2 y; n <- newBNode
-                                 tellTs [(n,p1,n1), (n,p2,n2)]; return n
+toRDFPair p1 f1 p2 f2 (x,y) =
+    do n <- newBNode; addRDFPair p1 f1 p2 f2 (x,y) n; return n
                                  
 fromRDFConns :: Node -> FromRdfM a -> FromRdfM [a]
 fromRDFConns p f g n = mapM (f g) $ query (n, p, X) g
 
+addRDFConns :: Node -> (a -> ToRdfM Node) -> [a] -> Node -> ToRdfM ()
+addRDFConns p f xs n = do nodes <- mapM f xs; tellTs [(n,p,n') | n' <- nodes]
+
 toRDFConns :: Node -> (a -> ToRdfM Node) -> ([a] -> ToRdfM Node)
-toRDFConns p f xs = do n <- newBNode; nodes <- mapM f xs
-                       tellTs [(n,p,n') | n' <- nodes]; return n
+toRDFConns p f xs = do n <- newBNode; addRDFConns p f xs n; return n
             
 instance FromRDF String where
     fromRDF _ (Literal s _) = return s
