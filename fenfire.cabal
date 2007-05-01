@@ -61,6 +61,14 @@ GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall
                 -fno-warn-orphans -main-is Fenfire.Irc2RDF.main
 Extra-Libraries: raptor
 
+Executable:     irc2notetaker
+Main-Is:        Fenfire/Irc2Notetaker.hs
+Other-Modules:  Fenfire.Irc2Notetaker Fenfire.RDF
+GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
+                -fno-warn-unused-imports -fno-warn-missing-signatures
+                -fno-warn-orphans -main-is Fenfire.Irc2Notetaker.main
+Extra-Libraries: raptor
+
 Executable:     latex2png
 Main-Is:        Fenfire/Latex2Png.hs
 Other-Modules:  Fenfire.Latex2Png
