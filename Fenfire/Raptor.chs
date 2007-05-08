@@ -25,7 +25,7 @@ module Fenfire.Raptor where
 import Foreign (Ptr, FunPtr, IntPtr, Storable(pokeByteOff, peekByteOff), 
                 allocaBytes, nullPtr, castPtr, freeHaskellFunPtr, malloc, peek)
 import Foreign.C (CString, castCharToCChar, CFile,
-                  CSize, CInt, CUInt, CUChar, CChar, peekCStringLen)
+                  CSize, CULong, CInt, CUInt, CUChar, CChar, peekCStringLen)
                   
 import Data.ByteString (ByteString, useAsCStringLen, copyCStringLen)
 
@@ -221,8 +221,8 @@ triplesToBytes triples namespaces baseURI = do
   serializer <- withUTFString "turtle" {# call new_serializer #}
   when (unSerializer serializer == nullPtr) $ fail "serializer is null"
   
-  result_str :: Ptr (Ptr ()) <- malloc
-  result_len :: Ptr CUInt    <- malloc
+  result_str <- malloc
+  result_len <- malloc
   
   base_uri <- withUTFString baseURI new_uri
 
