@@ -168,7 +168,10 @@ triples :: [String] -> String -> FilePath -> (ClockTime, Maybe Integer) ->
            Maybe String -> [String] -> (Maybe FilePath, [Triple])
 triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg0] 
     | map toUpper cmd == "PRIVMSG", 
-      '#':channelName <- map toLower target, channelName `elem` channels
+      '#':channelName <- map toLower target, channelName `elem` channels,
+      not $ "[off]" `isPrefixOf` msg0,
+      not $ "+[off]" `isPrefixOf` msg0,
+      not $ "-[off]" `isPrefixOf` msg0
     = 
     let msg = case msg0 of '+':cs -> cs; '-':cs -> cs; cs -> cs
         file = channelName ++ "-" ++ day
