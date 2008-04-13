@@ -169,12 +169,11 @@ triples :: [String] -> String -> FilePath -> (ClockTime, Maybe Integer) ->
 triples channels root filepath (time,offset) (Just prefix) [cmd,target,msg0] 
     | map toUpper cmd == "PRIVMSG", 
       '#':channelName <- map toLower target, channelName `elem` channels,
-      not $ "[off]" `isPrefixOf` msg0,
-      not $ "+[off]" `isPrefixOf` msg0,
-      not $ "-[off]" `isPrefixOf` msg0
+      msg <- case msg0 of '+':cs -> cs; '-':cs -> cs; cs -> cs,
+      not $ "[off]" `isPrefixOf` msg,
+      not $ "\1ACTION [off]" `isPrefixOf` msg
     = 
-    let msg = case msg0 of '+':cs -> cs; '-':cs -> cs; cs -> cs
-        file = channelName ++ "-" ++ day
+    let file = channelName ++ "-" ++ day
         channel = IRI $ "irc://freenode/%23" ++ channelName
         uri = root ++ file ++ "#" ++ second ++ maybe "" (('.':) . show) offset
         event = IRI uri
