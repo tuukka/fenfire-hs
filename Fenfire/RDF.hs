@@ -29,6 +29,7 @@ import Control.Monad.Writer (Writer, WriterT, MonadWriter, tell, forM_,
                              runWriter, runWriterT)
 import Control.Monad.Reader (Reader, ask, runReader)
 import Control.Monad.State (State, get, put, modify, runState)
+import Control.Monad.Error () -- for the instance (Monad (Either String))
 
 import Data.Generics hiding ((:*:))
 import Data.List (intersperse)

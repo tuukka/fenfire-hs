@@ -684,6 +684,7 @@ makeWindow window canvasBgColor view stateRef = do
 makeAboutDialog :: (?pw :: Window) => IO AboutDialog
 makeAboutDialog = do
     dialog <- aboutDialogNew
+{- pixbufNewFromFile has different signature on newer gtk2hs:
     logoFilename <- getDataFileName "data-files/logo.svg"
     pixbuf <- Control.Exception.catch (pixbufNewFromFile logoFilename)
                   (\e -> return $ Left (undefined, show e))
@@ -695,6 +696,7 @@ makeAboutDialog = do
                                pixbufScaleSimple pixbuf'
                                    200 (floor (200*(1.40::Double))) 
                                    InterpHyper 
+-}  logo <- return Nothing
     set dialog [ aboutDialogName := "Fenfire" 
                , aboutDialogVersion := "alpha version"
                , aboutDialogCopyright := "Licensed under GNU GPL v2 or later"
