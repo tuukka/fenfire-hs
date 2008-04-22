@@ -276,7 +276,8 @@ saveGraph graph fileName = do
 newState :: Graph -> Path -> FilePath -> Bool -> FenState
 newState graph path fp focus = 
     FenState graph path Set.empty fp False focus 0 rdfs_seeAlso ps [] []
-    where ps = Set.insert rdfs_seeAlso $ query (Any,X,Any) graph
+    where ps = Set.insert rdfs_seeAlso $ Set.delete rdfs_label
+                   $ query (Any, X, Any) graph
 
 stateReplaceNode :: Node -> Node -> Endo FenState
 stateReplaceNode m n s@(FenState { fsPath = Path node cs }) = FenState {
