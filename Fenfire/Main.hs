@@ -250,8 +250,8 @@ handleAction action = do
         "revert" | filepath /= "" -> confirmRevert modified $ do
             g <- liftIO $ loadGraph filepath
             let graph' = delete' (Any,Any,Any,Dft) graph
-                g' = mergeGraphs (mergeGraphs graph' g) $ 
-                     containsInfoTriples g'
+                g' = mergeGraphs (mergeGraphs g graph') $ 
+                     containsInfoTriples g
             put $ newState g' (findStartPath Nothing g') filepath focus
         "save" | filepath /= "" -> do 
                      liftIO $ saveGraph graph filepath
