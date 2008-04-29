@@ -22,7 +22,7 @@ module Fenfire.RDF where
 
 import Fenfire.Cache
 import Fenfire.Utils
-import qualified Fenfire.Raptor as Raptor
+import qualified Raptor as Raptor
 
 import Control.Monad (liftM2)
 import Control.Monad.Writer (Writer, WriterT, MonadWriter, tell, forM_,

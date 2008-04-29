@@ -12,13 +12,19 @@ Category:       User Interfaces
 Stability:      alpha
 Homepage:       http://fenfire.org/
 Build-Depends:  base, HaXml, gtk > 0.9.10, mtl, unix, cairo, harp, 
-                template-haskell, glib, network, HList
-Exposed-Modules: Fenfire.RDF, Fenfire.Raptor, Fenfire.Utils, Fenfire.Cache
+                template-haskell, glib, network, HList,
+                containers >= 0.1.0.1,
+                bytestring >= 0.9.0.1,
+                old-time >= 1.0.0.0,
+                directory >= 1.0.0.0,
+                random >= 1.0.0.0,
+                process >= 1.0.0.0
+Exposed-Modules: Fenfire.RDF, Raptor, Fenfire.Utils, Fenfire.Cache
 Data-Files:     data-files/logo.svg data-files/icon16.png
 
 Executable:     fenfire
 Main-Is:        Fenfire/Main.hs
-Other-Modules:  Fenfire, Fenfire.Vobs, Fenfire.RDF, Fenfire.Cache, Fenfire.Cairo, Fenfire.Utils, Fenfire.Raptor, FunctorSugar,
+Other-Modules:  Fenfire, Fenfire.Vobs, Fenfire.RDF, Fenfire.Cache, Fenfire.Cairo, Fenfire.Utils, Raptor, FunctorSugar,
                 Fenfire.GtkFixes, Fenfire.VanishingView, Fenfire.Main
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
@@ -55,7 +61,7 @@ GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall
 
 Executable:     irc2rdf
 Main-Is:        Fenfire/Irc2RDF.hs
-Other-Modules:  Fenfire.Irc2RDF Fenfire.RDF
+Other-Modules:  Fenfire.Irc2RDF Fenfire.RDF Raptor
 GHC-Options:    -fglasgow-exts -hide-package haskell98 -Wall 
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -main-is Fenfire.Irc2RDF.main

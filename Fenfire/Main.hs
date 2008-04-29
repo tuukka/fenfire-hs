@@ -21,7 +21,7 @@ module Fenfire.Main where
 import Fenfire.Utils
 import Fenfire.Cairo hiding (Path, rotate)
 import Fenfire.Vobs
-import qualified Fenfire.Raptor as Raptor
+import qualified Raptor as Raptor
 import Fenfire.URN5
 import Fenfire.RDF
 import Fenfire.VanishingView

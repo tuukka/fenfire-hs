@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -fvia-C #-}
 {-# OPTIONS_GHC -fffi -I. #-}
 {-# OPTIONS_GHC -fglasgow-exts #-}
-module Fenfire.Raptor where
+module Raptor where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
 -- This file is part of Fenfire.
@@ -27,7 +27,7 @@ import Foreign (Ptr, FunPtr, IntPtr, Storable(pokeByteOff, peekByteOff),
 import Foreign.C (CString, castCharToCChar, CFile,
                   CSize, CULong, CInt, CUInt, CUChar, CChar, peekCStringLen)
                   
-import Data.ByteString (ByteString, useAsCStringLen, copyCStringLen)
+import Data.ByteString (ByteString, useAsCStringLen, packCStringLen)
 
 import System.Posix.IO (stdOutput)
 import System.Posix.Types (Fd)
@@ -246,7 +246,7 @@ triplesToBytes triples namespaces baseURI = do
   
   result_str' <- fmap castPtr $ peek result_str
   result_len' <- fmap fromIntegral $ peek result_len
-  result <- copyCStringLen (result_str', result_len')
+  result <- packCStringLen (result_str', result_len')
 
   {# call free_uri #} base_uri
   {# call free_memory #} (castPtr result_str')
