@@ -120,7 +120,7 @@ runHandler handleEvent state event = do
 
 (@@) :: Ord k => Cx k a -> k -> Cx k a   -- pronounce as 'of'
 (@@) x key = do cx <- ask
-                rect <- maybeReturn =<< Map.lookup key (rcScene cx)
+                rect <- maybeReturn =<< maybeReturn (Map.lookup key (rcScene cx))
                 local (\_ -> cx { rcRect = rect }) x
 
 
