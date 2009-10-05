@@ -619,7 +619,7 @@ makeWindow window canvasBgColor view stateRef = do
     New.cellLayoutPackStart combo renderer True
     New.cellLayoutSetAttributes combo renderer propList $ \row -> 
         [ New.cellText := snd row ]
-    New.onChanged combo $ do 
+    on combo changed $ do
         active <- New.comboBoxGetActive combo 
         case active of 
             (-1) -> return ()
