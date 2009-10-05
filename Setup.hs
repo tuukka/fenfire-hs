@@ -8,7 +8,7 @@ import System.Cmd (system)
 import System.Directory (getModificationTime, doesFileExist)
 
 main = defaultMainWithHooks hooks
-hooks = defaultUserHooks { hookedPreProcessors = [trhsx] }
+hooks = simpleUserHooks { hookedPreProcessors = [trhsx] }
 
 trhsx :: PPSuffixHandler
 trhsx = ("fhs", f) where

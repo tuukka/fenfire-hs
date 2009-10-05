@@ -31,7 +31,7 @@ import Control.Monad.State
 import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get, fill)
 import System.Environment (getArgs)
 
-import Control.Exception hiding (Handler)
+import Control.Exception hiding (Handler, handle)
 
 type Info = (String, Double, Double)
 type Data = [(String,[Info])]

@@ -35,7 +35,8 @@ import Control.Applicative
 import Control.Monad.Reader
 import Control.Monad.Trans (liftIO, MonadIO)
 
-import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get, fill)
+import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get, fill,
+                               stateChanged)
 import Graphics.UI.Gtk.Gdk.Events (Event(..))
 import qualified Graphics.Rendering.Cairo as C
 import Graphics.Rendering.Cairo.Matrix (Matrix(Matrix))
@@ -381,7 +382,7 @@ vobCanvas stateRef view eventHandler actionHandler stateChanged
                 rcFgColor=black, rcBgColor=white, rcFadeColor=bgColor }
                    
         updateAnim interpolate' = mdo
-	    (vob,scene,_) <- readIORef animRef
+	    (_vob,scene,_) <- readIORef animRef
             vob' <- getVob
 
             rc' <- getRenderContext scene'

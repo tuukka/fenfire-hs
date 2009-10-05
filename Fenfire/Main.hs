@@ -41,7 +41,8 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 
 import Fenfire.GtkFixes
-import Graphics.UI.Gtk hiding (Color, get, disconnect, fill,
+import Graphics.UI.Gtk hiding (Color, get, disconnect, fill, stateChanged,
+                               focus,
 -- GtkFixes overrides:
                                actionNew,
                                widgetGetStyle,
