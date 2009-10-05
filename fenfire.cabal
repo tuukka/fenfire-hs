@@ -20,17 +20,20 @@ Build-Depends:  base >= 4 && < 5, HaXml, gtk > 0.9.10, mtl, unix, cairo, harp,
                 random >= 1.0.0.0,
                 process >= 1.0.0.0,
                 syb
-Exposed-Modules: Fenfire.RDF, Raptor, Fenfire.Utils, Fenfire.Cache
 Data-Files:     data-files/logo.svg data-files/icon16.png
+Extra-Source-Files: README, Makefile, DaisyData.txt, test.nt
 Build-Type:     Custom
 
 Executable:     fenfire
 Main-Is:        Fenfire/Main.hs
-Other-Modules:  Fenfire, Fenfire.Vobs, Fenfire.RDF, Fenfire.Cache, Fenfire.Cairo, Fenfire.Utils, Raptor, FunctorSugar,
-                Fenfire.GtkFixes, Fenfire.VanishingView, Fenfire.Main
+Other-Modules:  Fenfire, Fenfire.Vobs, Fenfire.RDF, Fenfire.Cache,
+                Fenfire.Cairo, Fenfire.Utils, Raptor, FunctorSugar,
+                Fenfire.GtkFixes, Fenfire.VanishingView, Fenfire.Main,
+                Fenfire.URN5
 GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -main-is Fenfire.Main.main
+                -fno-warn-orphans
+                -main-is Fenfire.Main.main
 Extra-Libraries: raptor
 
 Executable:     functortest
@@ -38,35 +41,40 @@ Main-Is:        Fenfire/FunctorTest.hs
 Other-Modules:  Fenfire.FunctorTest, FunctorSugar
 GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -main-is Fenfire.FunctorTest.main
+                -fno-warn-orphans
+                -main-is Fenfire.FunctorTest.main
 
 Executable:     vobtest
 Main-Is:        Fenfire/VobTest.hs
 Other-Modules:  Fenfire.VobTest, Fenfire.Vobs, Fenfire.Cairo, Fenfire.Utils, FunctorSugar
 GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -main-is Fenfire.VobTest.main
+                -fno-warn-orphans
+                -main-is Fenfire.VobTest.main
 
 Executable:     frptest
 Main-Is:        Fenfire/FRP.hs
 Other-Modules:  Fenfire.FRP, Fenfire.Utils, FunctorSugar
 GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -main-is Fenfire.FRP.main
+                -fno-warn-orphans
+                -main-is Fenfire.FRP.main
 
 Executable:     darcs2rdf
 Main-Is:        Fenfire/Darcs2RDF.hs
 Other-Modules:  Fenfire.Darcs2RDF, FunctorSugar
 GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -main-is Fenfire.Darcs2RDF.main
+                -fno-warn-orphans
+                -main-is Fenfire.Darcs2RDF.main
 
 Executable:     irc2rdf
 Main-Is:        Fenfire/Irc2RDF.hs
 Other-Modules:  Fenfire.Irc2RDF Fenfire.RDF Raptor
 GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -main-is Fenfire.Irc2RDF.main
+                -fno-warn-orphans
+                -main-is Fenfire.Irc2RDF.main
 Extra-Libraries: raptor
 
 Executable:     irc2notetaker
@@ -74,7 +82,8 @@ Main-Is:        Fenfire/Irc2Notetaker.hs
 Other-Modules:  Fenfire.Irc2Notetaker Fenfire.RDF
 GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -main-is Fenfire.Irc2Notetaker.main
+                -fno-warn-orphans
+                -main-is Fenfire.Irc2Notetaker.main
 Extra-Libraries: raptor
 
 Executable:     latex2png
@@ -82,5 +91,6 @@ Main-Is:        Fenfire/Latex2Png.hs
 Other-Modules:  Fenfire.Latex2Png
 GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
-                -fno-warn-orphans -main-is Fenfire.Latex2Png.main
+                -fno-warn-orphans
+                -main-is Fenfire.Latex2Png.main
 
