@@ -18,7 +18,8 @@ Build-Depends:  base, HaXml, gtk > 0.9.10, mtl, unix, cairo, harp,
                 old-time >= 1.0.0.0,
                 directory >= 1.0.0.0,
                 random >= 1.0.0.0,
-                process >= 1.0.0.0
+                process >= 1.0.0.0,
+                syb
 Exposed-Modules: Fenfire.RDF, Raptor, Fenfire.Utils, Fenfire.Cache
 Data-Files:     data-files/logo.svg data-files/icon16.png
 

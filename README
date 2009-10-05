@@ -24,9 +24,9 @@ Fenfire source code
 
 Dependencies with known-to-work version numbers:
 
-  ghc    6.6    (The Glorious Glasgow Haskell Compilation System)
-  gtk2hs 0.9.11 (A GUI library for Haskell based on Gtk, release candidate ok)
-  raptor 1.4.14 (Raptor RDF Parser Toolkit)
+  ghc    6.10.4 (The Glorious Glasgow Haskell Compilation System)
+  gtk2hs 0.10.1 (A GUI library for Haskell based on Gtk, release candidate ok)
+  raptor 1.4.19 (Raptor RDF Parser Toolkit)
   c2hs   0.14.5 (C->Haskell, An Interface Generator for Haskell)
   harp   0.2    (Haskell Regular Patterns, in haskell-src-exts)
   haxml  1.13.2 (Haskell and XML)
