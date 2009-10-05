@@ -27,6 +27,7 @@ import Data.IORef
 
 import Graphics.Rendering.Cairo
 import Graphics.UI.Gtk
+import Graphics.UI.Gtk.Gdk.Events (Event(..))
 
 newtype SF i o = SF { runSF :: TimeDiff -> i -> (o, SF i o) }
 

@@ -49,6 +49,7 @@ import Graphics.UI.Gtk hiding (Color, get, disconnect, fill,
                                styleGetText, styleGetBase, 
                                styleGetAntiAliasing)
 import Graphics.UI.Gtk.ModelView as New
+import Graphics.UI.Gtk.Gdk.Events (Event(..))
 
 import qualified Network.URI
 
@@ -609,7 +610,7 @@ makeWindow window canvasBgColor view stateRef = do
 
     propList <- New.listStoreNew []
     combo <- New.comboBoxNew
-    set combo [ New.comboBoxModel := Just propList
+    set combo [ New.comboBoxModel := propList
               , New.comboBoxFocusOnClick := False ]
     renderer <- New.cellRendererTextNew
     New.cellLayoutPackStart combo renderer True
@@ -618,8 +619,8 @@ makeWindow window canvasBgColor view stateRef = do
     New.onChanged combo $ do 
         active <- New.comboBoxGetActive combo 
         case active of 
-            Nothing -> return ()
-            Just i -> do 
+            (-1) -> return ()
+            i -> do
                 (prop,_name) <- listStoreGetValue propList i
                 state' <- readIORef stateRef
                 writeIORef stateRef $ state' {fsProperty=prop}
@@ -746,7 +747,7 @@ makeMessageDialog primary secondary = do
                , containerBorderWidth := 6
                , dialogHasSeparator := False
                ]
-    image' <- imageNewFromStock stockDialogError iconSizeDialog
+    image' <- imageNewFromStock stockDialogError IconSizeDialog
     set image' [ miscYalign := 0.0 ]
     label' <- labelNew $ Just $ "<span weight=\"bold\" size=\"larger\">"++
                   escapeMarkup primary++"</span>\n\n"++escapeMarkup secondary

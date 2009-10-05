@@ -35,6 +35,7 @@ import Control.Monad.Reader
 import Control.Monad.Trans (liftIO, MonadIO)
 
 import Graphics.UI.Gtk hiding (Point, Size, Layout, Color, get, fill)
+import Graphics.UI.Gtk.Gdk.Events (Event(..))
 import qualified Graphics.Rendering.Cairo as C
 import Graphics.Rendering.Cairo.Matrix (Matrix(Matrix))
 import qualified Graphics.Rendering.Cairo.Matrix as Matrix
@@ -325,13 +326,6 @@ isInterpUseful sc1 sc2 =
           interpKeys = intersect (getKeys sc1) (getKeys sc2)
           getKeys sc = [k | k <- keys sc, isJust (sc Map.! k)]
           
-instance Show Modifier where
-    show Shift = "Shift"
-    show Control = "Control"
-    show Alt = "Alt"
-    show Apple = "Apple"
-    show Compose = "Compose"
-
 timeDbg :: MonadIO m => String -> Endo (m ())
 timeDbg s act | False     = do out s; act; out s
               | otherwise = act
