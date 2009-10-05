@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fallow-undecidable-instances -fallow-incoherent-instances #-}
+{-# LANGUAGE UndecidableInstances, IncoherentInstances #-}
 module Fenfire.FRP where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup

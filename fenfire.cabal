@@ -28,7 +28,7 @@ Executable:     fenfire
 Main-Is:        Fenfire/Main.hs
 Other-Modules:  Fenfire, Fenfire.Vobs, Fenfire.RDF, Fenfire.Cache, Fenfire.Cairo, Fenfire.Utils, Raptor, FunctorSugar,
                 Fenfire.GtkFixes, Fenfire.VanishingView, Fenfire.Main
-GHC-Options:    -fglasgow-exts -Wall
+GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -main-is Fenfire.Main.main
 Extra-Libraries: raptor
@@ -36,35 +36,35 @@ Extra-Libraries: raptor
 Executable:     functortest
 Main-Is:        Fenfire/FunctorTest.hs
 Other-Modules:  Fenfire.FunctorTest, FunctorSugar
-GHC-Options:    -fglasgow-exts -Wall
+GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -main-is Fenfire.FunctorTest.main
 
 Executable:     vobtest
 Main-Is:        Fenfire/VobTest.hs
 Other-Modules:  Fenfire.VobTest, Fenfire.Vobs, Fenfire.Cairo, Fenfire.Utils, FunctorSugar
-GHC-Options:    -fglasgow-exts -Wall
+GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -main-is Fenfire.VobTest.main
 
 Executable:     frptest
 Main-Is:        Fenfire/FRP.hs
 Other-Modules:  Fenfire.FRP, Fenfire.Utils, FunctorSugar
-GHC-Options:    -fglasgow-exts -Wall
+GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -main-is Fenfire.FRP.main
 
 Executable:     darcs2rdf
 Main-Is:        Fenfire/Darcs2RDF.hs
 Other-Modules:  Fenfire.Darcs2RDF, FunctorSugar
-GHC-Options:    -fglasgow-exts -Wall
+GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -main-is Fenfire.Darcs2RDF.main
 
 Executable:     irc2rdf
 Main-Is:        Fenfire/Irc2RDF.hs
 Other-Modules:  Fenfire.Irc2RDF Fenfire.RDF Raptor
-GHC-Options:    -fglasgow-exts -Wall
+GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -main-is Fenfire.Irc2RDF.main
 Extra-Libraries: raptor
@@ -72,7 +72,7 @@ Extra-Libraries: raptor
 Executable:     irc2notetaker
 Main-Is:        Fenfire/Irc2Notetaker.hs
 Other-Modules:  Fenfire.Irc2Notetaker Fenfire.RDF
-GHC-Options:    -fglasgow-exts -Wall
+GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -main-is Fenfire.Irc2Notetaker.main
 Extra-Libraries: raptor
@@ -80,7 +80,7 @@ Extra-Libraries: raptor
 Executable:     latex2png
 Main-Is:        Fenfire/Latex2Png.hs
 Other-Modules:  Fenfire.Latex2Png
-GHC-Options:    -fglasgow-exts -Wall
+GHC-Options:    -Wall
                 -fno-warn-unused-imports -fno-warn-missing-signatures
                 -fno-warn-orphans -main-is Fenfire.Latex2Png.main
 

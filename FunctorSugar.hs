@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fth #-} 
+{-# LANGUAGE TemplateHaskell #-}
 module FunctorSugar where
 
 import Control.Applicative

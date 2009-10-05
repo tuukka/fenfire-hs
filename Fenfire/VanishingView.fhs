@@ -1,3 +1,4 @@
+{-# LANGUAGE ImplicitParams, RelaxedPolyRec #-}
 module Fenfire.VanishingView where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup

@@ -1,4 +1,5 @@
-{-# OPTIONS_GHC -fallow-overlapping-instances #-}
+{-# LANGUAGE OverlappingInstances, RecursiveDo, TypeSynonymInstances, 
+             MultiParamTypeClasses #-}
 module Fenfire.Vobs where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup

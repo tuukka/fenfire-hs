@@ -1,3 +1,4 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
 module Fenfire.GtkFixes where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup

@@ -1,3 +1,4 @@
+{-# LANGUAGE ImplicitParams, RecursiveDo, PatternGuards #-}
 module Fenfire.Main where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup

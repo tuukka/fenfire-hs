@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fglasgow-exts -fffi #-}
+{-# LANGUAGE ForeignFunctionInterface, ScopedTypeVariables, PatternGuards #-}
 module Fenfire.Irc2Notetaker where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup

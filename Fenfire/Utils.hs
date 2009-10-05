@@ -1,5 +1,6 @@
 -- For (instance MonadReader w m => MonadReader w (MaybeT m)) in GHC 6.6:
-{-# OPTIONS_GHC -fglasgow-exts -fallow-undecidable-instances -fallow-overlapping-instances #-}
+{-# LANGUAGE UndecidableInstances, OverlappingInstances,
+             FlexibleInstances, MultiParamTypeClasses #-}
 module Fenfire.Utils where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup

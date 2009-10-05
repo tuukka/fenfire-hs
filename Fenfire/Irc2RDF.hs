@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fglasgow-exts -fffi #-}
+{-# LANGUAGE ForeignFunctionInterface, ScopedTypeVariables, PatternGuards #-}
 module Fenfire.Irc2RDF where
 
 -- Irc2RDF: An IRC to SIOC RDF converter

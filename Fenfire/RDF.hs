@@ -1,5 +1,8 @@
-{-# OPTIONS_GHC -fglasgow-exts 
-        -fallow-overlapping-instances -fallow-undecidable-instances #-}
+{-# LANGUAGE UndecidableInstances, OverlappingInstances, ImplicitParams,
+             TypeOperators, ScopedTypeVariables, MultiParamTypeClasses,
+             FunctionalDependencies, FlexibleInstances, TypeSynonymInstances,
+             DeriveDataTypeable, FlexibleContexts, PatternGuards,
+             ScopedTypeVariables #-}
 module Fenfire.RDF where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup

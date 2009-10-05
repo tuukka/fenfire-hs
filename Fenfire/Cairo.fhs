@@ -1,7 +1,8 @@
 -- For (instance (Cairo cx r, Monoid m) => Monoid (cx m)):
-{-# OPTIONS_GHC -fallow-undecidable-instances -fallow-incoherent-instances #-}
--- More, implied by the previous on GHC 6.6 but needed for earlier:
-{-# OPTIONS_GHC -fallow-overlapping-instances #-}
+{-# LANGUAGE UndecidableInstances, IncoherentInstances #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies,
+             TypeSynonymInstances, FlexibleInstances, 
+             GeneralizedNewtypeDeriving, RelaxedPolyRec #-}
 module Fenfire.Cairo where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup

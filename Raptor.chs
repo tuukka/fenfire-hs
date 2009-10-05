@@ -1,7 +1,4 @@
--- We want the C compiler to always check that types match:
-{-# OPTIONS_GHC -fvia-C #-}
-{-# OPTIONS_GHC -fffi -I. #-}
-{-# OPTIONS_GHC -fglasgow-exts #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 module Raptor where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup

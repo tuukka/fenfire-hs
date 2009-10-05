@@ -90,7 +90,7 @@ transform (HsModule s prags m mes is decls) =
                                  Nothing
                                  Nothing
                      else id
-            prags' = HsPragma " OPTIONS_GHC -fth " : prags
+            prags' = HsPragma " LANGUAGE TemplateHaskell " : prags
 	 in HsModule s prags' m mes (imps1 $ imps2 $ imps3 is) decls'
 
 -----------------------------------------------------------------------------

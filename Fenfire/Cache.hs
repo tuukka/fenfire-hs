@@ -1,5 +1,4 @@
-{-# OPTIONS_GHC -fglasgow-exts #-}
-
+{-# LANGUAGE RecursiveDo, TypeSynonymInstances #-}
 module Fenfire.Cache where
 
 -- Copyright (c) 2007, Benja Fallenstein, Tuukka Hastrup
