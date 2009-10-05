@@ -29,7 +29,7 @@ import Fenfire
 
 import Paths_fenfire (getDataFileName)
 
-import Control.Exception
+import Control.Exception hiding (Handler)
 import Control.Monad
 import Control.Monad.State
 
@@ -434,7 +434,7 @@ makeToolbarItems actionGroup toolbar = do
             item <- actionCreateToolItem action
             toolbarInsert toolbar (castToToolItem item) (-1)
 
-handleException :: Control.Exception.Exception -> IO ()
+handleException :: SomeException -> IO ()
 handleException e = do
     dialog <- makeMessageDialog "Exception in event" (show e)
     dialogRun dialog
@@ -505,7 +505,8 @@ makeWindow window canvasBgColor view stateRef = do
     let ?pw = window in mdo
     logo <- getDataFileName "data-files/icon16.png"
     Control.Exception.catch (windowSetIconFromFile window logo)
-          (\e -> putStr ("Opening "++logo++" failed: ") >> print e)
+          (\e -> do putStr ("Opening "++logo++" failed: ")
+                    print (e::SomeException))
     windowSetTitle window "Fenfire"
     windowSetDefaultSize window 800 550
 

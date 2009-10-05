@@ -62,7 +62,7 @@ fromUTF s = unsafePerformIO $ Control.Exception.catch
      if (valid cstr (-1) nullPtr && all isUnicode s') -- force any exceptions
          then return s'  -- it really was utf-8
          else return s ) -- it really wasn't utf-8
-    (\_e -> return s)                 -- if any, keep the local encoding
+    (\(_e::Control.Exception.SomeException) -> return s) -- keep the encoding
 
 -- from gutf8.c used in g_utf8_validate
 isUnicode c' = let c = ord c' in

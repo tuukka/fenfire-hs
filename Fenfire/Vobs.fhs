@@ -357,7 +357,7 @@ noAnim scene = const (scene, False)
 
 vobCanvas :: Ord b => IORef a -> View a b -> Handler Event a -> 
                       Handler c a -> (a -> a -> IO ()) -> 
-                      (Control.Exception.Exception -> IO ()) -> 
+                      (Control.Exception.SomeException -> IO ()) ->
                       Color -> TimeDiff ->
                       IO (DrawingArea, Bool -> IO (), c -> IO Bool)
 vobCanvas stateRef view eventHandler actionHandler stateChanged 
