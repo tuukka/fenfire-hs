@@ -2,7 +2,7 @@
              TypeOperators, ScopedTypeVariables, MultiParamTypeClasses,
              FunctionalDependencies, FlexibleInstances, TypeSynonymInstances,
              DeriveDataTypeable, FlexibleContexts, PatternGuards,
-             ScopedTypeVariables #-}
+             ScopedTypeVariables, CPP #-}
 module Fenfire.RDF where
 
 -- Copyright (c) 2006-2007, Benja Fallenstein, Tuukka Hastrup
@@ -43,7 +43,11 @@ import qualified Numeric
 import Data.Set (Set)
 import qualified Data.Set as Set
 
+#if MIN_VERSION_HList(0,1,1)
+import Data.HList
+#else
 import HList
+#endif
 
 import Network.URI hiding (query)
 
